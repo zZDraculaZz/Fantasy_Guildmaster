@@ -37,7 +37,12 @@ namespace FantasyGuildmaster.Editor
 
             var canvas = EnsureCanvas(root.transform);
             var layout = FindOrCreateUI("MapLayout", canvas.transform);
-            Stretch(layout);
+            var layoutRect = layout.GetComponent<RectTransform>();
+            if (layoutRect == null)
+            {
+                layoutRect = layout.AddComponent<RectTransform>();
+            }
+            Stretch(layoutRect);
 
             var detailsPanel = EnsureDetailsPanel(layout.transform, contractPrefab);
             var mapRect = EnsureMapArea(layout.transform, out var markersRoot);
@@ -59,7 +64,7 @@ namespace FantasyGuildmaster.Editor
 
         private static void EnsureEventSystem()
         {
-            if (Object.FindObjectOfType<EventSystem>() != null) return;
+            if (Object.FindFirstObjectByType<EventSystem>() != null) return;
             var eventSystem = new GameObject("EventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
             Undo.RegisterCreatedObjectUndo(eventSystem, "Create EventSystem");
         }
@@ -225,7 +230,7 @@ namespace FantasyGuildmaster.Editor
             travelTextElement.flexibleWidth = 1f;
 
             var threats = EnsurePanelText(panel.transform, "Threats", "Threats: -", 16f);
-            threats.enableWordWrapping = true;
+            threats.textWrappingMode = TextWrappingModes.Normal;
 
             var contractsHeader = EnsurePanelText(panel.transform, "ContractsHeader", "Contracts", 22f);
             contractsHeader.fontStyle = FontStyles.Bold;

@@ -119,12 +119,19 @@ namespace FantasyGuildmaster.Editor
             var cx = IconSize / 2;
             var cy = IconSize / 2;
             var radius = 88;
-            var color = style % 3 switch
+            Color32 color;
+            switch (style % 3)
             {
-                0 => new Color32(172, 60, 60, 255),
-                1 => new Color32(76, 134, 94, 255),
-                _ => new Color32(112, 112, 124, 255)
-            };
+                case 0:
+                    color = new Color32(172, 60, 60, 255);
+                    break;
+                case 1:
+                    color = new Color32(76, 134, 94, 255);
+                    break;
+                default:
+                    color = new Color32(112, 112, 124, 255);
+                    break;
+            }
 
             for (var y = 0; y < IconSize; y++)
             {
