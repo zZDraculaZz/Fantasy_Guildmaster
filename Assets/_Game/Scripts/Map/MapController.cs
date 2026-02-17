@@ -93,6 +93,12 @@ namespace FantasyGuildmaster.Map
             detailsPanel.Show(region, contracts);
         }
 
+
+        private static string PickContractIconKey(int index)
+        {
+            return index % 2 == 0 ? "contract_hunt" : "contract_escort";
+        }
+
         private void SeedContracts()
         {
             _contractsByRegion.Clear();
@@ -110,7 +116,8 @@ namespace FantasyGuildmaster.Map
                         id = $"{region.id}_contract_{i}",
                         title = $"Contract #{i + 1}: {region.name}",
                         remainingSeconds = random.Next(45, 300),
-                        reward = random.Next(50, 250)
+                        reward = random.Next(50, 250),
+                        iconKey = PickContractIconKey(i)
                     });
                 }
 

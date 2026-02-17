@@ -1,11 +1,16 @@
 using FantasyGuildmaster.Map;
 using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace FantasyGuildmaster.UI
 {
     public sealed class ContractRow : MonoBehaviour
     {
+        private const string ContractsIconBasePath = "Icons/Contracts/";
+        private const string ContractsFallbackPath = "Icons/Contracts/contract_generic";
+
+        [SerializeField] private Image iconImage;
         [SerializeField] private TMP_Text titleText;
         [SerializeField] private TMP_Text timerText;
         [SerializeField] private TMP_Text rewardText;
@@ -25,6 +30,12 @@ namespace FantasyGuildmaster.UI
             if (_contract == null)
             {
                 return;
+            }
+
+            if (iconImage != null)
+            {
+                var path = string.IsNullOrWhiteSpace(_contract.iconKey) ? null : ContractsIconBasePath + _contract.iconKey;
+                iconImage.sprite = SpriteLoader.TryLoadSprite(path, ContractsFallbackPath);
             }
 
             if (titleText != null)

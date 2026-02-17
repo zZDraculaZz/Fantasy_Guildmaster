@@ -9,6 +9,7 @@ namespace FantasyGuildmaster.Map
         public string title;
         public int remainingSeconds;
         public int reward;
+        public string iconKey;
 
         public bool IsExpired => remainingSeconds <= 0;
 

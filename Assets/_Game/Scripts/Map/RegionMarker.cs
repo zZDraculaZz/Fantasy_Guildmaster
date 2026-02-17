@@ -1,5 +1,6 @@
 using System;
 using FantasyGuildmaster.Data;
+using FantasyGuildmaster.UI;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -9,7 +10,11 @@ namespace FantasyGuildmaster.Map
     [RequireComponent(typeof(Button))]
     public sealed class RegionMarker : MonoBehaviour
     {
+        private const string RegionIconBasePath = "Icons/Regions/";
+        private const string RegionFallbackPath = "Icons/Regions/region_fallback";
+
         [SerializeField] private TMP_Text label;
+        [SerializeField] private Image iconImage;
 
         private RectTransform _rectTransform;
         private RectTransform _mapRect;
@@ -23,6 +28,15 @@ namespace FantasyGuildmaster.Map
             {
                 label = GetComponentInChildren<TMP_Text>();
             }
+
+            if (iconImage == null)
+            {
+                var iconChild = transform.Find("Icon");
+                if (iconChild != null)
+                {
+                    iconImage = iconChild.GetComponent<Image>();
+                }
+            }
         }
 
         public void Setup(RegionData region, RectTransform mapRect, Action<RegionData> onSelected)
@@ -34,6 +48,12 @@ namespace FantasyGuildmaster.Map
             if (label != null)
             {
                 label.text = region.name;
+            }
+
+            if (iconImage != null)
+            {
+                var path = string.IsNullOrWhiteSpace(region.iconKey) ? null : RegionIconBasePath + region.iconKey;
+                iconImage.sprite = SpriteLoader.TryLoadSprite(path, RegionFallbackPath);
             }
 
             var button = GetComponent<Button>();

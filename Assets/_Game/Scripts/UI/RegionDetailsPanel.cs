@@ -3,16 +3,21 @@ using FantasyGuildmaster.Data;
 using FantasyGuildmaster.Map;
 using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace FantasyGuildmaster.UI
 {
     public sealed class RegionDetailsPanel : MonoBehaviour
     {
+        private const string UiTravelTokenPath = "Icons/UI/travel_token";
+        private const string UiFallbackPath = "Icons/UI/squad_token";
+
         [SerializeField] private TMP_Text regionNameText;
         [SerializeField] private TMP_Text dangerText;
         [SerializeField] private TMP_Text factionText;
         [SerializeField] private TMP_Text travelDaysText;
         [SerializeField] private TMP_Text threatsText;
+        [SerializeField] private Image travelIconImage;
         [SerializeField] private RectTransform contractsRoot;
         [SerializeField] private ContractRow contractRowPrefab;
 
@@ -27,6 +32,11 @@ namespace FantasyGuildmaster.UI
             travelDaysText.text = $"Travel: {region.travelDays} days";
             var threats = region.threats != null ? string.Join(", ", region.threats) : "-";
             threatsText.text = $"Threats: {threats}";
+
+            if (travelIconImage != null)
+            {
+                travelIconImage.sprite = SpriteLoader.TryLoadSprite(UiTravelTokenPath, UiFallbackPath);
+            }
 
             _contracts = contracts;
             RebuildContracts();

@@ -8,7 +8,7 @@
       "threats": ["Undead Patrols", "Bandit Scouts"],
       "faction": "Wardens of Ash",
       "travelDays": 3,
-      "iconKey": "fort"
+      "iconKey": "region_northmarch"
     },
     {
       "id": "mireveil",
@@ -18,7 +18,7 @@
       "threats": ["Bog Wraiths", "Cult Activity", "Plague Wolves"],
       "faction": "Black Fen Circle",
       "travelDays": 5,
-      "iconKey": "swamp"
+      "iconKey": "region_blackfen"
     },
     {
       "id": "ironshore",
@@ -28,7 +28,7 @@
       "threats": ["Smugglers", "Sea Reavers"],
       "faction": "Free Coast Houses",
       "travelDays": 4,
-      "iconKey": "coast"
+      "iconKey": "region_fallback"
     }
   ]
 }

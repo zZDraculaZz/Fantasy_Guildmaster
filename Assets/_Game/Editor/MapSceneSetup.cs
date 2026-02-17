@@ -22,6 +22,12 @@ namespace FantasyGuildmaster.Editor
             EnsureFolders();
             EnsureEventSystem();
 
+            if (!PlaceholderIconsGenerator.HasRequiredIcons())
+            {
+                PlaceholderIconsGenerator.GenerateIcons(false);
+                Debug.Log("[MapSceneSetup] Placeholder icons were missing and have been generated.");
+            }
+
             var markerPrefab = EnsureRegionMarkerPrefab();
             var contractPrefab = EnsureContractRowPrefab();
 
@@ -54,7 +60,6 @@ namespace FantasyGuildmaster.Editor
         private static void EnsureEventSystem()
         {
             if (Object.FindObjectOfType<EventSystem>() != null) return;
-
             var eventSystem = new GameObject("EventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
             Undo.RegisterCreatedObjectUndo(eventSystem, "Create EventSystem");
         }
@@ -69,15 +74,12 @@ namespace FantasyGuildmaster.Editor
 
             var go = new GameObject("MapCanvas", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
             go.transform.SetParent(parent, false);
-
             var canvas = go.GetComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-
             var scaler = go.GetComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(1920, 1080);
             scaler.matchWidthOrHeight = 0.5f;
-
             return canvas;
         }
 
@@ -99,15 +101,31 @@ namespace FantasyGuildmaster.Editor
 
         private static GameObject BuildRegionMarkerSource()
         {
-            var root = new GameObject("RegionMarkerButton", typeof(RectTransform), typeof(Image), typeof(Button), typeof(RegionMarker));
+            var root = new GameObject("RegionMarkerButton", typeof(RectTransform), typeof(Image), typeof(Button), typeof(HorizontalLayoutGroup), typeof(RegionMarker));
             var rt = root.GetComponent<RectTransform>();
-            rt.sizeDelta = new Vector2(170f, 44f);
+            rt.sizeDelta = new Vector2(210f, 48f);
 
-            var image = root.GetComponent<Image>();
-            image.color = new Color(0.65f, 0.15f, 0.15f, 0.85f);
+            root.GetComponent<Image>().color = new Color(0.65f, 0.15f, 0.15f, 0.85f);
+            var layout = root.GetComponent<HorizontalLayoutGroup>();
+            layout.padding = new RectOffset(8, 8, 6, 6);
+            layout.spacing = 8f;
+            layout.childControlHeight = true;
+            layout.childControlWidth = false;
+            layout.childForceExpandWidth = false;
+            layout.childForceExpandHeight = false;
 
-            var label = CreateText("Label", root.transform, "Region", 18f, TextAlignmentOptions.Center);
-            Stretch((RectTransform)label.transform, 8f);
+            var icon = CreateImage("Icon", root.transform, new Vector2(36f, 36f));
+            icon.color = Color.white;
+            icon.preserveAspect = true;
+
+            var label = CreateText("Label", root.transform, "Region", 18f, TextAlignmentOptions.Left);
+            label.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
+
+            var marker = root.GetComponent<RegionMarker>();
+            var so = new SerializedObject(marker);
+            so.FindProperty("label").objectReferenceValue = label;
+            so.FindProperty("iconImage").objectReferenceValue = icon;
+            so.ApplyModifiedPropertiesWithoutUndo();
 
             return root;
         }
@@ -115,34 +133,35 @@ namespace FantasyGuildmaster.Editor
         private static GameObject BuildContractRowSource()
         {
             var root = new GameObject("ContractRow", typeof(RectTransform), typeof(Image), typeof(HorizontalLayoutGroup), typeof(LayoutElement), typeof(ContractRow));
-            var rt = root.GetComponent<RectTransform>();
-            rt.sizeDelta = new Vector2(0f, 36f);
-
-            var image = root.GetComponent<Image>();
-            image.color = new Color(1f, 1f, 1f, 0.05f);
+            root.GetComponent<RectTransform>().sizeDelta = new Vector2(0f, 40f);
+            root.GetComponent<Image>().color = new Color(1f, 1f, 1f, 0.05f);
 
             var layout = root.GetComponent<HorizontalLayoutGroup>();
             layout.padding = new RectOffset(8, 8, 6, 6);
             layout.spacing = 8f;
             layout.childControlWidth = true;
             layout.childControlHeight = true;
-            layout.childForceExpandWidth = false;
             layout.childForceExpandHeight = false;
+            layout.childForceExpandWidth = false;
 
-            var element = root.GetComponent<LayoutElement>();
-            element.minHeight = 36f;
+            root.GetComponent<LayoutElement>().minHeight = 40f;
+
+            var icon = CreateImage("Icon", root.transform, new Vector2(28f, 28f));
+            icon.preserveAspect = true;
+            icon.color = Color.white;
+            icon.gameObject.AddComponent<LayoutElement>().preferredWidth = 28f;
 
             var title = CreateText("Title", root.transform, "Contract", 16f, TextAlignmentOptions.Left);
-            var timer = CreateText("Timer", root.transform, "00:00", 16f, TextAlignmentOptions.Center);
-            var reward = CreateText("Reward", root.transform, "0g", 16f, TextAlignmentOptions.Right);
-
             title.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
+
+            var timer = CreateText("Timer", root.transform, "00:00", 16f, TextAlignmentOptions.Center);
             timer.gameObject.AddComponent<LayoutElement>().preferredWidth = 90f;
+
+            var reward = CreateText("Reward", root.transform, "0g", 16f, TextAlignmentOptions.Right);
             reward.gameObject.AddComponent<LayoutElement>().preferredWidth = 90f;
 
             var contractRow = root.GetComponent<ContractRow>();
-            AssignContractRow(contractRow, title, timer, reward);
-
+            AssignContractRow(contractRow, icon, title, timer, reward);
             return root;
         }
 
@@ -167,14 +186,44 @@ namespace FantasyGuildmaster.Editor
             vLayout.childForceExpandWidth = true;
             vLayout.childForceExpandHeight = false;
 
-            var fitter = panel.GetComponent<ContentSizeFitter>() ?? panel.AddComponent<ContentSizeFitter>();
-            fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
-            fitter.verticalFit = ContentSizeFitter.FitMode.Unconstrained;
-
             var regionName = EnsurePanelText(panel.transform, "RegionName", "Select region", 28f);
             var danger = EnsurePanelText(panel.transform, "Danger", "Danger: -", 18f);
             var faction = EnsurePanelText(panel.transform, "Faction", "Faction: -", 18f);
-            var travel = EnsurePanelText(panel.transform, "Travel", "Travel: -", 18f);
+
+            var travelRow = FindOrCreateUI("TravelRow", panel.transform);
+            var travelLayout = travelRow.GetComponent<HorizontalLayoutGroup>() ?? travelRow.AddComponent<HorizontalLayoutGroup>();
+            travelLayout.spacing = 8f;
+            travelLayout.childControlHeight = true;
+            travelLayout.childControlWidth = false;
+            travelLayout.childForceExpandWidth = false;
+            travelLayout.childForceExpandHeight = false;
+            var travelRowElement = travelRow.GetComponent<LayoutElement>() ?? travelRow.AddComponent<LayoutElement>();
+            travelRowElement.minHeight = 28f;
+
+            var travelIcon = FindOrCreateUI("TravelIcon", travelRow.transform).GetComponent<Image>();
+            if (travelIcon == null)
+            {
+                travelIcon = travelRow.transform.Find("TravelIcon").gameObject.AddComponent<Image>();
+            }
+            var travelIconRect = (RectTransform)travelIcon.transform;
+            travelIconRect.sizeDelta = new Vector2(22f, 22f);
+            travelIcon.preserveAspect = true;
+            travelIcon.color = Color.white;
+            var travelIconElement = travelIcon.GetComponent<LayoutElement>() ?? travelIcon.gameObject.AddComponent<LayoutElement>();
+            travelIconElement.preferredWidth = 22f;
+
+            var travel = FindOrCreateUI("Travel", travelRow.transform).GetComponent<TextMeshProUGUI>();
+            if (travel == null)
+            {
+                travel = travelRow.transform.Find("Travel").gameObject.AddComponent<TextMeshProUGUI>();
+            }
+            travel.text = "Travel: -";
+            travel.fontSize = 18f;
+            travel.color = Color.white;
+            travel.alignment = TextAlignmentOptions.Left;
+            var travelTextElement = travel.GetComponent<LayoutElement>() ?? travel.gameObject.AddComponent<LayoutElement>();
+            travelTextElement.flexibleWidth = 1f;
+
             var threats = EnsurePanelText(panel.transform, "Threats", "Threats: -", 16f);
             threats.enableWordWrapping = true;
 
@@ -187,7 +236,6 @@ namespace FantasyGuildmaster.Editor
             scrollImage.color = new Color(1f, 1f, 1f, 0.02f);
             var scrollMask = contractsScroll.GetComponent<Mask>() ?? contractsScroll.AddComponent<Mask>();
             scrollMask.showMaskGraphic = false;
-
             var scrollRectTransform = (RectTransform)contractsScroll.transform;
             scrollRectTransform.sizeDelta = new Vector2(0f, 420f);
 
@@ -216,8 +264,7 @@ namespace FantasyGuildmaster.Editor
             scrollRect.vertical = true;
 
             var details = panel.GetComponent<RegionDetailsPanel>() ?? panel.AddComponent<RegionDetailsPanel>();
-            AssignDetailsPanel(details, regionName, danger, faction, travel, threats, contentRect, contractPrefab);
-
+            AssignDetailsPanel(details, regionName, danger, faction, travel, threats, travelIcon, contentRect, contractPrefab);
             return details;
         }
 
@@ -288,6 +335,15 @@ namespace FantasyGuildmaster.Editor
             return text;
         }
 
+        private static Image CreateImage(string name, Transform parent, Vector2 size)
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(Image));
+            go.transform.SetParent(parent, false);
+            var rt = (RectTransform)go.transform;
+            rt.sizeDelta = size;
+            return go.GetComponent<Image>();
+        }
+
         private static GameObject FindOrCreate(string name)
         {
             var found = GameObject.Find(name);
@@ -325,7 +381,7 @@ namespace FantasyGuildmaster.Editor
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 
-        private static void AssignDetailsPanel(RegionDetailsPanel detailsPanel, TMP_Text regionName, TMP_Text danger, TMP_Text faction, TMP_Text travel, TMP_Text threats, RectTransform contractsRoot, ContractRow rowPrefab)
+        private static void AssignDetailsPanel(RegionDetailsPanel detailsPanel, TMP_Text regionName, TMP_Text danger, TMP_Text faction, TMP_Text travel, TMP_Text threats, Image travelIcon, RectTransform contractsRoot, ContractRow rowPrefab)
         {
             var so = new SerializedObject(detailsPanel);
             so.FindProperty("regionNameText").objectReferenceValue = regionName;
@@ -333,14 +389,16 @@ namespace FantasyGuildmaster.Editor
             so.FindProperty("factionText").objectReferenceValue = faction;
             so.FindProperty("travelDaysText").objectReferenceValue = travel;
             so.FindProperty("threatsText").objectReferenceValue = threats;
+            so.FindProperty("travelIconImage").objectReferenceValue = travelIcon;
             so.FindProperty("contractsRoot").objectReferenceValue = contractsRoot;
             so.FindProperty("contractRowPrefab").objectReferenceValue = rowPrefab;
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 
-        private static void AssignContractRow(ContractRow contractRow, TMP_Text title, TMP_Text timer, TMP_Text reward)
+        private static void AssignContractRow(ContractRow contractRow, Image icon, TMP_Text title, TMP_Text timer, TMP_Text reward)
         {
             var so = new SerializedObject(contractRow);
+            so.FindProperty("iconImage").objectReferenceValue = icon;
             so.FindProperty("titleText").objectReferenceValue = title;
             so.FindProperty("timerText").objectReferenceValue = timer;
             so.FindProperty("rewardText").objectReferenceValue = reward;
