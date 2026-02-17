@@ -1,0 +1,4 @@
+repository "Fantasy_Guildmaster/Fantasy_Guildmaster@9072349647564@cloud"
+  path "/"
+    br "/main"
+    co "/main"
