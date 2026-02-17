@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using FantasyGuildmaster.Data;
 using FantasyGuildmaster.Map;
@@ -20,12 +21,28 @@ namespace FantasyGuildmaster.UI
         [SerializeField] private Image travelIconImage;
         [SerializeField] private RectTransform contractsRoot;
         [SerializeField] private ContractRow contractRowPrefab;
+        [SerializeField] private Button assignSquadButton;
 
         private readonly List<ContractRow> _rows = new();
         private List<ContractData> _contracts;
+        private RegionData _region;
+        private ContractData _selectedContract;
+        private int _idleSquadsCount;
+
+        public event Action<RegionData, ContractData> AssignSquadRequested;
+
+        private void Awake()
+        {
+            if (assignSquadButton != null)
+            {
+                assignSquadButton.onClick.RemoveAllListeners();
+                assignSquadButton.onClick.AddListener(OnAssignSquadClicked);
+            }
+        }
 
         public void Show(RegionData region, List<ContractData> contracts)
         {
+            _region = region;
             regionNameText.text = region.name;
             dangerText.text = $"Danger: {region.danger}";
             factionText.text = $"Faction: {region.faction}";
@@ -39,7 +56,15 @@ namespace FantasyGuildmaster.UI
             }
 
             _contracts = contracts;
+            _selectedContract = contracts != null && contracts.Count > 0 ? contracts[0] : null;
             RebuildContracts();
+            UpdateAssignSquadButtonState();
+        }
+
+        public void SetIdleSquadsCount(int idleSquadsCount)
+        {
+            _idleSquadsCount = idleSquadsCount;
+            UpdateAssignSquadButtonState();
         }
 
         public void TickContracts()
@@ -61,6 +86,13 @@ namespace FantasyGuildmaster.UI
 
                 row.Refresh();
             }
+
+            if (_selectedContract != null && _selectedContract.IsExpired)
+            {
+                _selectedContract = _contracts.Count > 0 ? _contracts[0] : null;
+            }
+
+            UpdateAssignSquadButtonState();
         }
 
         private void RebuildContracts()
@@ -82,10 +114,40 @@ namespace FantasyGuildmaster.UI
 
             for (var i = 0; i < _contracts.Count; i++)
             {
+                var contract = _contracts[i];
                 var row = Instantiate(contractRowPrefab, contractsRoot);
-                row.Bind(_contracts[i]);
+                row.Bind(contract);
+
+                var button = row.GetComponent<Button>();
+                if (button != null)
+                {
+                    button.onClick.RemoveAllListeners();
+                    button.onClick.AddListener(() => { _selectedContract = contract; });
+                }
+
                 _rows.Add(row);
             }
+        }
+
+        private void OnAssignSquadClicked()
+        {
+            if (_region == null || _selectedContract == null)
+            {
+                return;
+            }
+
+            AssignSquadRequested?.Invoke(_region, _selectedContract);
+        }
+
+        private void UpdateAssignSquadButtonState()
+        {
+            if (assignSquadButton == null)
+            {
+                return;
+            }
+
+            var hasContract = _contracts != null && _contracts.Count > 0;
+            assignSquadButton.interactable = hasContract && _idleSquadsCount > 0;
         }
     }
 }

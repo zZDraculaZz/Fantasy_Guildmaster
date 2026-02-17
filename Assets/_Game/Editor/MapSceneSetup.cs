@@ -16,6 +16,7 @@ namespace FantasyGuildmaster.Editor
         private const string MarkerPrefabPath = PrefabsDir + "/RegionMarkerButton.prefab";
         private const string ContractRowPrefabPath = PrefabsDir + "/ContractRow.prefab";
         private const string ContractIconPrefabPath = PrefabsDir + "/ContractIcon.prefab";
+        private const string TravelTokenPrefabPath = PrefabsDir + "/TravelToken.prefab";
 
         [MenuItem("Tools/FantasyGuildmaster/Setup Map Scene")]
         public static void Setup()
@@ -32,6 +33,7 @@ namespace FantasyGuildmaster.Editor
             var markerPrefab = EnsureRegionMarkerPrefab();
             var contractPrefab = EnsureContractRowPrefab();
             var contractIconPrefab = EnsureContractIconPrefab();
+            var travelTokenPrefab = EnsureTravelTokenPrefab();
 
             var root = FindOrCreate("MapSceneRoot");
             var clock = root.GetComponent<GameClock>() ?? root.AddComponent<GameClock>();
@@ -47,9 +49,10 @@ namespace FantasyGuildmaster.Editor
             Stretch(layoutRect);
 
             var detailsPanel = EnsureDetailsPanel(layout.transform, contractPrefab);
-            var mapRect = EnsureMapArea(layout.transform, out var markersRoot, out var contractIconsRoot);
+            var squadSelectPanel = EnsureSquadSelectPanel(layout.transform);
+            var mapRect = EnsureMapArea(layout.transform, out var markersRoot, out var contractIconsRoot, out var travelTokensRoot);
 
-            AssignMapController(controller, mapRect, markersRoot, contractIconsRoot, markerPrefab, contractIconPrefab, detailsPanel, clock);
+            AssignMapController(controller, mapRect, markersRoot, contractIconsRoot, travelTokensRoot, markerPrefab, contractIconPrefab, travelTokenPrefab, detailsPanel, squadSelectPanel, clock);
 
             EditorUtility.SetDirty(root);
             EditorUtility.SetDirty(canvas.gameObject);
@@ -114,6 +117,14 @@ namespace FantasyGuildmaster.Editor
             return AssetDatabase.LoadAssetAtPath<ContractIcon>(ContractIconPrefabPath);
         }
 
+        private static TravelToken EnsureTravelTokenPrefab()
+        {
+            var source = BuildTravelTokenSource();
+            PrefabUtility.SaveAsPrefabAsset(source, TravelTokenPrefabPath);
+            Object.DestroyImmediate(source);
+            return AssetDatabase.LoadAssetAtPath<TravelToken>(TravelTokenPrefabPath);
+        }
+
         private static GameObject BuildRegionMarkerSource()
         {
             var root = new GameObject("RegionMarkerButton", typeof(RectTransform), typeof(Image), typeof(Button), typeof(HorizontalLayoutGroup), typeof(RegionMarker));
@@ -147,7 +158,7 @@ namespace FantasyGuildmaster.Editor
 
         private static GameObject BuildContractRowSource()
         {
-            var root = new GameObject("ContractRow", typeof(RectTransform), typeof(Image), typeof(HorizontalLayoutGroup), typeof(LayoutElement), typeof(ContractRow));
+            var root = new GameObject("ContractRow", typeof(RectTransform), typeof(Image), typeof(Button), typeof(HorizontalLayoutGroup), typeof(LayoutElement), typeof(ContractRow));
             root.GetComponent<RectTransform>().sizeDelta = new Vector2(0f, 40f);
             root.GetComponent<Image>().color = new Color(1f, 1f, 1f, 0.05f);
 
@@ -207,6 +218,34 @@ namespace FantasyGuildmaster.Editor
 
             var contractIcon = root.GetComponent<ContractIcon>();
             AssignContractIcon(contractIcon, icon, timer);
+            return root;
+        }
+
+        private static GameObject BuildTravelTokenSource()
+        {
+            var root = new GameObject("TravelToken", typeof(RectTransform), typeof(Image), typeof(VerticalLayoutGroup), typeof(TravelToken));
+            var rt = root.GetComponent<RectTransform>();
+            rt.sizeDelta = new Vector2(74f, 62f);
+
+            root.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0f);
+            var layout = root.GetComponent<VerticalLayoutGroup>();
+            layout.padding = new RectOffset(0, 0, 0, 0);
+            layout.spacing = 2f;
+            layout.childAlignment = TextAnchor.UpperCenter;
+            layout.childControlWidth = true;
+            layout.childControlHeight = true;
+            layout.childForceExpandWidth = false;
+            layout.childForceExpandHeight = false;
+
+            var icon = CreateImage("Icon", root.transform, new Vector2(24f, 24f));
+            icon.color = Color.white;
+            icon.preserveAspect = true;
+
+            var timer = CreateText("Timer", root.transform, "00:00", 12f, TextAlignmentOptions.Center);
+            var squad = CreateText("Squad", root.transform, "Squad", 11f, TextAlignmentOptions.Center);
+
+            var token = root.GetComponent<TravelToken>();
+            AssignTravelToken(token, icon, timer, squad);
             return root;
         }
 
@@ -275,6 +314,17 @@ namespace FantasyGuildmaster.Editor
             var contractsHeader = EnsurePanelText(panel.transform, "ContractsHeader", "Contracts", 22f);
             contractsHeader.fontStyle = FontStyles.Bold;
 
+            var assignButtonGo = FindOrCreateUI("AssignSquadButton", panel.transform);
+            var assignButtonImage = assignButtonGo.GetComponent<Image>() ?? assignButtonGo.AddComponent<Image>();
+            assignButtonImage.color = new Color(0.3f, 0.3f, 0.3f, 0.9f);
+            var assignButton = assignButtonGo.GetComponent<Button>() ?? assignButtonGo.AddComponent<Button>();
+            var assignButtonText = assignButtonGo.transform.Find("Label") != null
+                ? assignButtonGo.transform.Find("Label").GetComponent<TextMeshProUGUI>()
+                : CreateText("Label", assignButtonGo.transform, "Assign Squad", 16f, TextAlignmentOptions.Center);
+            Stretch((RectTransform)assignButtonText.transform, 4f);
+            var assignLayoutElement = assignButtonGo.GetComponent<LayoutElement>() ?? assignButtonGo.AddComponent<LayoutElement>();
+            assignLayoutElement.minHeight = 36f;
+
             var contractsScroll = FindOrCreateUI("ContractsScrollRect", panel.transform);
             var scrollRect = contractsScroll.GetComponent<ScrollRect>() ?? contractsScroll.AddComponent<ScrollRect>();
             var scrollImage = contractsScroll.GetComponent<Image>() ?? contractsScroll.AddComponent<Image>();
@@ -309,11 +359,72 @@ namespace FantasyGuildmaster.Editor
             scrollRect.vertical = true;
 
             var details = panel.GetComponent<RegionDetailsPanel>() ?? panel.AddComponent<RegionDetailsPanel>();
-            AssignDetailsPanel(details, regionName, danger, faction, travel, threats, travelIcon, contentRect, contractPrefab);
+            AssignDetailsPanel(details, regionName, danger, faction, travel, threats, travelIcon, contentRect, contractPrefab, assignButton);
             return details;
         }
 
-        private static RectTransform EnsureMapArea(Transform parent, out RectTransform markersRoot, out RectTransform contractIconsRoot)
+        private static SquadSelectPanel EnsureSquadSelectPanel(Transform parent)
+        {
+            var panelGo = FindOrCreateUI("SquadSelectPanel", parent);
+            var panelRect = (RectTransform)panelGo.transform;
+            panelRect.anchorMin = new Vector2(0.5f, 0.5f);
+            panelRect.anchorMax = new Vector2(0.5f, 0.5f);
+            panelRect.pivot = new Vector2(0.5f, 0.5f);
+            panelRect.sizeDelta = new Vector2(360f, 420f);
+
+            var image = panelGo.GetComponent<Image>() ?? panelGo.AddComponent<Image>();
+            image.color = new Color(0f, 0f, 0f, 0.82f);
+
+            var layout = panelGo.GetComponent<VerticalLayoutGroup>() ?? panelGo.AddComponent<VerticalLayoutGroup>();
+            layout.padding = new RectOffset(12, 12, 12, 12);
+            layout.spacing = 8f;
+            layout.childControlWidth = true;
+            layout.childControlHeight = false;
+            layout.childForceExpandWidth = true;
+            layout.childForceExpandHeight = false;
+
+            var title = EnsurePanelText(panelGo.transform, "Title", "Assign Squad", 24f);
+
+            var list = FindOrCreateUI("List", panelGo.transform);
+            var listRect = (RectTransform)list.transform;
+            listRect.sizeDelta = new Vector2(0f, 280f);
+            var listLayout = list.GetComponent<VerticalLayoutGroup>() ?? list.AddComponent<VerticalLayoutGroup>();
+            listLayout.spacing = 6f;
+            listLayout.childControlHeight = true;
+            listLayout.childControlWidth = true;
+            listLayout.childForceExpandWidth = true;
+            listLayout.childForceExpandHeight = false;
+
+            var buttonPrefab = FindOrCreateUI("SquadButtonPrefab", panelGo.transform);
+            buttonPrefab.SetActive(false);
+            var buttonImage = buttonPrefab.GetComponent<Image>() ?? buttonPrefab.AddComponent<Image>();
+            buttonImage.color = new Color(0.2f, 0.2f, 0.2f, 0.9f);
+            var button = buttonPrefab.GetComponent<Button>() ?? buttonPrefab.AddComponent<Button>();
+            var label = buttonPrefab.transform.Find("Label") != null
+                ? buttonPrefab.transform.Find("Label").GetComponent<TextMeshProUGUI>()
+                : CreateText("Label", buttonPrefab.transform, "Squad", 16f, TextAlignmentOptions.Center);
+            Stretch((RectTransform)label.transform, 4f);
+            var buttonLayout = buttonPrefab.GetComponent<LayoutElement>() ?? buttonPrefab.AddComponent<LayoutElement>();
+            buttonLayout.minHeight = 34f;
+
+            var closeGo = FindOrCreateUI("CloseButton", panelGo.transform);
+            var closeImage = closeGo.GetComponent<Image>() ?? closeGo.AddComponent<Image>();
+            closeImage.color = new Color(0.35f, 0.1f, 0.1f, 0.9f);
+            var closeButton = closeGo.GetComponent<Button>() ?? closeGo.AddComponent<Button>();
+            var closeLabel = closeGo.transform.Find("Label") != null
+                ? closeGo.transform.Find("Label").GetComponent<TextMeshProUGUI>()
+                : CreateText("Label", closeGo.transform, "Close", 16f, TextAlignmentOptions.Center);
+            Stretch((RectTransform)closeLabel.transform, 4f);
+            var closeLayout = closeGo.GetComponent<LayoutElement>() ?? closeGo.AddComponent<LayoutElement>();
+            closeLayout.minHeight = 34f;
+
+            var panel = panelGo.GetComponent<SquadSelectPanel>() ?? panelGo.AddComponent<SquadSelectPanel>();
+            AssignSquadSelectPanel(panel, title, listRect, button, closeButton);
+            panelGo.SetActive(false);
+            return panel;
+        }
+
+        private static RectTransform EnsureMapArea(Transform parent, out RectTransform markersRoot, out RectTransform contractIconsRoot, out RectTransform travelTokensRoot)
         {
             var mapScroll = FindOrCreateUI("MapScrollRect", parent);
             var scrollRect = mapScroll.GetComponent<ScrollRect>() ?? mapScroll.AddComponent<ScrollRect>();
@@ -350,6 +461,10 @@ namespace FantasyGuildmaster.Editor
             var contractIcons = FindOrCreateUI("ContractIconsRoot", mapImageGo.transform);
             contractIconsRoot = (RectTransform)contractIcons.transform;
             Stretch(contractIconsRoot);
+
+            var travelTokens = FindOrCreateUI("TravelTokensRoot", mapImageGo.transform);
+            travelTokensRoot = (RectTransform)travelTokens.transform;
+            Stretch(travelTokensRoot);
 
             scrollRect.viewport = viewportRect;
             scrollRect.content = contentRect;
@@ -419,20 +534,23 @@ namespace FantasyGuildmaster.Editor
             rect.localScale = Vector3.one;
         }
 
-        private static void AssignMapController(MapController controller, RectTransform mapRect, RectTransform markersRoot, RectTransform contractIconsRoot, RegionMarker markerPrefab, ContractIcon contractIconPrefab, RegionDetailsPanel detailsPanel, GameClock clock)
+        private static void AssignMapController(MapController controller, RectTransform mapRect, RectTransform markersRoot, RectTransform contractIconsRoot, RectTransform travelTokensRoot, RegionMarker markerPrefab, ContractIcon contractIconPrefab, TravelToken travelTokenPrefab, RegionDetailsPanel detailsPanel, SquadSelectPanel squadSelectPanel, GameClock clock)
         {
             var so = new SerializedObject(controller);
             so.FindProperty("mapRect").objectReferenceValue = mapRect;
             so.FindProperty("markersRoot").objectReferenceValue = markersRoot;
             so.FindProperty("regionMarkerPrefab").objectReferenceValue = markerPrefab;
             so.FindProperty("contractIconsRoot").objectReferenceValue = contractIconsRoot;
+            so.FindProperty("travelTokensRoot").objectReferenceValue = travelTokensRoot;
             so.FindProperty("contractIconPrefab").objectReferenceValue = contractIconPrefab;
+            so.FindProperty("travelTokenPrefab").objectReferenceValue = travelTokenPrefab;
             so.FindProperty("detailsPanel").objectReferenceValue = detailsPanel;
+            so.FindProperty("squadSelectPanel").objectReferenceValue = squadSelectPanel;
             so.FindProperty("gameClock").objectReferenceValue = clock;
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 
-        private static void AssignDetailsPanel(RegionDetailsPanel detailsPanel, TMP_Text regionName, TMP_Text danger, TMP_Text faction, TMP_Text travel, TMP_Text threats, Image travelIcon, RectTransform contractsRoot, ContractRow rowPrefab)
+        private static void AssignDetailsPanel(RegionDetailsPanel detailsPanel, TMP_Text regionName, TMP_Text danger, TMP_Text faction, TMP_Text travel, TMP_Text threats, Image travelIcon, RectTransform contractsRoot, ContractRow rowPrefab, Button assignButton)
         {
             var so = new SerializedObject(detailsPanel);
             so.FindProperty("regionNameText").objectReferenceValue = regionName;
@@ -443,6 +561,7 @@ namespace FantasyGuildmaster.Editor
             so.FindProperty("travelIconImage").objectReferenceValue = travelIcon;
             so.FindProperty("contractsRoot").objectReferenceValue = contractsRoot;
             so.FindProperty("contractRowPrefab").objectReferenceValue = rowPrefab;
+            so.FindProperty("assignSquadButton").objectReferenceValue = assignButton;
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 
@@ -461,6 +580,25 @@ namespace FantasyGuildmaster.Editor
             var so = new SerializedObject(contractIcon);
             so.FindProperty("iconImage").objectReferenceValue = icon;
             so.FindProperty("timerText").objectReferenceValue = timer;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        private static void AssignTravelToken(TravelToken token, Image icon, TMP_Text timer, TMP_Text squad)
+        {
+            var so = new SerializedObject(token);
+            so.FindProperty("iconImage").objectReferenceValue = icon;
+            so.FindProperty("timerText").objectReferenceValue = timer;
+            so.FindProperty("squadNameText").objectReferenceValue = squad;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        private static void AssignSquadSelectPanel(SquadSelectPanel panel, TMP_Text title, RectTransform listRoot, Button squadButtonPrefab, Button closeButton)
+        {
+            var so = new SerializedObject(panel);
+            so.FindProperty("titleText").objectReferenceValue = title;
+            so.FindProperty("listRoot").objectReferenceValue = listRoot;
+            so.FindProperty("squadButtonPrefab").objectReferenceValue = squadButtonPrefab;
+            so.FindProperty("closeButton").objectReferenceValue = closeButton;
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 
