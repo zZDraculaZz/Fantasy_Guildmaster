@@ -15,6 +15,7 @@ namespace FantasyGuildmaster.Editor
         private const string PrefabsDir = "Assets/_Game/Prefabs";
         private const string MarkerPrefabPath = PrefabsDir + "/RegionMarkerButton.prefab";
         private const string ContractRowPrefabPath = PrefabsDir + "/ContractRow.prefab";
+        private const string ContractIconPrefabPath = PrefabsDir + "/ContractIcon.prefab";
 
         [MenuItem("Tools/FantasyGuildmaster/Setup Map Scene")]
         public static void Setup()
@@ -30,6 +31,7 @@ namespace FantasyGuildmaster.Editor
 
             var markerPrefab = EnsureRegionMarkerPrefab();
             var contractPrefab = EnsureContractRowPrefab();
+            var contractIconPrefab = EnsureContractIconPrefab();
 
             var root = FindOrCreate("MapSceneRoot");
             var clock = root.GetComponent<GameClock>() ?? root.AddComponent<GameClock>();
@@ -45,9 +47,9 @@ namespace FantasyGuildmaster.Editor
             Stretch(layoutRect);
 
             var detailsPanel = EnsureDetailsPanel(layout.transform, contractPrefab);
-            var mapRect = EnsureMapArea(layout.transform, out var markersRoot);
+            var mapRect = EnsureMapArea(layout.transform, out var markersRoot, out var contractIconsRoot);
 
-            AssignMapController(controller, mapRect, markersRoot, markerPrefab, detailsPanel, clock);
+            AssignMapController(controller, mapRect, markersRoot, contractIconsRoot, markerPrefab, contractIconPrefab, detailsPanel, clock);
 
             EditorUtility.SetDirty(root);
             EditorUtility.SetDirty(canvas.gameObject);
@@ -102,6 +104,14 @@ namespace FantasyGuildmaster.Editor
             PrefabUtility.SaveAsPrefabAsset(source, ContractRowPrefabPath);
             Object.DestroyImmediate(source);
             return AssetDatabase.LoadAssetAtPath<ContractRow>(ContractRowPrefabPath);
+        }
+
+        private static ContractIcon EnsureContractIconPrefab()
+        {
+            var source = BuildContractIconSource();
+            PrefabUtility.SaveAsPrefabAsset(source, ContractIconPrefabPath);
+            Object.DestroyImmediate(source);
+            return AssetDatabase.LoadAssetAtPath<ContractIcon>(ContractIconPrefabPath);
         }
 
         private static GameObject BuildRegionMarkerSource()
@@ -167,6 +177,36 @@ namespace FantasyGuildmaster.Editor
 
             var contractRow = root.GetComponent<ContractRow>();
             AssignContractRow(contractRow, icon, title, timer, reward);
+            return root;
+        }
+
+        private static GameObject BuildContractIconSource()
+        {
+            var root = new GameObject("ContractIcon", typeof(RectTransform), typeof(Image), typeof(VerticalLayoutGroup), typeof(ContractIcon));
+            var rt = root.GetComponent<RectTransform>();
+            rt.sizeDelta = new Vector2(40f, 58f);
+
+            var bg = root.GetComponent<Image>();
+            bg.color = new Color(0f, 0f, 0f, 0f);
+
+            var layout = root.GetComponent<VerticalLayoutGroup>();
+            layout.padding = new RectOffset(0, 0, 0, 0);
+            layout.spacing = 2f;
+            layout.childAlignment = TextAnchor.UpperCenter;
+            layout.childControlWidth = true;
+            layout.childControlHeight = true;
+            layout.childForceExpandWidth = false;
+            layout.childForceExpandHeight = false;
+
+            var icon = CreateImage("Icon", root.transform, new Vector2(28f, 28f));
+            icon.preserveAspect = true;
+            icon.color = Color.white;
+
+            var timer = CreateText("Timer", root.transform, "00:00", 12f, TextAlignmentOptions.Center);
+            timer.gameObject.AddComponent<LayoutElement>().preferredHeight = 16f;
+
+            var contractIcon = root.GetComponent<ContractIcon>();
+            AssignContractIcon(contractIcon, icon, timer);
             return root;
         }
 
@@ -273,7 +313,7 @@ namespace FantasyGuildmaster.Editor
             return details;
         }
 
-        private static RectTransform EnsureMapArea(Transform parent, out RectTransform markersRoot)
+        private static RectTransform EnsureMapArea(Transform parent, out RectTransform markersRoot, out RectTransform contractIconsRoot)
         {
             var mapScroll = FindOrCreateUI("MapScrollRect", parent);
             var scrollRect = mapScroll.GetComponent<ScrollRect>() ?? mapScroll.AddComponent<ScrollRect>();
@@ -306,6 +346,10 @@ namespace FantasyGuildmaster.Editor
             var markers = FindOrCreateUI("MarkersRoot", mapImageGo.transform);
             markersRoot = (RectTransform)markers.transform;
             Stretch(markersRoot);
+
+            var contractIcons = FindOrCreateUI("ContractIconsRoot", mapImageGo.transform);
+            contractIconsRoot = (RectTransform)contractIcons.transform;
+            Stretch(contractIconsRoot);
 
             scrollRect.viewport = viewportRect;
             scrollRect.content = contentRect;
@@ -375,12 +419,14 @@ namespace FantasyGuildmaster.Editor
             rect.localScale = Vector3.one;
         }
 
-        private static void AssignMapController(MapController controller, RectTransform mapRect, RectTransform markersRoot, RegionMarker markerPrefab, RegionDetailsPanel detailsPanel, GameClock clock)
+        private static void AssignMapController(MapController controller, RectTransform mapRect, RectTransform markersRoot, RectTransform contractIconsRoot, RegionMarker markerPrefab, ContractIcon contractIconPrefab, RegionDetailsPanel detailsPanel, GameClock clock)
         {
             var so = new SerializedObject(controller);
             so.FindProperty("mapRect").objectReferenceValue = mapRect;
             so.FindProperty("markersRoot").objectReferenceValue = markersRoot;
             so.FindProperty("regionMarkerPrefab").objectReferenceValue = markerPrefab;
+            so.FindProperty("contractIconsRoot").objectReferenceValue = contractIconsRoot;
+            so.FindProperty("contractIconPrefab").objectReferenceValue = contractIconPrefab;
             so.FindProperty("detailsPanel").objectReferenceValue = detailsPanel;
             so.FindProperty("gameClock").objectReferenceValue = clock;
             so.ApplyModifiedPropertiesWithoutUndo();
@@ -409,6 +455,15 @@ namespace FantasyGuildmaster.Editor
             so.FindProperty("rewardText").objectReferenceValue = reward;
             so.ApplyModifiedPropertiesWithoutUndo();
         }
+
+        private static void AssignContractIcon(ContractIcon contractIcon, Image icon, TMP_Text timer)
+        {
+            var so = new SerializedObject(contractIcon);
+            so.FindProperty("iconImage").objectReferenceValue = icon;
+            so.FindProperty("timerText").objectReferenceValue = timer;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
     }
 }
 #endif

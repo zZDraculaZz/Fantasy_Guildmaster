@@ -21,6 +21,8 @@ namespace FantasyGuildmaster.Map
         private RegionData _region;
         private Action<RegionData> _onSelected;
 
+        public Vector2 AnchoredPosition => _rectTransform != null ? _rectTransform.anchoredPosition : Vector2.zero;
+
         private void Awake()
         {
             _rectTransform = (RectTransform)transform;
