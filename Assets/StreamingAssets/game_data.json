@@ -1,0 +1,34 @@
+{
+  "regions": [
+    {
+      "id": "northwatch",
+      "name": "Northwatch",
+      "pos": { "x": 0.22, "y": 0.72 },
+      "danger": 38,
+      "threats": ["Undead Patrols", "Bandit Scouts"],
+      "faction": "Wardens of Ash",
+      "travelDays": 3,
+      "iconKey": "region_northmarch"
+    },
+    {
+      "id": "mireveil",
+      "name": "Mireveil",
+      "pos": { "x": 0.47, "y": 0.44 },
+      "danger": 67,
+      "threats": ["Bog Wraiths", "Cult Activity", "Plague Wolves"],
+      "faction": "Black Fen Circle",
+      "travelDays": 5,
+      "iconKey": "region_blackfen"
+    },
+    {
+      "id": "ironshore",
+      "name": "Ironshore",
+      "pos": { "x": 0.78, "y": 0.61 },
+      "danger": 52,
+      "threats": ["Smugglers", "Sea Reavers"],
+      "faction": "Free Coast Houses",
+      "travelDays": 4,
+      "iconKey": "region_fallback"
+    }
+  ]
+}
