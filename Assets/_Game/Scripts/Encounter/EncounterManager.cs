@@ -19,6 +19,7 @@ namespace FantasyGuildmaster.Encounter
 
         private readonly List<EncounterData> _encounters = new();
         private readonly Queue<EncounterRequest> _queue = new();
+        private readonly HashSet<string> _cancelledSquadIds = new();
 
         private Func<string, SquadData> _resolveSquad;
         private Action<int> _addGold;
@@ -39,6 +40,12 @@ namespace FantasyGuildmaster.Encounter
 
         public void StartEncounter(string regionId, string squadId, Action onEncounterClosed)
         {
+            if (string.IsNullOrEmpty(squadId))
+            {
+                onEncounterClosed?.Invoke();
+                return;
+            }
+
             var request = new EncounterRequest
             {
                 regionId = regionId,
@@ -46,12 +53,20 @@ namespace FantasyGuildmaster.Encounter
                 onEncounterClosed = onEncounterClosed
             };
 
+            _cancelledSquadIds.Remove(squadId);
             _queue.Enqueue(request);
             TryPresentNextEncounter();
         }
 
         public void CancelPendingForSquad(string squadId)
         {
+            if (string.IsNullOrEmpty(squadId))
+            {
+                return;
+            }
+
+            _cancelledSquadIds.Add(squadId);
+
             if (_queue.Count == 0)
             {
                 return;
@@ -84,6 +99,12 @@ namespace FantasyGuildmaster.Encounter
             {
                 var request = _queue.Dequeue();
 
+                if (_cancelledSquadIds.Contains(request.squadId))
+                {
+                    request.onEncounterClosed?.Invoke();
+                    continue;
+                }
+
                 if (encounterPanel == null || _encounters.Count == 0)
                 {
                     request.onEncounterClosed?.Invoke();
@@ -107,6 +128,17 @@ namespace FantasyGuildmaster.Encounter
 
         private void ResolveOption(EncounterRequest request, EncounterOption option)
         {
+            if (_cancelledSquadIds.Contains(request.squadId))
+            {
+                encounterPanel.ShowResult("Encounter cancelled.", () =>
+                {
+                    _isPresentingEncounter = false;
+                    request.onEncounterClosed?.Invoke();
+                    TryPresentNextEncounter();
+                });
+                return;
+            }
+
             var success = UnityEngine.Random.value <= option.successChance;
             var squad = _resolveSquad?.Invoke(request.squadId);
             var result = success ? option.successText : option.failText;
@@ -129,6 +161,7 @@ namespace FantasyGuildmaster.Encounter
             encounterPanel.ShowResult(result, () =>
             {
                 _isPresentingEncounter = false;
+                _cancelledSquadIds.Remove(request.squadId);
                 request.onEncounterClosed?.Invoke();
                 TryPresentNextEncounter();
             });
