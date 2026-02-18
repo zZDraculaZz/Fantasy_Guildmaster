@@ -548,6 +548,7 @@ namespace FantasyGuildmaster.Map
 
             RemoveExistingTaskForSquad(squadId);
             RemoveTravelToken(squadId);
+            encounterManager?.CancelPendingForSquad(squadId);
             squad.state = SquadState.IdleAtHQ;
             squad.currentRegionId = GuildHqId;
             squad.hp = 0;

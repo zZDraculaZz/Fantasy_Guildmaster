@@ -8,13 +8,22 @@ namespace FantasyGuildmaster.Encounter
 {
     public sealed class EncounterManager : MonoBehaviour
     {
+        private struct EncounterRequest
+        {
+            public string regionId;
+            public string squadId;
+            public Action onEncounterClosed;
+        }
+
         [SerializeField] private EncounterPanel encounterPanel;
 
         private readonly List<EncounterData> _encounters = new();
+        private readonly Queue<EncounterRequest> _queue = new();
 
         private Func<string, SquadData> _resolveSquad;
         private Action<int> _addGold;
         private Action<string> _onSquadDestroyed;
+        private bool _isPresentingEncounter;
 
         private void Awake()
         {
@@ -30,21 +39,76 @@ namespace FantasyGuildmaster.Encounter
 
         public void StartEncounter(string regionId, string squadId, Action onEncounterClosed)
         {
-            if (encounterPanel == null || _encounters.Count == 0)
+            var request = new EncounterRequest
             {
-                onEncounterClosed?.Invoke();
+                regionId = regionId,
+                squadId = squadId,
+                onEncounterClosed = onEncounterClosed
+            };
+
+            _queue.Enqueue(request);
+            TryPresentNextEncounter();
+        }
+
+        public void CancelPendingForSquad(string squadId)
+        {
+            if (_queue.Count == 0)
+            {
                 return;
             }
 
-            var index = Mathf.Abs((regionId + squadId).GetHashCode()) % _encounters.Count;
-            var encounter = _encounters[index];
-            encounterPanel.ShowEncounter(encounter, option => ResolveOption(squadId, option, onEncounterClosed));
+            var tmp = new Queue<EncounterRequest>(_queue.Count);
+            while (_queue.Count > 0)
+            {
+                var req = _queue.Dequeue();
+                if (req.squadId != squadId)
+                {
+                    tmp.Enqueue(req);
+                }
+            }
+
+            while (tmp.Count > 0)
+            {
+                _queue.Enqueue(tmp.Dequeue());
+            }
         }
 
-        private void ResolveOption(string squadId, EncounterOption option, Action onEncounterClosed)
+        private void TryPresentNextEncounter()
+        {
+            if (_isPresentingEncounter)
+            {
+                return;
+            }
+
+            while (_queue.Count > 0)
+            {
+                var request = _queue.Dequeue();
+
+                if (encounterPanel == null || _encounters.Count == 0)
+                {
+                    request.onEncounterClosed?.Invoke();
+                    continue;
+                }
+
+                var squad = _resolveSquad?.Invoke(request.squadId);
+                if (squad == null || squad.hp <= 0)
+                {
+                    request.onEncounterClosed?.Invoke();
+                    continue;
+                }
+
+                var index = Mathf.Abs((request.regionId + request.squadId).GetHashCode()) % _encounters.Count;
+                var encounter = _encounters[index];
+                _isPresentingEncounter = true;
+                encounterPanel.ShowEncounter(encounter, option => ResolveOption(request, option));
+                return;
+            }
+        }
+
+        private void ResolveOption(EncounterRequest request, EncounterOption option)
         {
             var success = UnityEngine.Random.value <= option.successChance;
-            var squad = _resolveSquad?.Invoke(squadId);
+            var squad = _resolveSquad?.Invoke(request.squadId);
             var result = success ? option.successText : option.failText;
 
             if (success && option.goldReward > 0)
@@ -62,7 +126,12 @@ namespace FantasyGuildmaster.Encounter
                 }
             }
 
-            encounterPanel.ShowResult(result, onEncounterClosed);
+            encounterPanel.ShowResult(result, () =>
+            {
+                _isPresentingEncounter = false;
+                request.onEncounterClosed?.Invoke();
+                TryPresentNextEncounter();
+            });
         }
 
         private void SeedEncounters()
