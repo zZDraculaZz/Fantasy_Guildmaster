@@ -27,11 +27,30 @@ namespace FantasyGuildmaster.UI
             gameObject.SetActive(false);
         }
 
+
+
+        public void ConfigureRuntimeBindings(TMP_Text runtimeTitleText, TMP_Text runtimeDescriptionText, RectTransform runtimeOptionsRoot, Button runtimeOptionButtonPrefab, Button runtimeContinueButton)
+        {
+            titleText = runtimeTitleText;
+            descriptionText = runtimeDescriptionText;
+            optionsRoot = runtimeOptionsRoot;
+            optionButtonPrefab = runtimeOptionButtonPrefab;
+            continueButton = runtimeContinueButton;
+        }
+
         public void ShowEncounter(EncounterData encounter, Action<EncounterOption> onOptionSelected)
         {
             gameObject.SetActive(true);
-            titleText.text = encounter.title;
-            descriptionText.text = encounter.description;
+
+            if (titleText != null)
+            {
+                titleText.text = encounter.title;
+            }
+
+            if (descriptionText != null)
+            {
+                descriptionText.text = encounter.description;
+            }
 
             if (continueButton != null)
             {
@@ -44,7 +63,11 @@ namespace FantasyGuildmaster.UI
 
         public void ShowResult(string resultText, Action onContinue)
         {
-            descriptionText.text = resultText;
+            if (descriptionText != null)
+            {
+                descriptionText.text = resultText;
+            }
+
             ClearOptionButtons();
 
             if (continueButton != null)
@@ -62,6 +85,11 @@ namespace FantasyGuildmaster.UI
         private void RebuildOptions(List<EncounterOption> options, Action<EncounterOption> onOptionSelected)
         {
             ClearOptionButtons();
+
+            if (optionButtonPrefab == null || optionsRoot == null || options == null)
+            {
+                return;
+            }
 
             for (var i = 0; i < options.Count; i++)
             {

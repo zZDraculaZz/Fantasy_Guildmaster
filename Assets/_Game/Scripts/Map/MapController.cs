@@ -4,7 +4,10 @@ using FantasyGuildmaster.Core;
 using FantasyGuildmaster.Data;
 using FantasyGuildmaster.Encounter;
 using FantasyGuildmaster.UI;
+using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
+using UnityEngine.EventSystems;
 
 namespace FantasyGuildmaster.Map
 {
@@ -12,6 +15,7 @@ namespace FantasyGuildmaster.Map
     {
         private const string GuildHqId = "guild_hq";
         private const string GuildHqName = "Guild HQ";
+        private const bool DEBUG_TRAVEL = true;
 
         [SerializeField] private RectTransform mapRect;
         [SerializeField] private RectTransform markersRoot;
@@ -49,6 +53,7 @@ namespace FantasyGuildmaster.Map
             SpawnMarkers();
             InitializePools();
             SyncAllContractIcons();
+            EnsureEncounterDependencies();
 
             if (encounterManager != null)
             {
@@ -134,8 +139,9 @@ namespace FantasyGuildmaster.Map
         private void TickTravelTasks()
         {
             var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            var completedTasks = new List<TravelTask>();
 
-            for (var i = _travelTasks.Count - 1; i >= 0; i--)
+            for (var i = 0; i < _travelTasks.Count; i++)
             {
                 var task = _travelTasks[i];
                 if (!_markersByRegion.TryGetValue(task.fromRegionId, out var fromMarker)
@@ -154,17 +160,25 @@ namespace FantasyGuildmaster.Map
                     token.UpdateView(pos, ToTimerText(remaining));
                 }
 
-                if (now < task.endUnix)
+                if (now >= task.endUnix)
                 {
-                    continue;
+                    completedTasks.Add(task);
                 }
+            }
 
-                _travelTasks.RemoveAt(i);
-                HandleTravelTaskCompleted(task);
+            for (var i = 0; i < completedTasks.Count; i++)
+            {
+                var task = completedTasks[i];
+                HandleTravelTaskCompleted(task, now);
+            }
+
+            for (var i = 0; i < completedTasks.Count; i++)
+            {
+                _travelTasks.Remove(completedTasks[i]);
             }
         }
 
-        private void HandleTravelTaskCompleted(TravelTask task)
+        private void HandleTravelTaskCompleted(TravelTask task, long nowUnix)
         {
             var squad = FindSquad(task.squadId);
             if (squad == null)
@@ -175,19 +189,35 @@ namespace FantasyGuildmaster.Map
 
             if (task.phase == TravelPhase.Outbound)
             {
+                if (DEBUG_TRAVEL)
+                {
+                    Debug.Log($"[TravelDebug] Outbound complete: squad={squad.name}, now={nowUnix}, region={task.toRegionId}");
+                }
+
                 squad.currentRegionId = task.toRegionId;
                 squad.state = SquadState.ResolvingEncounter;
 
                 if (encounterManager != null)
                 {
-                    encounterManager.StartEncounter(task.toRegionId, squad.id, () => OnEncounterResolved(squad.id, task.toRegionId, task.contractId, task.contractReward));
+                    if (DEBUG_TRAVEL)
+                    {
+                        Debug.Log($"[TravelDebug] Encounter queued: squad={squad.name}, region={task.toRegionId}");
+                    }
+
+                    encounterManager.EnqueueEncounter(task.toRegionId, squad.id, () => OnEncounterResolved(squad.id, task.toRegionId, task.contractId, task.contractReward));
                 }
                 else
                 {
+                    Debug.LogWarning($"[TravelDebug] EncounterManager missing, fallback to immediate return: squad={squad.name}");
                     OnEncounterResolved(squad.id, task.toRegionId, task.contractId, task.contractReward);
                 }
 
                 return;
+            }
+
+            if (DEBUG_TRAVEL)
+            {
+                Debug.Log($"[TravelDebug] Return complete: squad={squad.name}, now={nowUnix}, reward={task.contractReward}");
             }
 
             squad.currentRegionId = GuildHqId;
@@ -208,10 +238,176 @@ namespace FantasyGuildmaster.Map
             StartTravelTask(squad, regionId, GuildHqId, contractId, contractReward, TravelPhase.Return);
             squad.state = SquadState.ReturningToHQ;
 
+            if (DEBUG_TRAVEL)
+            {
+                Debug.Log($"[TravelDebug] Return task created: squad={squad.name}, {regionId}->{GuildHqId}");
+            }
+
             if (detailsPanel != null)
             {
                 detailsPanel.SetIdleSquadsCount(GetIdleSquads().Count);
             }
+        }
+
+        private void EnsureEncounterDependencies()
+        {
+            if (encounterManager == null)
+            {
+                encounterManager = FindFirstObjectByType<EncounterManager>();
+            }
+
+            var encounterPanel = FindFirstObjectByType<EncounterPanel>();
+            if (encounterPanel == null)
+            {
+                var allPanels = Resources.FindObjectsOfTypeAll<EncounterPanel>();
+                if (allPanels != null && allPanels.Length > 0)
+                {
+                    encounterPanel = allPanels[0];
+                }
+            }
+
+            if (encounterPanel == null)
+            {
+                encounterPanel = CreateRuntimeEncounterPanel();
+            }
+
+            if (encounterManager == null)
+            {
+                var managerGo = new GameObject("EncounterManager");
+                encounterManager = managerGo.AddComponent<EncounterManager>();
+            }
+
+            if (encounterPanel != null)
+            {
+                encounterManager.SetEncounterPanel(encounterPanel);
+            }
+        }
+
+        private EncounterPanel CreateRuntimeEncounterPanel()
+        {
+            var prefab = Resources.Load<GameObject>("Prefabs/EncounterPanel");
+            if (prefab != null)
+            {
+                var instance = Instantiate(prefab);
+                var panelFromPrefab = instance.GetComponent<EncounterPanel>();
+                if (panelFromPrefab != null)
+                {
+                    return panelFromPrefab;
+                }
+            }
+
+            var canvas = EnsureCanvas();
+            if (canvas == null)
+            {
+                Debug.LogError("[TravelDebug] Failed to create runtime EncounterPanel: Canvas missing.");
+                return null;
+            }
+
+            var panelGo = new GameObject("EncounterPanel", typeof(RectTransform), typeof(Image), typeof(EncounterPanel));
+            panelGo.transform.SetParent(canvas.transform, false);
+            var panelRect = panelGo.GetComponent<RectTransform>();
+            panelRect.anchorMin = Vector2.zero;
+            panelRect.anchorMax = Vector2.one;
+            panelRect.offsetMin = Vector2.zero;
+            panelRect.offsetMax = Vector2.zero;
+            var panelImage = panelGo.GetComponent<Image>();
+            panelImage.color = new Color(0f, 0f, 0f, 0.75f);
+
+            var contentGo = new GameObject("Content", typeof(RectTransform), typeof(Image), typeof(VerticalLayoutGroup));
+            contentGo.transform.SetParent(panelGo.transform, false);
+            var contentRect = contentGo.GetComponent<RectTransform>();
+            contentRect.anchorMin = new Vector2(0.5f, 0.5f);
+            contentRect.anchorMax = new Vector2(0.5f, 0.5f);
+            contentRect.pivot = new Vector2(0.5f, 0.5f);
+            contentRect.sizeDelta = new Vector2(680f, 420f);
+            var contentImage = contentGo.GetComponent<Image>();
+            contentImage.color = new Color(0.12f, 0.12f, 0.12f, 0.95f);
+            var layout = contentGo.GetComponent<VerticalLayoutGroup>();
+            layout.padding = new RectOffset(24, 24, 24, 24);
+            layout.spacing = 12f;
+            layout.childForceExpandWidth = true;
+            layout.childForceExpandHeight = false;
+
+            var title = CreateText(contentGo.transform, "Title", 34f, FontStyles.Bold, TextAlignmentOptions.Center);
+            var description = CreateText(contentGo.transform, "Description", 26f, FontStyles.Normal, TextAlignmentOptions.TopLeft);
+
+            var optionsRootGo = new GameObject("OptionsRoot", typeof(RectTransform), typeof(VerticalLayoutGroup));
+            optionsRootGo.transform.SetParent(contentGo.transform, false);
+            var optionsLayout = optionsRootGo.GetComponent<VerticalLayoutGroup>();
+            optionsLayout.spacing = 8f;
+            optionsLayout.childForceExpandHeight = false;
+            optionsLayout.childForceExpandWidth = true;
+
+            var optionButton = CreateButton(contentGo.transform, "OptionButtonTemplate", "Option");
+            optionButton.gameObject.SetActive(false);
+
+            var continueButton = CreateButton(contentGo.transform, "ContinueButton", "Continue");
+
+            var panel = panelGo.GetComponent<EncounterPanel>();
+            panel.ConfigureRuntimeBindings(title, description, optionsRootGo.GetComponent<RectTransform>(), optionButton, continueButton);
+            panelGo.SetActive(false);
+            return panel;
+        }
+
+        private static Canvas EnsureCanvas()
+        {
+            var canvas = FindFirstObjectByType<Canvas>();
+            if (canvas != null)
+            {
+                EnsureEventSystem();
+                return canvas;
+            }
+
+            var canvasGo = new GameObject("Canvas", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
+            canvas = canvasGo.GetComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            var scaler = canvasGo.GetComponent<CanvasScaler>();
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            scaler.referenceResolution = new Vector2(1920f, 1080f);
+            EnsureEventSystem();
+            return canvas;
+        }
+
+        private static void EnsureEventSystem()
+        {
+            if (FindFirstObjectByType<EventSystem>() != null)
+            {
+                return;
+            }
+
+            _ = new GameObject("EventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
+        }
+
+        private static TextMeshProUGUI CreateText(Transform parent, string objectName, float size, FontStyles style, TextAlignmentOptions alignment)
+        {
+            var go = new GameObject(objectName, typeof(RectTransform), typeof(TextMeshProUGUI));
+            go.transform.SetParent(parent, false);
+            var text = go.GetComponent<TextMeshProUGUI>();
+            text.fontSize = size;
+            text.fontStyle = style;
+            text.alignment = alignment;
+            text.color = Color.white;
+            text.text = objectName;
+            return text;
+        }
+
+        private static Button CreateButton(Transform parent, string objectName, string labelText)
+        {
+            var buttonGo = new GameObject(objectName, typeof(RectTransform), typeof(Image), typeof(Button), typeof(LayoutElement));
+            buttonGo.transform.SetParent(parent, false);
+            var image = buttonGo.GetComponent<Image>();
+            image.color = new Color(0.24f, 0.24f, 0.24f, 1f);
+            var layoutElement = buttonGo.GetComponent<LayoutElement>();
+            layoutElement.minHeight = 56f;
+
+            var label = CreateText(buttonGo.transform, "Label", 24f, FontStyles.Normal, TextAlignmentOptions.Center);
+            var labelRect = label.rectTransform;
+            labelRect.anchorMin = Vector2.zero;
+            labelRect.anchorMax = Vector2.one;
+            labelRect.offsetMin = Vector2.zero;
+            labelRect.offsetMax = Vector2.zero;
+            label.text = labelText;
+            return buttonGo.GetComponent<Button>();
         }
 
         private void InitializePools()
@@ -314,6 +510,12 @@ namespace FantasyGuildmaster.Map
             RemoveExistingTaskForSquad(squad.id);
             _travelTasks.Add(task);
             AcquireOrUpdateTravelToken(squad, task);
+
+            if (DEBUG_TRAVEL)
+            {
+                var phaseLabel = phase == TravelPhase.Outbound ? "OUT" : "RET";
+                Debug.Log($"[TravelDebug] Travel task created: phase={phaseLabel}, squad={squad.name}, route={fromRegionId}->{toRegionId}, endUnix={task.endUnix}");
+            }
         }
 
         private int ResolveTravelDuration(string regionId)

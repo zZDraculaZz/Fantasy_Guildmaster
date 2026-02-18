@@ -26,9 +26,16 @@ namespace FantasyGuildmaster.Encounter
         private Action<string> _onSquadDestroyed;
         private bool _isPresentingEncounter;
 
+        public bool IsEncounterActive => _isPresentingEncounter;
+
         private void Awake()
         {
             SeedEncounters();
+        }
+
+        public void SetEncounterPanel(EncounterPanel panel)
+        {
+            encounterPanel = panel;
         }
 
         public void Configure(Func<string, SquadData> resolveSquad, Action<int> addGold, Action<string> onSquadDestroyed)
@@ -36,6 +43,11 @@ namespace FantasyGuildmaster.Encounter
             _resolveSquad = resolveSquad;
             _addGold = addGold;
             _onSquadDestroyed = onSquadDestroyed;
+        }
+
+        public void EnqueueEncounter(string regionId, string squadId, Action onEncounterClosed)
+        {
+            StartEncounter(regionId, squadId, onEncounterClosed);
         }
 
         public void StartEncounter(string regionId, string squadId, Action onEncounterClosed)
@@ -121,6 +133,7 @@ namespace FantasyGuildmaster.Encounter
                 var index = Mathf.Abs((request.regionId + request.squadId).GetHashCode()) % _encounters.Count;
                 var encounter = _encounters[index];
                 _isPresentingEncounter = true;
+                Debug.Log($"[TravelDebug] Encounter UI show: squad={request.squadId}, region={request.regionId}, encounter={encounter.id}");
                 encounterPanel.ShowEncounter(encounter, option => ResolveOption(request, option));
                 return;
             }
@@ -133,6 +146,7 @@ namespace FantasyGuildmaster.Encounter
                 encounterPanel.ShowResult("Encounter cancelled.", () =>
                 {
                     _isPresentingEncounter = false;
+                    Debug.Log($"[TravelDebug] Encounter continue: squad={request.squadId} (cancelled)");
                     request.onEncounterClosed?.Invoke();
                     TryPresentNextEncounter();
                 });
@@ -162,6 +176,7 @@ namespace FantasyGuildmaster.Encounter
             {
                 _isPresentingEncounter = false;
                 _cancelledSquadIds.Remove(request.squadId);
+                Debug.Log($"[TravelDebug] Encounter continue: squad={request.squadId}");
                 request.onEncounterClosed?.Invoke();
                 TryPresentNextEncounter();
             });
