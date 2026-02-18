@@ -59,3 +59,12 @@ crashlytics-build.properties
 .DS_Store*
 Thumbs.db
 Desktop.ini
+
+# Additional local/editor noise
+*.orig
+*.rej
+*.log
+*.tmp
+*.bak
+.artifacts/
+artifacts/
