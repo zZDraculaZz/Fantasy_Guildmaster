@@ -20,6 +20,12 @@ namespace FantasyGuildmaster.UI
 
         private void Awake()
         {
+            _canvasGroup = GetComponent<CanvasGroup>();
+            if (_canvasGroup == null)
+            {
+                _canvasGroup = gameObject.AddComponent<CanvasGroup>();
+            }
+
             if (continueButton != null)
             {
                 continueButton.gameObject.SetActive(false);
@@ -54,7 +60,14 @@ namespace FantasyGuildmaster.UI
 
             EnsureParentCanvas();
 
-            _canvasGroup ??= GetComponent<CanvasGroup>() ?? gameObject.AddComponent<CanvasGroup>();
+            if (_canvasGroup == null)
+            {
+                _canvasGroup = GetComponent<CanvasGroup>();
+                if (_canvasGroup == null)
+                {
+                    _canvasGroup = gameObject.AddComponent<CanvasGroup>();
+                }
+            }
             _canvasGroup.alpha = 1f;
             _canvasGroup.interactable = true;
             _canvasGroup.blocksRaycasts = true;
