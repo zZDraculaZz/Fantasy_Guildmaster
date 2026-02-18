@@ -10,6 +10,9 @@ namespace FantasyGuildmaster.Map
 {
     public sealed class MapController : MonoBehaviour
     {
+        private const string GuildHqId = "guild_hq";
+        private const string GuildHqName = "Guild HQ";
+
         [SerializeField] private RectTransform mapRect;
         [SerializeField] private RectTransform markersRoot;
         [SerializeField] private RectTransform contractIconsRoot;
@@ -24,12 +27,14 @@ namespace FantasyGuildmaster.Map
         [SerializeField] private GameClock gameClock;
 
         private readonly Dictionary<string, List<ContractData>> _contractsByRegion = new();
+        private readonly Dictionary<string, RegionData> _regionById = new();
         private readonly Dictionary<string, RegionMarker> _markersByRegion = new();
         private readonly Dictionary<string, List<ContractIcon>> _iconsByRegion = new();
         private readonly Dictionary<string, ContractIcon> _iconByContractId = new();
         private readonly List<SquadData> _squads = new();
         private readonly List<TravelTask> _travelTasks = new();
         private readonly Dictionary<string, TravelToken> _travelTokenBySquadId = new();
+
         private GameData _gameData;
         private ContractIconPool _iconPool;
         private TravelTokenPool _travelTokenPool;
@@ -37,6 +42,8 @@ namespace FantasyGuildmaster.Map
         private void Awake()
         {
             _gameData = GameDataLoader.Load();
+            EnsureGuildHqRegion();
+            BuildRegionIndex();
             SeedContracts();
             SeedSquads();
             SpawnMarkers();
@@ -59,9 +66,10 @@ namespace FantasyGuildmaster.Map
                 squadSelectPanel.Hide();
             }
 
-            if (_gameData.regions.Count > 0)
+            var firstPlayableRegion = GetFirstPlayableRegion();
+            if (firstPlayableRegion != null)
             {
-                SelectRegion(_gameData.regions[0]);
+                SelectRegion(firstPlayableRegion);
             }
         }
 
@@ -94,6 +102,7 @@ namespace FantasyGuildmaster.Map
             TickContracts();
             SyncAllContractIcons();
             TickTravelTasks();
+
             if (detailsPanel != null)
             {
                 detailsPanel.TickContracts();
@@ -103,8 +112,14 @@ namespace FantasyGuildmaster.Map
 
         private void TickContracts()
         {
-            foreach (var contracts in _contractsByRegion.Values)
+            foreach (var pair in _contractsByRegion)
             {
+                if (pair.Key == GuildHqId)
+                {
+                    continue;
+                }
+
+                var contracts = pair.Value;
                 for (var i = contracts.Count - 1; i >= 0; i--)
                 {
                     contracts[i].remainingSeconds--;
@@ -144,8 +159,58 @@ namespace FantasyGuildmaster.Map
                     continue;
                 }
 
-                CompleteTravelTask(task);
                 _travelTasks.RemoveAt(i);
+                HandleTravelTaskCompleted(task);
+            }
+        }
+
+        private void HandleTravelTaskCompleted(TravelTask task)
+        {
+            var squad = FindSquad(task.squadId);
+            if (squad == null)
+            {
+                RemoveTravelToken(task.squadId);
+                return;
+            }
+
+            if (task.phase == TravelPhase.Outbound)
+            {
+                squad.currentRegionId = task.toRegionId;
+                squad.state = SquadState.ResolvingEncounter;
+
+                if (encounterManager != null)
+                {
+                    encounterManager.StartEncounter(task.toRegionId, squad.id, () => OnEncounterResolved(squad.id, task.toRegionId, task.contractId, task.contractReward));
+                }
+                else
+                {
+                    OnEncounterResolved(squad.id, task.toRegionId, task.contractId, task.contractReward);
+                }
+
+                return;
+            }
+
+            squad.currentRegionId = GuildHqId;
+            squad.state = SquadState.IdleAtHQ;
+            AddGold(task.contractReward);
+            RemoveTravelToken(task.squadId);
+        }
+
+        private void OnEncounterResolved(string squadId, string regionId, string contractId, int contractReward)
+        {
+            var squad = FindSquad(squadId);
+            if (squad == null || squad.hp <= 0)
+            {
+                RemoveTravelToken(squadId);
+                return;
+            }
+
+            StartTravelTask(squad, regionId, GuildHqId, contractId, contractReward, TravelPhase.Return);
+            squad.state = SquadState.ReturningToHQ;
+
+            if (detailsPanel != null)
+            {
+                detailsPanel.SetIdleSquadsCount(GetIdleSquads().Count);
             }
         }
 
@@ -165,11 +230,12 @@ namespace FantasyGuildmaster.Map
 
         private void SpawnMarkers()
         {
-            foreach (var marker in _markersByRegion.Values)
+            for (var i = markersRoot.childCount - 1; i >= 0; i--)
             {
-                if (marker != null)
+                var child = markersRoot.GetChild(i);
+                if (child != null)
                 {
-                    Destroy(marker.gameObject);
+                    Destroy(child.gameObject);
                 }
             }
 
@@ -200,7 +266,7 @@ namespace FantasyGuildmaster.Map
 
         private void OnAssignSquadRequested(RegionData region, ContractData contract)
         {
-            if (squadSelectPanel == null || region == null || contract == null)
+            if (squadSelectPanel == null || region == null || contract == null || region.id == GuildHqId)
             {
                 return;
             }
@@ -211,82 +277,95 @@ namespace FantasyGuildmaster.Map
                 return;
             }
 
-            squadSelectPanel.Show(idle, squad => StartTravelTask(squad, region, contract));
+            squadSelectPanel.Show(idle, squad =>
+            {
+                StartTravelTask(squad, GuildHqId, region.id, contract.id, contract.reward, TravelPhase.Outbound);
+                squad.state = SquadState.TravelingToRegion;
+
+                if (detailsPanel != null)
+                {
+                    detailsPanel.SetIdleSquadsCount(GetIdleSquads().Count);
+                }
+            });
         }
 
-        private void StartTravelTask(SquadData squad, RegionData destination, ContractData contract)
+        private void StartTravelTask(SquadData squad, string fromRegionId, string toRegionId, string contractId, int contractReward, TravelPhase phase)
         {
-            if (squad == null || destination == null || contract == null)
+            if (squad == null)
             {
                 return;
             }
 
-            if (squad.status != SquadStatus.Idle)
-            {
-                return;
-            }
-
+            var duration = ResolveTravelDuration(toRegionId);
             var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            var duration = Mathf.Max(1, destination.travelDays * 10);
 
             var task = new TravelTask
             {
                 squadId = squad.id,
-                fromRegionId = squad.currentRegionId,
-                toRegionId = destination.id,
-                contractId = contract.id,
+                fromRegionId = fromRegionId,
+                toRegionId = toRegionId,
+                contractId = contractId,
+                contractReward = contractReward,
+                phase = phase,
                 startUnix = now,
                 endUnix = now + duration
             };
 
-            squad.status = SquadStatus.Traveling;
+            RemoveExistingTaskForSquad(squad.id);
             _travelTasks.Add(task);
-            AcquireTravelToken(squad, task);
-            if (detailsPanel != null)
+            AcquireOrUpdateTravelToken(squad, task);
+        }
+
+        private int ResolveTravelDuration(string regionId)
+        {
+            if (_regionById.TryGetValue(regionId, out var region))
             {
-                detailsPanel.SetIdleSquadsCount(GetIdleSquads().Count);
+                return Mathf.Max(1, region.travelDays * 10);
+            }
+
+            return 10;
+        }
+
+        private void RemoveExistingTaskForSquad(string squadId)
+        {
+            for (var i = _travelTasks.Count - 1; i >= 0; i--)
+            {
+                if (_travelTasks[i].squadId == squadId)
+                {
+                    _travelTasks.RemoveAt(i);
+                }
             }
         }
 
-        private void AcquireTravelToken(SquadData squad, TravelTask task)
+        private void AcquireOrUpdateTravelToken(SquadData squad, TravelTask task)
         {
             if (_travelTokenPool == null)
             {
                 return;
             }
 
-            if (_travelTokenBySquadId.TryGetValue(task.squadId, out var existing) && existing != null)
+            if (!_travelTokenBySquadId.TryGetValue(task.squadId, out var token) || token == null)
             {
-                return;
+                token = _travelTokenPool.Get();
+                token.transform.SetParent(travelTokensRoot, false);
+                _travelTokenBySquadId[task.squadId] = token;
             }
 
-            var token = _travelTokenPool.Get();
-            token.transform.SetParent(travelTokensRoot, false);
             token.Bind(squad.id, squad.name);
-            _travelTokenBySquadId[squad.id] = token;
+
+            if (_markersByRegion.TryGetValue(task.fromRegionId, out var fromMarker) && fromMarker != null)
+            {
+                var remaining = Mathf.Max(0, (int)(task.endUnix - DateTimeOffset.UtcNow.ToUnixTimeSeconds()));
+                token.UpdateView(fromMarker.AnchoredPosition, ToTimerText(remaining));
+            }
         }
 
-        private void CompleteTravelTask(TravelTask task)
+        private void RemoveTravelToken(string squadId)
         {
-            var squad = FindSquad(task.squadId);
-            if (squad != null)
-            {
-                squad.status = SquadStatus.Idle;
-                squad.currentRegionId = task.toRegionId;
-                if (encounterManager != null)
-                {
-                    encounterManager.StartEncounter(task.toRegionId, squad.id);
-                }
-                else
-                {
-                    Debug.Log($"Squad arrived: {squad.name}");
-                }
-            }
-
-            if (_travelTokenBySquadId.TryGetValue(task.squadId, out var token))
+            if (_travelTokenBySquadId.TryGetValue(squadId, out var token))
             {
                 _travelTokenPool?.Return(token);
-                _travelTokenBySquadId.Remove(task.squadId);
+                _travelTokenBySquadId.Remove(squadId);
             }
         }
 
@@ -299,6 +378,11 @@ namespace FantasyGuildmaster.Map
 
             foreach (var pair in _contractsByRegion)
             {
+                if (pair.Key == GuildHqId)
+                {
+                    continue;
+                }
+
                 if (!_markersByRegion.TryGetValue(pair.Key, out var marker) || marker == null)
                 {
                     continue;
@@ -385,6 +469,12 @@ namespace FantasyGuildmaster.Map
 
             foreach (var region in _gameData.regions)
             {
+                if (region.id == GuildHqId)
+                {
+                    _contractsByRegion[region.id] = new List<ContractData>();
+                    continue;
+                }
+
                 var random = new System.Random(region.id.GetHashCode());
                 var count = random.Next(2, 5);
                 var contracts = new List<ContractData>(count);
@@ -408,9 +498,9 @@ namespace FantasyGuildmaster.Map
         private void SeedSquads()
         {
             _squads.Clear();
-            _squads.Add(new SquadData { id = "squad_iron_hawks", name = "Iron Hawks", membersCount = 6, hp = 100, status = SquadStatus.Idle, currentRegionId = _gameData.regions.Count > 0 ? _gameData.regions[0].id : string.Empty });
-            _squads.Add(new SquadData { id = "squad_ash_blades", name = "Ash Blades", membersCount = 5, hp = 100, status = SquadStatus.Idle, currentRegionId = _gameData.regions.Count > 1 ? _gameData.regions[1].id : (_gameData.regions.Count > 0 ? _gameData.regions[0].id : string.Empty) });
-            _squads.Add(new SquadData { id = "squad_grim_lantern", name = "Grim Lantern", membersCount = 4, hp = 100, status = SquadStatus.Idle, currentRegionId = _gameData.regions.Count > 2 ? _gameData.regions[2].id : (_gameData.regions.Count > 0 ? _gameData.regions[0].id : string.Empty) });
+            _squads.Add(new SquadData { id = "squad_iron_hawks", name = "Iron Hawks", membersCount = 6, hp = 100, state = SquadState.IdleAtHQ, currentRegionId = GuildHqId });
+            _squads.Add(new SquadData { id = "squad_ash_blades", name = "Ash Blades", membersCount = 5, hp = 100, state = SquadState.IdleAtHQ, currentRegionId = GuildHqId });
+            _squads.Add(new SquadData { id = "squad_grim_lantern", name = "Grim Lantern", membersCount = 4, hp = 100, state = SquadState.IdleAtHQ, currentRegionId = GuildHqId });
         }
 
         private List<SquadData> GetIdleSquads()
@@ -418,7 +508,7 @@ namespace FantasyGuildmaster.Map
             var list = new List<SquadData>();
             for (var i = 0; i < _squads.Count; i++)
             {
-                if (_squads[i].status == SquadStatus.Idle && _squads[i].hp > 0)
+                if (_squads[i].state == SquadState.IdleAtHQ && _squads[i].hp > 0)
                 {
                     list.Add(_squads[i]);
                 }
@@ -456,9 +546,64 @@ namespace FantasyGuildmaster.Map
                 return;
             }
 
-            squad.status = SquadStatus.Idle;
+            RemoveExistingTaskForSquad(squadId);
+            RemoveTravelToken(squadId);
+            squad.state = SquadState.IdleAtHQ;
+            squad.currentRegionId = GuildHqId;
             squad.hp = 0;
             Debug.Log("Squad destroyed");
+        }
+
+        private void EnsureGuildHqRegion()
+        {
+            var exists = false;
+            for (var i = 0; i < _gameData.regions.Count; i++)
+            {
+                if (_gameData.regions[i].id == GuildHqId)
+                {
+                    exists = true;
+                    break;
+                }
+            }
+
+            if (exists)
+            {
+                return;
+            }
+
+            _gameData.regions.Insert(0, new RegionData
+            {
+                id = GuildHqId,
+                name = GuildHqName,
+                pos = new NormalizedPosition { x = 0.5f, y = 0.52f },
+                danger = 0,
+                threats = new List<string>(),
+                faction = "Guild",
+                travelDays = 1,
+                iconKey = "guild_hq"
+            });
+        }
+
+        private void BuildRegionIndex()
+        {
+            _regionById.Clear();
+            for (var i = 0; i < _gameData.regions.Count; i++)
+            {
+                _regionById[_gameData.regions[i].id] = _gameData.regions[i];
+            }
+        }
+
+        private RegionData GetFirstPlayableRegion()
+        {
+            for (var i = 0; i < _gameData.regions.Count; i++)
+            {
+                if (_gameData.regions[i].id != GuildHqId)
+                {
+                    return _gameData.regions[i];
+                }
+            }
+
+            return _gameData.regions.Count > 0 ? _gameData.regions[0] : null;
         }
 
         private static string ToTimerText(int remainingSeconds)

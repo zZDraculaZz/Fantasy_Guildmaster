@@ -27,7 +27,8 @@ namespace FantasyGuildmaster.Editor
         private static readonly string[] UiIcons =
         {
             "travel_token",
-            "squad_token"
+            "squad_token",
+            "guild_hq"
         };
 
         [MenuItem("Tools/FantasyGuildmaster/Generate Placeholder Icons")]

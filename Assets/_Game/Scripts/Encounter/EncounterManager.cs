@@ -28,55 +28,41 @@ namespace FantasyGuildmaster.Encounter
             _onSquadDestroyed = onSquadDestroyed;
         }
 
-        public void StartEncounter(string regionId, string squadId)
+        public void StartEncounter(string regionId, string squadId, Action onEncounterClosed)
         {
             if (encounterPanel == null || _encounters.Count == 0)
             {
+                onEncounterClosed?.Invoke();
                 return;
             }
 
             var index = Mathf.Abs((regionId + squadId).GetHashCode()) % _encounters.Count;
             var encounter = _encounters[index];
-            encounterPanel.ShowEncounter(encounter, option => ResolveOption(squadId, option));
+            encounterPanel.ShowEncounter(encounter, option => ResolveOption(squadId, option, onEncounterClosed));
         }
 
-        private void ResolveOption(string squadId, EncounterOption option)
+        private void ResolveOption(string squadId, EncounterOption option, Action onEncounterClosed)
         {
             var success = UnityEngine.Random.value <= option.successChance;
             var squad = _resolveSquad?.Invoke(squadId);
             var result = success ? option.successText : option.failText;
 
-            if (success)
+            if (success && option.goldReward > 0)
             {
-                if (option.goldReward > 0)
-                {
-                    _addGold?.Invoke(option.goldReward);
-                }
-
-                if (option.hpLoss > 0 && squad != null)
-                {
-                    squad.hp = Mathf.Max(0, squad.hp - option.hpLoss);
-                    if (squad.hp <= 0)
-                    {
-                        _onSquadDestroyed?.Invoke(squad.id);
-                        result += "\nSquad destroyed";
-                    }
-                }
+                _addGold?.Invoke(option.goldReward);
             }
-            else
+
+            if (option.hpLoss > 0 && squad != null)
             {
-                if (option.hpLoss > 0 && squad != null)
+                squad.hp = Mathf.Max(0, squad.hp - option.hpLoss);
+                if (squad.hp <= 0)
                 {
-                    squad.hp = Mathf.Max(0, squad.hp - option.hpLoss);
-                    if (squad.hp <= 0)
-                    {
-                        _onSquadDestroyed?.Invoke(squad.id);
-                        result += "\nSquad destroyed";
-                    }
+                    _onSquadDestroyed?.Invoke(squad.id);
+                    result += "\nSquad destroyed";
                 }
             }
 
-            encounterPanel.ShowResult(result, () => { });
+            encounterPanel.ShowResult(result, onEncounterClosed);
         }
 
         private void SeedEncounters()

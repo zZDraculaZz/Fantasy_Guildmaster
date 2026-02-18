@@ -2,10 +2,18 @@ using System;
 
 namespace FantasyGuildmaster.Map
 {
-    public enum SquadStatus
+    public enum SquadState
     {
-        Idle = 0,
-        Traveling = 1
+        IdleAtHQ = 0,
+        TravelingToRegion = 1,
+        ResolvingEncounter = 2,
+        ReturningToHQ = 3
+    }
+
+    public enum TravelPhase
+    {
+        Outbound = 0,
+        Return = 1
     }
 
     [Serializable]
@@ -15,7 +23,7 @@ namespace FantasyGuildmaster.Map
         public string name;
         public int membersCount;
         public int hp;
-        public SquadStatus status;
+        public SquadState state;
         public string currentRegionId;
     }
 
@@ -26,6 +34,8 @@ namespace FantasyGuildmaster.Map
         public string fromRegionId;
         public string toRegionId;
         public string contractId;
+        public int contractReward;
+        public TravelPhase phase;
         public long startUnix;
         public long endUnix;
 

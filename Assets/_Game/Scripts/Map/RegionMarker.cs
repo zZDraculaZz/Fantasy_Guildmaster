@@ -12,6 +12,8 @@ namespace FantasyGuildmaster.Map
     {
         private const string RegionIconBasePath = "Icons/Regions/";
         private const string RegionFallbackPath = "Icons/Regions/region_fallback";
+        private const string GuildHqId = "guild_hq";
+        private const string GuildHqIconPath = "Icons/UI/guild_hq";
 
         [SerializeField] private TMP_Text label;
         [SerializeField] private Image iconImage;
@@ -54,8 +56,15 @@ namespace FantasyGuildmaster.Map
 
             if (iconImage != null)
             {
-                var path = string.IsNullOrWhiteSpace(region.iconKey) ? null : RegionIconBasePath + region.iconKey;
-                iconImage.sprite = SpriteLoader.TryLoadSprite(path, RegionFallbackPath);
+                if (region.id == GuildHqId)
+                {
+                    iconImage.sprite = SpriteLoader.TryLoadSprite(GuildHqIconPath, RegionFallbackPath);
+                }
+                else
+                {
+                    var path = string.IsNullOrWhiteSpace(region.iconKey) ? null : RegionIconBasePath + region.iconKey;
+                    iconImage.sprite = SpriteLoader.TryLoadSprite(path, RegionFallbackPath);
+                }
             }
 
             var button = GetComponent<Button>();

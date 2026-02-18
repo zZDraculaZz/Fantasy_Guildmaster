@@ -56,6 +56,7 @@ namespace FantasyGuildmaster.Editor
             var encounterPanel = EnsureEncounterPanel(layout.transform);
             var encounterManager = root.GetComponent<EncounterManager>() ?? root.AddComponent<EncounterManager>();
             var mapRect = EnsureMapArea(layout.transform, out var markersRoot, out var contractIconsRoot, out var travelTokensRoot);
+            EnsureGuildHqMarker(markersRoot);
 
             AssignEncounterManager(encounterManager, encounterPanel);
             AssignMapController(controller, mapRect, markersRoot, contractIconsRoot, travelTokensRoot, markerPrefab, contractIconPrefab, travelTokenPrefab, detailsPanel, squadSelectPanel, encounterManager, gameManager, clock);
@@ -494,6 +495,38 @@ namespace FantasyGuildmaster.Editor
             AssignEncounterPanel(panel, title, description, optionsRect, optionButton, continueButton);
             panelGo.SetActive(false);
             return panel;
+        }
+
+        private static void EnsureGuildHqMarker(RectTransform markersRoot)
+        {
+            var markerGo = FindOrCreateUI("GuildHQMarker", markersRoot);
+            markerGo.transform.SetAsFirstSibling();
+            var markerRect = (RectTransform)markerGo.transform;
+            markerRect.anchorMin = new Vector2(0.5f, 0.5f);
+            markerRect.anchorMax = new Vector2(0.5f, 0.5f);
+            markerRect.pivot = new Vector2(0.5f, 0.5f);
+            markerRect.anchoredPosition = Vector2.zero;
+            markerRect.sizeDelta = new Vector2(120f, 40f);
+
+            var image = markerGo.GetComponent<Image>() ?? markerGo.AddComponent<Image>();
+            image.color = new Color(0.2f, 0.2f, 0.25f, 0.75f);
+            image.raycastTarget = false;
+            var sprite = Resources.Load<Sprite>("Icons/UI/guild_hq");
+            if (sprite != null)
+            {
+                image.sprite = sprite;
+                image.preserveAspect = true;
+            }
+
+            var label = markerGo.transform.Find("Label") != null
+                ? markerGo.transform.Find("Label").GetComponent<TextMeshProUGUI>()
+                : CreateText("Label", markerGo.transform, "Guild HQ", 14f, TextAlignmentOptions.Center);
+            Stretch((RectTransform)label.transform, 2f);
+            label.color = Color.white;
+
+            var canvasGroup = markerGo.GetComponent<CanvasGroup>() ?? markerGo.AddComponent<CanvasGroup>();
+            canvasGroup.blocksRaycasts = false;
+            canvasGroup.interactable = false;
         }
 
         private static RectTransform EnsureMapArea(Transform parent, out RectTransform markersRoot, out RectTransform contractIconsRoot, out RectTransform travelTokensRoot)
