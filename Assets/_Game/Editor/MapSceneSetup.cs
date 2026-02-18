@@ -19,6 +19,7 @@ namespace FantasyGuildmaster.Editor
         private const string ContractRowPrefabPath = PrefabsDir + "/ContractRow.prefab";
         private const string ContractIconPrefabPath = PrefabsDir + "/ContractIcon.prefab";
         private const string TravelTokenPrefabPath = PrefabsDir + "/TravelToken.prefab";
+        private const string SquadStatusRowPrefabPath = PrefabsDir + "/SquadStatusRow.prefab";
 
         [MenuItem("Tools/FantasyGuildmaster/Setup Map Scene")]
         public static void Setup()
@@ -36,6 +37,7 @@ namespace FantasyGuildmaster.Editor
             var contractPrefab = EnsureContractRowPrefab();
             var contractIconPrefab = EnsureContractIconPrefab();
             var travelTokenPrefab = EnsureTravelTokenPrefab();
+            var squadStatusRowPrefab = EnsureSquadStatusRowPrefab();
 
             var root = FindOrCreate("MapSceneRoot");
             var clock = root.GetComponent<GameClock>() ?? root.AddComponent<GameClock>();
@@ -53,13 +55,14 @@ namespace FantasyGuildmaster.Editor
 
             var detailsPanel = EnsureDetailsPanel(layout.transform, contractPrefab);
             var squadSelectPanel = EnsureSquadSelectPanel(layout.transform);
+            var squadStatusHud = EnsureSquadStatusHud(layout.transform, squadStatusRowPrefab);
             var encounterPanel = EnsureEncounterPanel(canvas.transform);
             var encounterManager = root.GetComponent<EncounterManager>() ?? root.AddComponent<EncounterManager>();
             var mapRect = EnsureMapArea(layout.transform, out var markersRoot, out var contractIconsRoot, out var travelTokensRoot);
             EnsureGuildHqMarker(markersRoot);
 
             AssignEncounterManager(encounterManager, encounterPanel);
-            AssignMapController(controller, mapRect, markersRoot, contractIconsRoot, travelTokensRoot, markerPrefab, contractIconPrefab, travelTokenPrefab, detailsPanel, squadSelectPanel, encounterManager, gameManager, clock);
+            AssignMapController(controller, mapRect, markersRoot, contractIconsRoot, travelTokensRoot, markerPrefab, contractIconPrefab, travelTokenPrefab, detailsPanel, squadSelectPanel, squadStatusHud, encounterManager, gameManager, clock);
 
             EditorUtility.SetDirty(root);
             EditorUtility.SetDirty(canvas.gameObject);
@@ -135,6 +138,14 @@ namespace FantasyGuildmaster.Editor
             PrefabUtility.SaveAsPrefabAsset(source, TravelTokenPrefabPath);
             Object.DestroyImmediate(source);
             return AssetDatabase.LoadAssetAtPath<TravelToken>(TravelTokenPrefabPath);
+        }
+
+        private static SquadStatusRow EnsureSquadStatusRowPrefab()
+        {
+            var source = BuildSquadStatusRowSource();
+            PrefabUtility.SaveAsPrefabAsset(source, SquadStatusRowPrefabPath);
+            Object.DestroyImmediate(source);
+            return AssetDatabase.LoadAssetAtPath<SquadStatusRow>(SquadStatusRowPrefabPath);
         }
 
         private static GameObject BuildRegionMarkerSource()
@@ -258,6 +269,37 @@ namespace FantasyGuildmaster.Editor
 
             var token = root.GetComponent<TravelToken>();
             AssignTravelToken(token, icon, timer, squad);
+            return root;
+        }
+
+
+        private static GameObject BuildSquadStatusRowSource()
+        {
+            var root = new GameObject("SquadStatusRow", typeof(RectTransform), typeof(Image), typeof(HorizontalLayoutGroup), typeof(LayoutElement), typeof(SquadStatusRow));
+            root.GetComponent<RectTransform>().sizeDelta = new Vector2(0f, 34f);
+            root.GetComponent<Image>().color = new Color(1f, 1f, 1f, 0.05f);
+
+            var layout = root.GetComponent<HorizontalLayoutGroup>();
+            layout.padding = new RectOffset(8, 8, 5, 5);
+            layout.spacing = 8f;
+            layout.childControlWidth = true;
+            layout.childControlHeight = true;
+            layout.childForceExpandHeight = false;
+            layout.childForceExpandWidth = false;
+
+            root.GetComponent<LayoutElement>().minHeight = 34f;
+
+            var squadName = CreateText("SquadName", root.transform, "Iron Hawks", 15f, TextAlignmentOptions.Left);
+            squadName.gameObject.AddComponent<LayoutElement>().preferredWidth = 170f;
+
+            var status = CreateText("Status", root.transform, "Idle at HQ", 15f, TextAlignmentOptions.Left);
+            status.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
+
+            var timer = CreateText("Timer", root.transform, "00:00", 15f, TextAlignmentOptions.Right);
+            timer.gameObject.AddComponent<LayoutElement>().preferredWidth = 72f;
+
+            var row = root.GetComponent<SquadStatusRow>();
+            AssignSquadStatusRow(row, squadName, status, timer);
             return root;
         }
 
@@ -434,6 +476,72 @@ namespace FantasyGuildmaster.Editor
             AssignSquadSelectPanel(panel, title, listRect, button, closeButton);
             panelGo.SetActive(false);
             return panel;
+        }
+
+        private static SquadStatusHUD EnsureSquadStatusHud(Transform parent, SquadStatusRow rowPrefab)
+        {
+            var panelGo = FindOrCreateUI("SquadStatusHUD", parent);
+            var panelRect = (RectTransform)panelGo.transform;
+            panelRect.anchorMin = new Vector2(0f, 0f);
+            panelRect.anchorMax = new Vector2(0f, 1f);
+            panelRect.pivot = new Vector2(0f, 0.5f);
+            panelRect.sizeDelta = new Vector2(360f, 0f);
+            panelRect.anchoredPosition = new Vector2(8f, 0f);
+
+            var image = panelGo.GetComponent<Image>() ?? panelGo.AddComponent<Image>();
+            image.color = new Color(0.05f, 0.09f, 0.16f, 0.84f);
+
+            var layout = panelGo.GetComponent<VerticalLayoutGroup>() ?? panelGo.AddComponent<VerticalLayoutGroup>();
+            layout.padding = new RectOffset(12, 12, 12, 12);
+            layout.spacing = 6f;
+            layout.childControlWidth = true;
+            layout.childControlHeight = false;
+            layout.childForceExpandWidth = true;
+            layout.childForceExpandHeight = false;
+
+            var title = panelGo.transform.Find("Title") != null
+                ? panelGo.transform.Find("Title").GetComponent<TextMeshProUGUI>()
+                : CreateText("Title", panelGo.transform, "Squads", 20f, TextAlignmentOptions.Left);
+
+            var scrollGo = FindOrCreateUI("RowsScrollRect", panelGo.transform);
+            var scrollRect = scrollGo.GetComponent<ScrollRect>() ?? scrollGo.AddComponent<ScrollRect>();
+            var scrollImage = scrollGo.GetComponent<Image>() ?? scrollGo.AddComponent<Image>();
+            scrollImage.color = new Color(0f, 0f, 0f, 0.2f);
+            var scrollLayout = scrollGo.GetComponent<LayoutElement>() ?? scrollGo.AddComponent<LayoutElement>();
+            scrollLayout.flexibleHeight = 1f;
+
+            var viewport = FindOrCreateUI("Viewport", scrollGo.transform);
+            var viewportRect = (RectTransform)viewport.transform;
+            Stretch(viewportRect);
+            var viewportImage = viewport.GetComponent<Image>() ?? viewport.AddComponent<Image>();
+            viewportImage.color = new Color(0f, 0f, 0f, 0f);
+            var viewportMask = viewport.GetComponent<Mask>() ?? viewport.AddComponent<Mask>();
+            viewportMask.showMaskGraphic = false;
+
+            var content = FindOrCreateUI("RowsContent", viewport.transform);
+            var contentRect = (RectTransform)content.transform;
+            contentRect.anchorMin = new Vector2(0f, 1f);
+            contentRect.anchorMax = new Vector2(1f, 1f);
+            contentRect.pivot = new Vector2(0.5f, 1f);
+            contentRect.anchoredPosition = Vector2.zero;
+            contentRect.sizeDelta = new Vector2(0f, 0f);
+            var fitter = content.GetComponent<ContentSizeFitter>() ?? content.AddComponent<ContentSizeFitter>();
+            fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            var contentLayout = content.GetComponent<VerticalLayoutGroup>() ?? content.AddComponent<VerticalLayoutGroup>();
+            contentLayout.spacing = 4f;
+            contentLayout.childControlWidth = true;
+            contentLayout.childControlHeight = true;
+            contentLayout.childForceExpandWidth = true;
+            contentLayout.childForceExpandHeight = false;
+
+            scrollRect.viewport = viewportRect;
+            scrollRect.content = contentRect;
+            scrollRect.horizontal = false;
+            scrollRect.vertical = true;
+
+            var hud = panelGo.GetComponent<SquadStatusHUD>() ?? panelGo.AddComponent<SquadStatusHUD>();
+            AssignSquadStatusHud(hud, title, contentRect, rowPrefab);
+            return hud;
         }
 
         private static EncounterPanel EnsureEncounterPanel(Transform parent)
@@ -647,7 +755,7 @@ namespace FantasyGuildmaster.Editor
             rect.localScale = Vector3.one;
         }
 
-        private static void AssignMapController(MapController controller, RectTransform mapRect, RectTransform markersRoot, RectTransform contractIconsRoot, RectTransform travelTokensRoot, RegionMarker markerPrefab, ContractIcon contractIconPrefab, TravelToken travelTokenPrefab, RegionDetailsPanel detailsPanel, SquadSelectPanel squadSelectPanel, EncounterManager encounterManager, GameManager gameManager, GameClock clock)
+        private static void AssignMapController(MapController controller, RectTransform mapRect, RectTransform markersRoot, RectTransform contractIconsRoot, RectTransform travelTokensRoot, RegionMarker markerPrefab, ContractIcon contractIconPrefab, TravelToken travelTokenPrefab, RegionDetailsPanel detailsPanel, SquadSelectPanel squadSelectPanel, SquadStatusHUD squadStatusHud, EncounterManager encounterManager, GameManager gameManager, GameClock clock)
         {
             var so = new SerializedObject(controller);
             so.FindProperty("mapRect").objectReferenceValue = mapRect;
@@ -659,6 +767,7 @@ namespace FantasyGuildmaster.Editor
             so.FindProperty("travelTokenPrefab").objectReferenceValue = travelTokenPrefab;
             so.FindProperty("detailsPanel").objectReferenceValue = detailsPanel;
             so.FindProperty("squadSelectPanel").objectReferenceValue = squadSelectPanel;
+            so.FindProperty("squadStatusHud").objectReferenceValue = squadStatusHud;
             so.FindProperty("encounterManager").objectReferenceValue = encounterManager;
             so.FindProperty("gameManager").objectReferenceValue = gameManager;
             so.FindProperty("gameClock").objectReferenceValue = clock;
@@ -704,6 +813,24 @@ namespace FantasyGuildmaster.Editor
             so.FindProperty("iconImage").objectReferenceValue = icon;
             so.FindProperty("timerText").objectReferenceValue = timer;
             so.FindProperty("squadNameText").objectReferenceValue = squad;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        private static void AssignSquadStatusRow(SquadStatusRow row, TMP_Text squadName, TMP_Text status, TMP_Text timer)
+        {
+            var so = new SerializedObject(row);
+            so.FindProperty("squadNameText").objectReferenceValue = squadName;
+            so.FindProperty("statusText").objectReferenceValue = status;
+            so.FindProperty("timerText").objectReferenceValue = timer;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        private static void AssignSquadStatusHud(SquadStatusHUD hud, TMP_Text title, RectTransform rowsRoot, SquadStatusRow rowPrefab)
+        {
+            var so = new SerializedObject(hud);
+            so.FindProperty("titleText").objectReferenceValue = title;
+            so.FindProperty("rowsRoot").objectReferenceValue = rowsRoot;
+            so.FindProperty("rowPrefab").objectReferenceValue = rowPrefab;
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 

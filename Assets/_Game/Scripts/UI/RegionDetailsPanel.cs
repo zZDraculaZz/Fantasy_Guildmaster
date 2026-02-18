@@ -50,6 +50,25 @@ namespace FantasyGuildmaster.UI
             UpdateAssignSquadButtonState();
         }
 
+
+        public void UnblockContract(string contractId)
+        {
+            if (string.IsNullOrEmpty(contractId))
+            {
+                return;
+            }
+
+            _blockedContractIds.Remove(contractId);
+
+            if (_selectedContract == null)
+            {
+                _selectedContract = GetFirstAvailableContract();
+            }
+
+            RebuildContracts();
+            UpdateAssignSquadButtonState();
+        }
+
         private void Awake()
         {
             if (assignSquadButton != null)
