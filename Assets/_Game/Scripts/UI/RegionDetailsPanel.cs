@@ -28,8 +28,27 @@ namespace FantasyGuildmaster.UI
         private RegionData _region;
         private ContractData _selectedContract;
         private int _idleSquadsCount;
+        private readonly HashSet<string> _blockedContractIds = new();
 
         public event Action<RegionData, ContractData> AssignSquadRequested;
+
+        public void BlockContract(string contractId)
+        {
+            if (string.IsNullOrEmpty(contractId))
+            {
+                return;
+            }
+
+            _blockedContractIds.Add(contractId);
+
+            if (_selectedContract != null && _selectedContract.id == contractId)
+            {
+                _selectedContract = GetFirstAvailableContract();
+            }
+
+            RebuildContracts();
+            UpdateAssignSquadButtonState();
+        }
 
         private void Awake()
         {
@@ -56,7 +75,7 @@ namespace FantasyGuildmaster.UI
             }
 
             _contracts = contracts;
-            _selectedContract = contracts != null && contracts.Count > 0 ? contracts[0] : null;
+            _selectedContract = GetFirstAvailableContract(contracts);
             RebuildContracts();
             UpdateAssignSquadButtonState();
         }
@@ -87,9 +106,9 @@ namespace FantasyGuildmaster.UI
                 row.Refresh();
             }
 
-            if (_selectedContract != null && _selectedContract.IsExpired)
+            if (_selectedContract != null && (_selectedContract.IsExpired || _blockedContractIds.Contains(_selectedContract.id)))
             {
-                _selectedContract = _contracts.Count > 0 ? _contracts[0] : null;
+                _selectedContract = GetFirstAvailableContract();
             }
 
             UpdateAssignSquadButtonState();
@@ -118,11 +137,26 @@ namespace FantasyGuildmaster.UI
                 var row = Instantiate(contractRowPrefab, contractsRoot);
                 row.Bind(contract);
 
+                var isBlocked = _blockedContractIds.Contains(contract.id);
+                row.SetAssigned(isBlocked);
+                row.SetSelected(_selectedContract != null && _selectedContract.id == contract.id);
+
                 var button = row.GetComponent<Button>();
                 if (button != null)
                 {
+                    button.interactable = !isBlocked;
                     button.onClick.RemoveAllListeners();
-                    button.onClick.AddListener(() => { _selectedContract = contract; });
+                    button.onClick.AddListener(() =>
+                    {
+                        if (isBlocked)
+                        {
+                            return;
+                        }
+
+                        _selectedContract = contract;
+                        RefreshSelectionVisuals();
+                        UpdateAssignSquadButtonState();
+                    });
                 }
 
                 _rows.Add(row);
@@ -131,7 +165,7 @@ namespace FantasyGuildmaster.UI
 
         private void OnAssignSquadClicked()
         {
-            if (_region == null || _selectedContract == null)
+            if (_region == null || _selectedContract == null || _blockedContractIds.Contains(_selectedContract.id))
             {
                 return;
             }
@@ -146,8 +180,49 @@ namespace FantasyGuildmaster.UI
                 return;
             }
 
-            var hasContract = _contracts != null && _contracts.Count > 0;
+            var hasContract = GetFirstAvailableContract() != null;
             assignSquadButton.interactable = hasContract && _idleSquadsCount > 0;
+        }
+
+        private void RefreshSelectionVisuals()
+        {
+            for (var i = 0; i < _rows.Count; i++)
+            {
+                var row = _rows[i];
+                if (row == null || row.Contract == null)
+                {
+                    continue;
+                }
+
+                row.SetAssigned(_blockedContractIds.Contains(row.Contract.id));
+                row.SetSelected(_selectedContract != null && row.Contract.id == _selectedContract.id);
+            }
+        }
+
+        private ContractData GetFirstAvailableContract()
+        {
+            return GetFirstAvailableContract(_contracts);
+        }
+
+        private ContractData GetFirstAvailableContract(List<ContractData> contracts)
+        {
+            if (contracts == null)
+            {
+                return null;
+            }
+
+            for (var i = 0; i < contracts.Count; i++)
+            {
+                var contract = contracts[i];
+                if (contract == null || contract.IsExpired || _blockedContractIds.Contains(contract.id))
+                {
+                    continue;
+                }
+
+                return contract;
+            }
+
+            return null;
         }
     }
 }

@@ -481,14 +481,35 @@ namespace FantasyGuildmaster.Map
                 return;
             }
 
+            if (_travelTasks.Exists(t => t.contractId == contract.id && t.phase == TravelPhase.Outbound))
+            {
+                return;
+            }
+
             squadSelectPanel.Show(idle, squad =>
             {
                 StartTravelTask(squad, GuildHqId, region.id, contract.id, contract.reward, TravelPhase.Outbound);
                 squad.state = SquadState.TravelingToRegion;
 
+                detailsPanel?.BlockContract(contract.id);
+
+                if (_contractsByRegion.TryGetValue(region.id, out var regionContracts))
+                {
+                    for (var i = regionContracts.Count - 1; i >= 0; i--)
+                    {
+                        if (regionContracts[i].id == contract.id)
+                        {
+                            regionContracts.RemoveAt(i);
+                        }
+                    }
+                }
+
+                SyncAllContractIcons();
+
                 if (detailsPanel != null)
                 {
                     detailsPanel.SetIdleSquadsCount(GetIdleSquads().Count);
+                    SelectRegion(region);
                 }
             });
         }

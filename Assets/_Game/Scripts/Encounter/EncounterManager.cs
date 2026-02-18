@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using FantasyGuildmaster.Map;
 using FantasyGuildmaster.UI;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace FantasyGuildmaster.Encounter
 {
@@ -25,6 +26,7 @@ namespace FantasyGuildmaster.Encounter
         private Action<int> _addGold;
         private Action<string> _onSquadDestroyed;
         private bool _isPresentingEncounter;
+        private Canvas _fallbackCanvas;
 
         public bool IsEncounterActive => _isPresentingEncounter;
 
@@ -117,7 +119,13 @@ namespace FantasyGuildmaster.Encounter
                     continue;
                 }
 
-                if (encounterPanel == null || _encounters.Count == 0)
+                if (!EnsureEncounterPanelReadyForDisplay())
+                {
+                    request.onEncounterClosed?.Invoke();
+                    continue;
+                }
+
+                if (_encounters.Count == 0)
                 {
                     request.onEncounterClosed?.Invoke();
                     continue;
@@ -133,6 +141,7 @@ namespace FantasyGuildmaster.Encounter
                 var index = Mathf.Abs((request.regionId + request.squadId).GetHashCode()) % _encounters.Count;
                 var encounter = _encounters[index];
                 _isPresentingEncounter = true;
+                encounterPanel.gameObject.SetActive(true);
                 Debug.Log($"[TravelDebug] Encounter UI show: squad={request.squadId}, region={request.regionId}, encounter={encounter.id}");
                 encounterPanel.ShowEncounter(encounter, option => ResolveOption(request, option));
                 return;
@@ -180,6 +189,93 @@ namespace FantasyGuildmaster.Encounter
                 request.onEncounterClosed?.Invoke();
                 TryPresentNextEncounter();
             });
+        }
+
+        private bool EnsureEncounterPanelReadyForDisplay()
+        {
+            if (encounterPanel == null)
+            {
+                encounterPanel = FindFirstObjectByType<EncounterPanel>();
+            }
+
+            if (encounterPanel == null)
+            {
+                var prefab = Resources.Load<GameObject>("Prefabs/EncounterPanel");
+                if (prefab != null)
+                {
+                    var canvas = EnsureOverlayCanvas();
+                    var instance = Instantiate(prefab, canvas.transform, false);
+                    encounterPanel = instance.GetComponent<EncounterPanel>();
+                }
+            }
+
+            if (encounterPanel == null)
+            {
+                return false;
+            }
+
+            var canvasParent = encounterPanel.GetComponentInParent<Canvas>();
+            if (canvasParent == null)
+            {
+                canvasParent = EnsureOverlayCanvas();
+            }
+
+            if (canvasParent.GetComponent<GraphicRaycaster>() == null)
+            {
+                canvasParent.gameObject.AddComponent<GraphicRaycaster>();
+            }
+
+            canvasParent.renderMode = RenderMode.ScreenSpaceOverlay;
+            encounterPanel.transform.SetParent(canvasParent.transform, false);
+
+            var canvasGroup = encounterPanel.GetComponent<CanvasGroup>();
+            if (canvasGroup == null)
+            {
+                canvasGroup = encounterPanel.gameObject.AddComponent<CanvasGroup>();
+            }
+
+            canvasGroup.alpha = 1f;
+            canvasGroup.interactable = true;
+            canvasGroup.blocksRaycasts = true;
+
+            encounterPanel.gameObject.SetActive(true);
+            encounterPanel.transform.SetAsLastSibling();
+            return true;
+        }
+
+        private Canvas EnsureOverlayCanvas()
+        {
+            if (_fallbackCanvas != null)
+            {
+                if (_fallbackCanvas.GetComponent<GraphicRaycaster>() == null)
+                {
+                    _fallbackCanvas.gameObject.AddComponent<GraphicRaycaster>();
+                }
+
+                _fallbackCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
+                return _fallbackCanvas;
+            }
+
+            _fallbackCanvas = FindFirstObjectByType<Canvas>();
+            if (_fallbackCanvas != null)
+            {
+                if (_fallbackCanvas.GetComponent<GraphicRaycaster>() == null)
+                {
+                    _fallbackCanvas.gameObject.AddComponent<GraphicRaycaster>();
+                }
+
+                _fallbackCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
+                return _fallbackCanvas;
+            }
+
+            var canvasGo = new GameObject("EncounterOverlayCanvas", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
+            _fallbackCanvas = canvasGo.GetComponent<Canvas>();
+            _fallbackCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            _fallbackCanvas.sortingOrder = 999;
+            var scaler = canvasGo.GetComponent<CanvasScaler>();
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            scaler.referenceResolution = new Vector2(1920f, 1080f);
+            return _fallbackCanvas;
         }
 
         private void SeedEncounters()
