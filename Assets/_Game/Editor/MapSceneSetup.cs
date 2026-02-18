@@ -1,4 +1,6 @@
 #if UNITY_EDITOR
+using FantasyGuildmaster.Core;
+using FantasyGuildmaster.Encounter;
 using FantasyGuildmaster.Map;
 using FantasyGuildmaster.UI;
 using TMPro;
@@ -37,6 +39,7 @@ namespace FantasyGuildmaster.Editor
 
             var root = FindOrCreate("MapSceneRoot");
             var clock = root.GetComponent<GameClock>() ?? root.AddComponent<GameClock>();
+            var gameManager = root.GetComponent<GameManager>() ?? root.AddComponent<GameManager>();
             var controller = root.GetComponent<MapController>() ?? root.AddComponent<MapController>();
 
             var canvas = EnsureCanvas(root.transform);
@@ -50,9 +53,12 @@ namespace FantasyGuildmaster.Editor
 
             var detailsPanel = EnsureDetailsPanel(layout.transform, contractPrefab);
             var squadSelectPanel = EnsureSquadSelectPanel(layout.transform);
+            var encounterPanel = EnsureEncounterPanel(layout.transform);
+            var encounterManager = root.GetComponent<EncounterManager>() ?? root.AddComponent<EncounterManager>();
             var mapRect = EnsureMapArea(layout.transform, out var markersRoot, out var contractIconsRoot, out var travelTokensRoot);
 
-            AssignMapController(controller, mapRect, markersRoot, contractIconsRoot, travelTokensRoot, markerPrefab, contractIconPrefab, travelTokenPrefab, detailsPanel, squadSelectPanel, clock);
+            AssignEncounterManager(encounterManager, encounterPanel);
+            AssignMapController(controller, mapRect, markersRoot, contractIconsRoot, travelTokensRoot, markerPrefab, contractIconPrefab, travelTokenPrefab, detailsPanel, squadSelectPanel, encounterManager, gameManager, clock);
 
             EditorUtility.SetDirty(root);
             EditorUtility.SetDirty(canvas.gameObject);
@@ -424,6 +430,72 @@ namespace FantasyGuildmaster.Editor
             return panel;
         }
 
+        private static EncounterPanel EnsureEncounterPanel(Transform parent)
+        {
+            var panelGo = FindOrCreateUI("EncounterPanel", parent);
+            var panelRect = (RectTransform)panelGo.transform;
+            panelRect.anchorMin = new Vector2(0.5f, 0.5f);
+            panelRect.anchorMax = new Vector2(0.5f, 0.5f);
+            panelRect.pivot = new Vector2(0.5f, 0.5f);
+            panelRect.sizeDelta = new Vector2(560f, 420f);
+
+            var bg = panelGo.GetComponent<Image>() ?? panelGo.AddComponent<Image>();
+            bg.color = new Color(0f, 0f, 0f, 0.86f);
+
+            var layout = panelGo.GetComponent<VerticalLayoutGroup>() ?? panelGo.AddComponent<VerticalLayoutGroup>();
+            layout.padding = new RectOffset(14, 14, 14, 14);
+            layout.spacing = 8f;
+            layout.childControlWidth = true;
+            layout.childControlHeight = false;
+            layout.childForceExpandWidth = true;
+            layout.childForceExpandHeight = false;
+
+            var title = EnsurePanelText(panelGo.transform, "Title", "Encounter", 28f);
+            var description = EnsurePanelText(panelGo.transform, "Description", "Description", 18f);
+            description.textWrappingMode = TextWrappingModes.Normal;
+            var descriptionLayout = description.GetComponent<LayoutElement>() ?? description.gameObject.AddComponent<LayoutElement>();
+            descriptionLayout.minHeight = 120f;
+
+            var options = FindOrCreateUI("Options", panelGo.transform);
+            var optionsRect = (RectTransform)options.transform;
+            var optionsLayout = options.GetComponent<VerticalLayoutGroup>() ?? options.AddComponent<VerticalLayoutGroup>();
+            optionsLayout.spacing = 6f;
+            optionsLayout.childControlWidth = true;
+            optionsLayout.childControlHeight = true;
+            optionsLayout.childForceExpandWidth = true;
+            optionsLayout.childForceExpandHeight = false;
+            var optionsElement = options.GetComponent<LayoutElement>() ?? options.AddComponent<LayoutElement>();
+            optionsElement.minHeight = 180f;
+
+            var optionButtonPrefabGo = FindOrCreateUI("OptionButtonPrefab", panelGo.transform);
+            optionButtonPrefabGo.SetActive(false);
+            var optionImage = optionButtonPrefabGo.GetComponent<Image>() ?? optionButtonPrefabGo.AddComponent<Image>();
+            optionImage.color = new Color(0.2f, 0.2f, 0.2f, 0.9f);
+            var optionButton = optionButtonPrefabGo.GetComponent<Button>() ?? optionButtonPrefabGo.AddComponent<Button>();
+            var optionLabel = optionButtonPrefabGo.transform.Find("Label") != null
+                ? optionButtonPrefabGo.transform.Find("Label").GetComponent<TextMeshProUGUI>()
+                : CreateText("Label", optionButtonPrefabGo.transform, "Option", 16f, TextAlignmentOptions.Center);
+            Stretch((RectTransform)optionLabel.transform, 4f);
+            var optionLayoutElement = optionButtonPrefabGo.GetComponent<LayoutElement>() ?? optionButtonPrefabGo.AddComponent<LayoutElement>();
+            optionLayoutElement.minHeight = 36f;
+
+            var continueGo = FindOrCreateUI("ContinueButton", panelGo.transform);
+            var continueImage = continueGo.GetComponent<Image>() ?? continueGo.AddComponent<Image>();
+            continueImage.color = new Color(0.15f, 0.35f, 0.18f, 0.9f);
+            var continueButton = continueGo.GetComponent<Button>() ?? continueGo.AddComponent<Button>();
+            var continueLabel = continueGo.transform.Find("Label") != null
+                ? continueGo.transform.Find("Label").GetComponent<TextMeshProUGUI>()
+                : CreateText("Label", continueGo.transform, "Continue", 16f, TextAlignmentOptions.Center);
+            Stretch((RectTransform)continueLabel.transform, 4f);
+            var continueLayout = continueGo.GetComponent<LayoutElement>() ?? continueGo.AddComponent<LayoutElement>();
+            continueLayout.minHeight = 36f;
+
+            var panel = panelGo.GetComponent<EncounterPanel>() ?? panelGo.AddComponent<EncounterPanel>();
+            AssignEncounterPanel(panel, title, description, optionsRect, optionButton, continueButton);
+            panelGo.SetActive(false);
+            return panel;
+        }
+
         private static RectTransform EnsureMapArea(Transform parent, out RectTransform markersRoot, out RectTransform contractIconsRoot, out RectTransform travelTokensRoot)
         {
             var mapScroll = FindOrCreateUI("MapScrollRect", parent);
@@ -534,7 +606,7 @@ namespace FantasyGuildmaster.Editor
             rect.localScale = Vector3.one;
         }
 
-        private static void AssignMapController(MapController controller, RectTransform mapRect, RectTransform markersRoot, RectTransform contractIconsRoot, RectTransform travelTokensRoot, RegionMarker markerPrefab, ContractIcon contractIconPrefab, TravelToken travelTokenPrefab, RegionDetailsPanel detailsPanel, SquadSelectPanel squadSelectPanel, GameClock clock)
+        private static void AssignMapController(MapController controller, RectTransform mapRect, RectTransform markersRoot, RectTransform contractIconsRoot, RectTransform travelTokensRoot, RegionMarker markerPrefab, ContractIcon contractIconPrefab, TravelToken travelTokenPrefab, RegionDetailsPanel detailsPanel, SquadSelectPanel squadSelectPanel, EncounterManager encounterManager, GameManager gameManager, GameClock clock)
         {
             var so = new SerializedObject(controller);
             so.FindProperty("mapRect").objectReferenceValue = mapRect;
@@ -546,6 +618,8 @@ namespace FantasyGuildmaster.Editor
             so.FindProperty("travelTokenPrefab").objectReferenceValue = travelTokenPrefab;
             so.FindProperty("detailsPanel").objectReferenceValue = detailsPanel;
             so.FindProperty("squadSelectPanel").objectReferenceValue = squadSelectPanel;
+            so.FindProperty("encounterManager").objectReferenceValue = encounterManager;
+            so.FindProperty("gameManager").objectReferenceValue = gameManager;
             so.FindProperty("gameClock").objectReferenceValue = clock;
             so.ApplyModifiedPropertiesWithoutUndo();
         }
@@ -599,6 +673,24 @@ namespace FantasyGuildmaster.Editor
             so.FindProperty("listRoot").objectReferenceValue = listRoot;
             so.FindProperty("squadButtonPrefab").objectReferenceValue = squadButtonPrefab;
             so.FindProperty("closeButton").objectReferenceValue = closeButton;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        private static void AssignEncounterPanel(EncounterPanel panel, TMP_Text title, TMP_Text description, RectTransform optionsRoot, Button optionButtonPrefab, Button continueButton)
+        {
+            var so = new SerializedObject(panel);
+            so.FindProperty("titleText").objectReferenceValue = title;
+            so.FindProperty("descriptionText").objectReferenceValue = description;
+            so.FindProperty("optionsRoot").objectReferenceValue = optionsRoot;
+            so.FindProperty("optionButtonPrefab").objectReferenceValue = optionButtonPrefab;
+            so.FindProperty("continueButton").objectReferenceValue = continueButton;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        private static void AssignEncounterManager(EncounterManager manager, EncounterPanel panel)
+        {
+            var so = new SerializedObject(manager);
+            so.FindProperty("encounterPanel").objectReferenceValue = panel;
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 

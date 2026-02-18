@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using FantasyGuildmaster.Core;
 using FantasyGuildmaster.Data;
+using FantasyGuildmaster.Encounter;
 using FantasyGuildmaster.UI;
 using UnityEngine;
 
@@ -17,6 +19,8 @@ namespace FantasyGuildmaster.Map
         [SerializeField] private TravelToken travelTokenPrefab;
         [SerializeField] private RegionDetailsPanel detailsPanel;
         [SerializeField] private SquadSelectPanel squadSelectPanel;
+        [SerializeField] private EncounterManager encounterManager;
+        [SerializeField] private GameManager gameManager;
         [SerializeField] private GameClock gameClock;
 
         private readonly Dictionary<string, List<ContractData>> _contractsByRegion = new();
@@ -38,6 +42,12 @@ namespace FantasyGuildmaster.Map
             SpawnMarkers();
             InitializePools();
             SyncAllContractIcons();
+
+            if (encounterManager != null)
+            {
+                encounterManager.Configure(FindSquad, AddGold, HandleSquadDestroyed);
+            }
+
             if (detailsPanel != null)
             {
                 detailsPanel.AssignSquadRequested += OnAssignSquadRequested;
@@ -263,7 +273,14 @@ namespace FantasyGuildmaster.Map
             {
                 squad.status = SquadStatus.Idle;
                 squad.currentRegionId = task.toRegionId;
-                Debug.Log($"Squad arrived: {squad.name}");
+                if (encounterManager != null)
+                {
+                    encounterManager.StartEncounter(task.toRegionId, squad.id);
+                }
+                else
+                {
+                    Debug.Log($"Squad arrived: {squad.name}");
+                }
             }
 
             if (_travelTokenBySquadId.TryGetValue(task.squadId, out var token))
@@ -391,9 +408,9 @@ namespace FantasyGuildmaster.Map
         private void SeedSquads()
         {
             _squads.Clear();
-            _squads.Add(new SquadData { id = "squad_iron_hawks", name = "Iron Hawks", membersCount = 6, status = SquadStatus.Idle, currentRegionId = _gameData.regions.Count > 0 ? _gameData.regions[0].id : string.Empty });
-            _squads.Add(new SquadData { id = "squad_ash_blades", name = "Ash Blades", membersCount = 5, status = SquadStatus.Idle, currentRegionId = _gameData.regions.Count > 1 ? _gameData.regions[1].id : (_gameData.regions.Count > 0 ? _gameData.regions[0].id : string.Empty) });
-            _squads.Add(new SquadData { id = "squad_grim_lantern", name = "Grim Lantern", membersCount = 4, status = SquadStatus.Idle, currentRegionId = _gameData.regions.Count > 2 ? _gameData.regions[2].id : (_gameData.regions.Count > 0 ? _gameData.regions[0].id : string.Empty) });
+            _squads.Add(new SquadData { id = "squad_iron_hawks", name = "Iron Hawks", membersCount = 6, hp = 100, status = SquadStatus.Idle, currentRegionId = _gameData.regions.Count > 0 ? _gameData.regions[0].id : string.Empty });
+            _squads.Add(new SquadData { id = "squad_ash_blades", name = "Ash Blades", membersCount = 5, hp = 100, status = SquadStatus.Idle, currentRegionId = _gameData.regions.Count > 1 ? _gameData.regions[1].id : (_gameData.regions.Count > 0 ? _gameData.regions[0].id : string.Empty) });
+            _squads.Add(new SquadData { id = "squad_grim_lantern", name = "Grim Lantern", membersCount = 4, hp = 100, status = SquadStatus.Idle, currentRegionId = _gameData.regions.Count > 2 ? _gameData.regions[2].id : (_gameData.regions.Count > 0 ? _gameData.regions[0].id : string.Empty) });
         }
 
         private List<SquadData> GetIdleSquads()
@@ -401,7 +418,7 @@ namespace FantasyGuildmaster.Map
             var list = new List<SquadData>();
             for (var i = 0; i < _squads.Count; i++)
             {
-                if (_squads[i].status == SquadStatus.Idle)
+                if (_squads[i].status == SquadStatus.Idle && _squads[i].hp > 0)
                 {
                     list.Add(_squads[i]);
                 }
@@ -421,6 +438,27 @@ namespace FantasyGuildmaster.Map
             }
 
             return null;
+        }
+
+        private void AddGold(int amount)
+        {
+            if (gameManager != null)
+            {
+                gameManager.AddGold(amount);
+            }
+        }
+
+        private void HandleSquadDestroyed(string squadId)
+        {
+            var squad = FindSquad(squadId);
+            if (squad == null)
+            {
+                return;
+            }
+
+            squad.status = SquadStatus.Idle;
+            squad.hp = 0;
+            Debug.Log("Squad destroyed");
         }
 
         private static string ToTimerText(int remainingSeconds)

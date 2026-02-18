@@ -14,6 +14,7 @@ namespace FantasyGuildmaster.Map
         public string id;
         public string name;
         public int membersCount;
+        public int hp;
         public SquadStatus status;
         public string currentRegionId;
     }
