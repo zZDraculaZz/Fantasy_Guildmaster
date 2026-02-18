@@ -16,6 +16,7 @@ namespace FantasyGuildmaster.UI
         [SerializeField] private Button continueButton;
 
         private readonly List<Button> _optionButtons = new();
+        private CanvasGroup _canvasGroup;
 
         private void Awake()
         {
@@ -38,9 +39,65 @@ namespace FantasyGuildmaster.UI
             continueButton = runtimeContinueButton;
         }
 
-        public void ShowEncounter(EncounterData encounter, Action<EncounterOption> onOptionSelected)
+
+        private void EnsureVisibleAndInteractiveState()
         {
             gameObject.SetActive(true);
+
+            if (transform is RectTransform rootRect)
+            {
+                rootRect.anchorMin = Vector2.zero;
+                rootRect.anchorMax = Vector2.one;
+                rootRect.offsetMin = Vector2.zero;
+                rootRect.offsetMax = Vector2.zero;
+            }
+
+            EnsureParentCanvas();
+
+            _canvasGroup ??= GetComponent<CanvasGroup>() ?? gameObject.AddComponent<CanvasGroup>();
+            _canvasGroup.alpha = 1f;
+            _canvasGroup.interactable = true;
+            _canvasGroup.blocksRaycasts = true;
+
+            transform.SetAsLastSibling();
+
+            Debug.Log($"[EncounterDebug] Panel active={gameObject.activeSelf}, alpha={_canvasGroup.alpha}, siblingIndex={transform.GetSiblingIndex()}, parent={(transform.parent != null ? transform.parent.name : "none")}");
+        }
+
+        private void EnsureParentCanvas()
+        {
+            var parentCanvas = GetComponentInParent<Canvas>();
+            if (parentCanvas == null)
+            {
+                var canvasGo = new GameObject("EncounterCanvas", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
+                var canvas = canvasGo.GetComponent<Canvas>();
+                canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+                canvas.sortingOrder = 999;
+
+                var scaler = canvasGo.GetComponent<CanvasScaler>();
+                scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+                scaler.referenceResolution = new Vector2(1920f, 1080f);
+
+                transform.SetParent(canvasGo.transform, false);
+                return;
+            }
+
+            var raycaster = parentCanvas.GetComponent<GraphicRaycaster>();
+            if (raycaster == null)
+            {
+                parentCanvas.gameObject.AddComponent<GraphicRaycaster>();
+            }
+
+            var overlayCanvas = GetComponent<Canvas>();
+            if (overlayCanvas != null && overlayCanvas.overrideSorting)
+            {
+                overlayCanvas.sortingOrder = 999;
+            }
+        }
+
+        public void ShowEncounter(EncounterData encounter, Action<EncounterOption> onOptionSelected)
+        {
+            EnsureVisibleAndInteractiveState();
 
             if (titleText != null)
             {
@@ -63,6 +120,8 @@ namespace FantasyGuildmaster.UI
 
         public void ShowResult(string resultText, Action onContinue)
         {
+            EnsureVisibleAndInteractiveState();
+
             if (descriptionText != null)
             {
                 descriptionText.text = resultText;

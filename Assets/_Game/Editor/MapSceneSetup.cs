@@ -53,7 +53,7 @@ namespace FantasyGuildmaster.Editor
 
             var detailsPanel = EnsureDetailsPanel(layout.transform, contractPrefab);
             var squadSelectPanel = EnsureSquadSelectPanel(layout.transform);
-            var encounterPanel = EnsureEncounterPanel(layout.transform);
+            var encounterPanel = EnsureEncounterPanel(canvas.transform);
             var encounterManager = root.GetComponent<EncounterManager>() ?? root.AddComponent<EncounterManager>();
             var mapRect = EnsureMapArea(layout.transform, out var markersRoot, out var contractIconsRoot, out var travelTokensRoot);
             EnsureGuildHqMarker(markersRoot);
@@ -86,6 +86,11 @@ namespace FantasyGuildmaster.Editor
             var existing = GameObject.Find("MapCanvas");
             if (existing != null && existing.TryGetComponent<Canvas>(out var canvasExisting))
             {
+                if (canvasExisting.GetComponent<GraphicRaycaster>() == null)
+                {
+                    canvasExisting.gameObject.AddComponent<GraphicRaycaster>();
+                }
+
                 return canvasExisting;
             }
 
@@ -434,11 +439,14 @@ namespace FantasyGuildmaster.Editor
         private static EncounterPanel EnsureEncounterPanel(Transform parent)
         {
             var panelGo = FindOrCreateUI("EncounterPanel", parent);
+            panelGo.transform.SetAsLastSibling();
             var panelRect = (RectTransform)panelGo.transform;
-            panelRect.anchorMin = new Vector2(0.5f, 0.5f);
-            panelRect.anchorMax = new Vector2(0.5f, 0.5f);
-            panelRect.pivot = new Vector2(0.5f, 0.5f);
-            panelRect.sizeDelta = new Vector2(560f, 420f);
+            Stretch(panelRect);
+
+            var canvasGroup = panelGo.GetComponent<CanvasGroup>() ?? panelGo.AddComponent<CanvasGroup>();
+            canvasGroup.alpha = 1f;
+            canvasGroup.interactable = true;
+            canvasGroup.blocksRaycasts = true;
 
             var bg = panelGo.GetComponent<Image>() ?? panelGo.AddComponent<Image>();
             bg.color = new Color(0f, 0f, 0f, 0.86f);

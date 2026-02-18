@@ -285,22 +285,23 @@ namespace FantasyGuildmaster.Map
 
         private EncounterPanel CreateRuntimeEncounterPanel()
         {
-            var prefab = Resources.Load<GameObject>("Prefabs/EncounterPanel");
-            if (prefab != null)
-            {
-                var instance = Instantiate(prefab);
-                var panelFromPrefab = instance.GetComponent<EncounterPanel>();
-                if (panelFromPrefab != null)
-                {
-                    return panelFromPrefab;
-                }
-            }
-
             var canvas = EnsureCanvas();
             if (canvas == null)
             {
                 Debug.LogError("[TravelDebug] Failed to create runtime EncounterPanel: Canvas missing.");
                 return null;
+            }
+
+            var prefab = Resources.Load<GameObject>("Prefabs/EncounterPanel");
+            if (prefab != null)
+            {
+                var instance = Instantiate(prefab, canvas.transform, false);
+                var panelFromPrefab = instance.GetComponent<EncounterPanel>();
+                if (panelFromPrefab != null)
+                {
+                    instance.transform.SetAsLastSibling();
+                    return panelFromPrefab;
+                }
             }
 
             var panelGo = new GameObject("EncounterPanel", typeof(RectTransform), typeof(Image), typeof(EncounterPanel));
@@ -346,6 +347,7 @@ namespace FantasyGuildmaster.Map
             var panel = panelGo.GetComponent<EncounterPanel>();
             panel.ConfigureRuntimeBindings(title, description, optionsRootGo.GetComponent<RectTransform>(), optionButton, continueButton);
             panelGo.SetActive(false);
+            panelGo.transform.SetAsLastSibling();
             return panel;
         }
 
@@ -354,6 +356,11 @@ namespace FantasyGuildmaster.Map
             var canvas = FindFirstObjectByType<Canvas>();
             if (canvas != null)
             {
+                if (canvas.GetComponent<GraphicRaycaster>() == null)
+                {
+                    canvas.gameObject.AddComponent<GraphicRaycaster>();
+                }
+
                 EnsureEventSystem();
                 return canvas;
             }
@@ -361,6 +368,7 @@ namespace FantasyGuildmaster.Map
             var canvasGo = new GameObject("Canvas", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
             canvas = canvasGo.GetComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            canvas.sortingOrder = 999;
             var scaler = canvasGo.GetComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(1920f, 1080f);
