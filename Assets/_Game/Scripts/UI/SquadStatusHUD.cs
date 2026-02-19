@@ -742,10 +742,23 @@ namespace FantasyGuildmaster.UI
             var text = go.GetComponent<TextMeshProUGUI>();
 
             var styleSource = goldText != null ? goldText : titleText;
+            if (styleSource == null)
+            {
+                styleSource = FindChildByName(transform, "GoldText")?.GetComponent<TMP_Text>()
+                    ?? FindChildByName(transform, "Title")?.GetComponent<TMP_Text>();
+            }
+
             if (styleSource != null)
             {
                 text.font = styleSource.font;
                 text.fontSharedMaterial = styleSource.fontSharedMaterial;
+                text.enableAutoSizing = false;
+                text.raycastTarget = false;
+            }
+            else if (TMP_Settings.defaultFontAsset != null)
+            {
+                text.font = TMP_Settings.defaultFontAsset;
+                text.fontSharedMaterial = TMP_Settings.defaultFontAsset.material;
                 text.enableAutoSizing = false;
                 text.raycastTarget = false;
             }
