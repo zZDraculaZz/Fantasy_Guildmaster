@@ -493,6 +493,9 @@ namespace FantasyGuildmaster.Editor
 
         private static SquadStatusHUD EnsureSquadStatusHud(Transform parent, SquadStatusRow rowPrefab, GameState gameState)
         {
+            _ = rowPrefab;
+            _ = gameState;
+
             var panelGo = FindOrCreateUI("SquadStatusHUD", parent);
             var panelRect = (RectTransform)panelGo.transform;
             panelRect.anchorMin = new Vector2(0f, 1f);
@@ -510,6 +513,7 @@ namespace FantasyGuildmaster.Editor
             {
                 Object.DestroyImmediate(panelFitter);
             }
+
             layout.padding = new RectOffset(8, 8, 8, 8);
             layout.spacing = 6f;
             layout.childControlWidth = true;
@@ -533,62 +537,34 @@ namespace FantasyGuildmaster.Editor
             goldLayout.preferredHeight = 22f;
             goldLayout.flexibleHeight = 0f;
 
-            var scrollGo = FindOrCreateUI("RowsScrollRect", panelGo.transform);
-            var scrollRect = scrollGo.GetComponent<ScrollRect>() ?? scrollGo.AddComponent<ScrollRect>();
-            var scrollFitter = scrollGo.GetComponent<ContentSizeFitter>();
-            if (scrollFitter != null)
+            var bodyText = panelGo.transform.Find("BodyText") != null
+                ? panelGo.transform.Find("BodyText").GetComponent<TextMeshProUGUI>()
+                : CreateText("BodyText", panelGo.transform, "No squads.", 18f, TextAlignmentOptions.TopLeft);
+
+            var bodyRect = (RectTransform)bodyText.transform;
+            bodyRect.anchorMin = new Vector2(0f, 1f);
+            bodyRect.anchorMax = new Vector2(1f, 1f);
+            bodyRect.pivot = new Vector2(0.5f, 1f);
+            bodyRect.anchoredPosition = Vector2.zero;
+            bodyRect.sizeDelta = Vector2.zero;
+
+            var bodyLayout = bodyText.GetComponent<LayoutElement>() ?? bodyText.gameObject.AddComponent<LayoutElement>();
+            bodyLayout.minHeight = 120f;
+            bodyLayout.preferredHeight = 120f;
+            bodyLayout.flexibleHeight = 1f;
+
+            bodyText.textWrappingMode = TextWrappingModes.NoWrap;
+
+            var legacyScroll = panelGo.transform.Find("RowsScrollRect");
+            if (legacyScroll != null)
             {
-                Object.DestroyImmediate(scrollFitter);
+                Object.DestroyImmediate(legacyScroll.gameObject);
             }
-            var scrollImage = scrollGo.GetComponent<Image>() ?? scrollGo.AddComponent<Image>();
-            scrollImage.color = new Color(0f, 0f, 0f, 0f);
-            var scrollRectTransform = (RectTransform)scrollGo.transform;
-            scrollRectTransform.anchorMin = new Vector2(0f, 1f);
-            scrollRectTransform.anchorMax = new Vector2(1f, 1f);
-            scrollRectTransform.pivot = new Vector2(0.5f, 1f);
-            scrollRectTransform.anchoredPosition = Vector2.zero;
-            scrollRectTransform.sizeDelta = Vector2.zero;
-            var viewportLayout = scrollGo.GetComponent<LayoutElement>() ?? scrollGo.AddComponent<LayoutElement>();
-            viewportLayout.preferredHeight = 120f;
-            viewportLayout.minHeight = 120f;
-            viewportLayout.flexibleHeight = 1f;
-
-            var viewport = FindOrCreateUI("Viewport", scrollGo.transform);
-            var viewportRect = (RectTransform)viewport.transform;
-            Stretch(viewportRect);
-            var viewportImage = viewport.GetComponent<Image>() ?? viewport.AddComponent<Image>();
-            viewportImage.color = new Color(0f, 0f, 0f, 0f);
-            var viewportMask = viewport.GetComponent<Mask>() ?? viewport.AddComponent<Mask>();
-            viewportMask.showMaskGraphic = false;
-            _ = viewport.GetComponent<RectMask2D>() ?? viewport.AddComponent<RectMask2D>();
-
-            var content = FindOrCreateUI("Content", viewport.transform);
-            var contentRect = (RectTransform)content.transform;
-            contentRect.anchorMin = new Vector2(0f, 1f);
-            contentRect.anchorMax = new Vector2(1f, 1f);
-            contentRect.pivot = new Vector2(0.5f, 1f);
-            contentRect.anchoredPosition = Vector2.zero;
-            contentRect.sizeDelta = Vector2.zero;
-
-            var contentLayout = content.GetComponent<VerticalLayoutGroup>() ?? content.AddComponent<VerticalLayoutGroup>();
-            contentLayout.padding = new RectOffset(8, 8, 8, 8);
-            contentLayout.spacing = 6f;
-            contentLayout.childControlWidth = true;
-            contentLayout.childControlHeight = true;
-            contentLayout.childForceExpandWidth = true;
-            contentLayout.childForceExpandHeight = false;
-
-            var fitter = content.GetComponent<ContentSizeFitter>() ?? content.AddComponent<ContentSizeFitter>();
-            fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
-            fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-
-            scrollRect.viewport = viewportRect;
-            scrollRect.content = contentRect;
-            scrollRect.horizontal = false;
-            scrollRect.vertical = true;
 
             var hud = panelGo.GetComponent<SquadStatusHUD>() ?? panelGo.AddComponent<SquadStatusHUD>();
-            AssignSquadStatusHud(hud, title, goldText, panelRect, scrollRect, viewportRect, contentRect, viewportLayout, rowPrefab, gameState);
+            AssignSquadStatusHud(hud, title, goldText, bodyText);
+            Debug.Log("[MapSceneSetup] SquadStatusHUD created/assigned for NEW simple mode");
+            Debug.Log("[MapSceneSetup] Skipped legacy scroll/row prefab wiring (new HUD)");
             return hud;
         }
 
@@ -901,19 +877,27 @@ namespace FantasyGuildmaster.Editor
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 
-        private static void AssignSquadStatusHud(SquadStatusHUD hud, TMP_Text title, TMP_Text goldText, RectTransform rootRect, ScrollRect scrollRect, RectTransform viewportRect, RectTransform rowsRoot, LayoutElement viewportLayout, SquadStatusRow rowPrefab, GameState gameState)
+        private static void AssignSquadStatusHud(SquadStatusHUD hud, TMP_Text title, TMP_Text goldText, TMP_Text bodyText)
         {
             var so = new SerializedObject(hud);
-            so.FindProperty("titleText").objectReferenceValue = title;
-            so.FindProperty("goldText").objectReferenceValue = goldText;
-            so.FindProperty("rootRect").objectReferenceValue = rootRect;
-            so.FindProperty("scrollRect").objectReferenceValue = scrollRect;
-            so.FindProperty("viewportRect").objectReferenceValue = viewportRect;
-            so.FindProperty("rowsRoot").objectReferenceValue = rowsRoot;
-            so.FindProperty("viewportLayoutElement").objectReferenceValue = viewportLayout;
-            so.FindProperty("rowPrefab").objectReferenceValue = rowPrefab;
-            so.FindProperty("gameState").objectReferenceValue = gameState;
+            TryAssignObjectReference(so, "titleText", title);
+            TryAssignObjectReference(so, "goldText", goldText);
+            TryAssignObjectReference(so, "bodyText", bodyText);
             so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        private static void TryAssignObjectReference(SerializedObject serializedObject, string propertyName, UnityEngine.Object value)
+        {
+            if (serializedObject == null)
+            {
+                return;
+            }
+
+            var property = serializedObject.FindProperty(propertyName);
+            if (property != null)
+            {
+                property.objectReferenceValue = value;
+            }
         }
 
         private static void AssignSquadSelectPanel(SquadSelectPanel panel, TMP_Text title, RectTransform listRoot, Button squadButtonPrefab, Button closeButton)
