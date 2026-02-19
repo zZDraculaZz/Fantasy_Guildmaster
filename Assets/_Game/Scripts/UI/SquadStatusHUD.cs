@@ -31,6 +31,7 @@ namespace FantasyGuildmaster.UI
         private GameClock _gameClock;
         private string _lastRosterSignature = string.Empty;
         private bool _loggedInitialRebuild;
+        private bool _loggedParentPath;
 
         private void Awake()
         {
@@ -234,6 +235,7 @@ namespace FantasyGuildmaster.UI
             }
 
             _gameClock = FindFirstObjectByType<GameClock>();
+            LogHudParentPathOnce();
         }
 
         private void OnRosterChanged()
@@ -585,6 +587,53 @@ namespace FantasyGuildmaster.UI
             text.color = Color.white;
             text.text = objectName;
             return text;
+        }
+
+        private void LogHudParentPathOnce()
+        {
+            if (_loggedParentPath)
+            {
+                return;
+            }
+
+            var parentPath = BuildParentPath(transform);
+            Debug.Log($"[HUDDebug] HUD parent path={parentPath}, isUnderViewportMask={IsUnderViewportMask(transform)}");
+            _loggedParentPath = true;
+        }
+
+        private static string BuildParentPath(Transform node)
+        {
+            if (node == null)
+            {
+                return "<null>";
+            }
+
+            var names = new List<string>();
+            var cursor = node;
+            while (cursor != null)
+            {
+                names.Add(cursor.name);
+                cursor = cursor.parent;
+            }
+
+            names.Reverse();
+            return string.Join("/", names);
+        }
+
+        private static bool IsUnderViewportMask(Transform node)
+        {
+            var cursor = node != null ? node.parent : null;
+            while (cursor != null)
+            {
+                if (cursor.GetComponent<RectMask2D>() != null || cursor.GetComponent<Mask>() != null)
+                {
+                    return true;
+                }
+
+                cursor = cursor.parent;
+            }
+
+            return false;
         }
 
         private static string BuildRosterSignature(IReadOnlyList<SquadData> squads)

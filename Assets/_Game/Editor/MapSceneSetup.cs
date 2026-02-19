@@ -47,20 +47,15 @@ namespace FantasyGuildmaster.Editor
             var controller = root.GetComponent<MapController>() ?? root.AddComponent<MapController>();
 
             var canvas = EnsureCanvas(root.transform);
-            var layout = FindOrCreateUI("MapLayout", canvas.transform);
-            var layoutRect = layout.GetComponent<RectTransform>();
-            if (layoutRect == null)
-            {
-                layoutRect = layout.AddComponent<RectTransform>();
-            }
-            Stretch(layoutRect);
+            var mapLayer = EnsureLayer(canvas.transform, "MapLayer");
+            var overlayLayer = EnsureLayer(canvas.transform, "OverlayLayer");
 
-            var detailsPanel = EnsureDetailsPanel(layout.transform, contractPrefab);
-            var squadSelectPanel = EnsureSquadSelectPanel(layout.transform);
-            var squadStatusHud = EnsureSquadStatusHud(layout.transform, squadStatusRowPrefab, gameState);
-            var encounterPanel = EnsureEncounterPanel(canvas.transform);
+            var detailsPanel = EnsureDetailsPanel(overlayLayer, contractPrefab);
+            var squadSelectPanel = EnsureSquadSelectPanel(overlayLayer);
+            var squadStatusHud = EnsureSquadStatusHud(overlayLayer, squadStatusRowPrefab, gameState);
+            var encounterPanel = EnsureEncounterPanel(overlayLayer);
             var encounterManager = root.GetComponent<EncounterManager>() ?? root.AddComponent<EncounterManager>();
-            var mapRect = EnsureMapArea(layout.transform, out var markersRoot, out var contractIconsRoot, out var travelTokensRoot);
+            var mapRect = EnsureMapArea(mapLayer, out var markersRoot, out var contractIconsRoot, out var travelTokensRoot);
             EnsureGuildHqMarker(markersRoot);
 
             AssignEncounterManager(encounterManager, encounterPanel);
@@ -84,6 +79,15 @@ namespace FantasyGuildmaster.Editor
             if (Object.FindFirstObjectByType<EventSystem>() != null) return;
             var eventSystem = new GameObject("EventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
             Undo.RegisterCreatedObjectUndo(eventSystem, "Create EventSystem");
+        }
+
+        private static Transform EnsureLayer(Transform parent, string layerName)
+        {
+            var layerGo = FindOrCreateUI(layerName, parent);
+            var rect = layerGo.GetComponent<RectTransform>() ?? layerGo.AddComponent<RectTransform>();
+            Stretch(rect);
+            rect.SetAsLastSibling();
+            return rect;
         }
 
         private static Canvas EnsureCanvas(Transform parent)
@@ -712,6 +716,7 @@ namespace FantasyGuildmaster.Editor
             viewportImage.color = new Color(0.10f, 0.10f, 0.12f, 1f);
             var mask = viewport.GetComponent<Mask>() ?? viewport.AddComponent<Mask>();
             mask.showMaskGraphic = true;
+            _ = viewport.GetComponent<RectMask2D>() ?? viewport.AddComponent<RectMask2D>();
 
             var content = FindOrCreateUI("Content", viewport.transform);
             var contentRect = (RectTransform)content.transform;
