@@ -678,6 +678,7 @@ namespace FantasyGuildmaster.UI
         {
             if (rowsRoot == null)
             {
+                rowPrefab = _runtimeRowPrefab;
                 return;
             }
 
