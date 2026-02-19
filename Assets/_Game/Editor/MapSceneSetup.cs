@@ -966,6 +966,28 @@ namespace FantasyGuildmaster.Editor
             }
         }
 
+        private static void AssignSquadDetailsPanel(SquadDetailsPanel panel, TMP_Text title, TMP_Text body)
+        {
+            var so = new SerializedObject(panel);
+            TryAssignObjectReference(so, "titleText", title);
+            TryAssignObjectReference(so, "bodyText", body);
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        private static void TryAssignObjectReference(SerializedObject serializedObject, string propertyName, UnityEngine.Object value)
+        {
+            if (serializedObject == null)
+            {
+                return;
+            }
+
+            var property = serializedObject.FindProperty(propertyName);
+            if (property != null)
+            {
+                property.objectReferenceValue = value;
+            }
+        }
+
         private static void AssignSquadSelectPanel(SquadSelectPanel panel, TMP_Text title, RectTransform listRoot, Button squadButtonPrefab, Button closeButton)
         {
             var so = new SerializedObject(panel);

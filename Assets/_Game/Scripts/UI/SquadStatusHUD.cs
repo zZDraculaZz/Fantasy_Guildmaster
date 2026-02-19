@@ -310,7 +310,6 @@ namespace FantasyGuildmaster.UI
             bodyText.alignment = TextAlignmentOptions.TopLeft;
             bodyText.textWrappingMode = TextWrappingModes.Normal;
             bodyText.overflowMode = TextOverflowModes.Ellipsis;
-            bodyText.enableWordWrapping = true;
         }
 
         private void OnGoldChanged(int value)
