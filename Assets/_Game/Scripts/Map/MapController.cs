@@ -48,6 +48,7 @@ namespace FantasyGuildmaster.Map
         private void Awake()
         {
             _gameData = GameDataLoader.Load();
+            ResolveRuntimeReferences();
             EnsureGuildHqRegion();
             BuildRegionIndex();
             SeedContracts();
@@ -462,6 +463,28 @@ namespace FantasyGuildmaster.Map
 
         private void SpawnMarkers()
         {
+            if (markersRoot == null)
+            {
+                Debug.LogWarning("[MapController] markersRoot is not assigned, creating runtime fallback root.");
+                var fallback = new GameObject("MarkersRoot", typeof(RectTransform));
+                markersRoot = fallback.GetComponent<RectTransform>();
+                markersRoot.SetParent(mapRect != null ? mapRect : transform, false);
+                markersRoot.anchorMin = Vector2.zero;
+                markersRoot.anchorMax = Vector2.one;
+                markersRoot.offsetMin = Vector2.zero;
+                markersRoot.offsetMax = Vector2.zero;
+            }
+
+            if (regionMarkerPrefab == null)
+            {
+                regionMarkerPrefab = CreateRuntimeRegionMarkerTemplate();
+                if (regionMarkerPrefab == null)
+                {
+                    Debug.LogError("[MapController] regionMarkerPrefab is not assigned and runtime fallback creation failed. Marker spawn skipped.");
+                    return;
+                }
+            }
+
             for (var i = markersRoot.childCount - 1; i >= 0; i--)
             {
                 var child = markersRoot.GetChild(i);
@@ -480,6 +503,87 @@ namespace FantasyGuildmaster.Map
                 marker.Setup(region, mapRect, SelectRegion);
                 _markersByRegion[region.id] = marker;
             }
+        }
+
+        private void ResolveRuntimeReferences()
+        {
+            if (mapRect == null)
+            {
+                var mapImage = transform.Find("MapCanvas/MapLayer/MapScrollRect/Viewport/Content/MapImage") as RectTransform;
+                if (mapImage != null)
+                {
+                    mapRect = mapImage;
+                }
+            }
+
+            if (markersRoot == null)
+            {
+                var root = transform.Find("MapCanvas/MapLayer/MapScrollRect/Viewport/Content/MapImage/MarkersRoot") as RectTransform;
+                if (root != null)
+                {
+                    markersRoot = root;
+                }
+            }
+
+            if (contractIconsRoot == null)
+            {
+                var root = transform.Find("MapCanvas/MapLayer/MapScrollRect/Viewport/Content/MapImage/ContractIconsRoot") as RectTransform;
+                if (root != null)
+                {
+                    contractIconsRoot = root;
+                }
+            }
+
+            if (travelTokensRoot == null)
+            {
+                var root = transform.Find("MapCanvas/MapLayer/MapScrollRect/Viewport/Content/MapImage/TravelTokensRoot") as RectTransform;
+                if (root != null)
+                {
+                    travelTokensRoot = root;
+                }
+            }
+        }
+
+        private RegionMarker CreateRuntimeRegionMarkerTemplate()
+        {
+            var template = new GameObject("RuntimeRegionMarkerTemplate", typeof(RectTransform), typeof(Image), typeof(Button), typeof(HorizontalLayoutGroup), typeof(RegionMarker));
+            template.SetActive(false);
+            template.transform.SetParent(transform, false);
+
+            var layout = template.GetComponent<HorizontalLayoutGroup>();
+            layout.padding = new RectOffset(8, 8, 6, 6);
+            layout.spacing = 8f;
+            layout.childControlHeight = true;
+            layout.childControlWidth = false;
+            layout.childForceExpandWidth = false;
+            layout.childForceExpandHeight = false;
+
+            var rootImage = template.GetComponent<Image>();
+            rootImage.color = new Color(0.65f, 0.15f, 0.15f, 0.85f);
+
+            var iconGo = new GameObject("Icon", typeof(RectTransform), typeof(Image), typeof(LayoutElement));
+            iconGo.transform.SetParent(template.transform, false);
+            var iconImage = iconGo.GetComponent<Image>();
+            iconImage.color = Color.white;
+            iconImage.preserveAspect = true;
+            var iconLayout = iconGo.GetComponent<LayoutElement>();
+            iconLayout.preferredWidth = 36f;
+            iconLayout.preferredHeight = 36f;
+
+            var labelGo = new GameObject("Label", typeof(RectTransform), typeof(TextMeshProUGUI), typeof(LayoutElement));
+            labelGo.transform.SetParent(template.transform, false);
+            var label = labelGo.GetComponent<TextMeshProUGUI>();
+            label.text = "Region";
+            label.fontSize = 18f;
+            label.alignment = TextAlignmentOptions.Left;
+            label.color = Color.white;
+            var labelLayout = labelGo.GetComponent<LayoutElement>();
+            labelLayout.flexibleWidth = 1f;
+
+            var rect = template.GetComponent<RectTransform>();
+            rect.sizeDelta = new Vector2(210f, 48f);
+
+            return template.GetComponent<RegionMarker>();
         }
 
         private void SelectRegion(RegionData region)

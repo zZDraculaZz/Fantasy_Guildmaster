@@ -22,9 +22,15 @@ namespace FantasyGuildmaster.UI
         {
             EnsureReferences();
 
+            // Force visible text styling at runtime to avoid hidden rows from stale TMP settings.
+            EnsureVisibleTextStyle(squadNameText);
+            EnsureVisibleTextStyle(statusTimerText);
+            EnsureVisibleTextStyle(hpText);
+
             if (squadNameText != null)
             {
                 squadNameText.text = squadName;
+                squadNameText.color = Color.white;
             }
 
             if (statusTimerText != null)
@@ -78,6 +84,29 @@ namespace FantasyGuildmaster.UI
             }
 
             return null;
+        }
+
+        private static void EnsureVisibleTextStyle(TMP_Text text)
+        {
+            if (text == null)
+            {
+                return;
+            }
+
+            text.enableWordWrapping = false;
+            text.overflowMode = TextOverflowModes.Overflow;
+            text.fontSize = text.fontSize <= 0f ? 14f : text.fontSize;
+            var c = text.color;
+            text.color = new Color(c.r, c.g, c.b, 1f);
+            text.canvasRenderer.cullTransparentMesh = false;
+            var rect = text.rectTransform;
+            rect.localScale = Vector3.one;
+            rect.localRotation = Quaternion.identity;
+            rect.anchorMin = new Vector2(0.5f, 0.5f);
+            rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.anchoredPosition = new Vector2(rect.anchoredPosition.x, 0f);
+            text.ForceMeshUpdate();
         }
     }
 }
