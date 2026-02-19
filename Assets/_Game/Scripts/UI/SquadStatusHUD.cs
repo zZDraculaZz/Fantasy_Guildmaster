@@ -235,6 +235,22 @@ namespace FantasyGuildmaster.UI
 
         private void RenderRows(IReadOnlyList<SquadData> squads, IReadOnlyList<TravelTask> tasks, long nowUnix)
         {
+            EnsureScrollHierarchy();
+            var previousRowsRoot = rowsRoot;
+
+            if (scrollRect != null)
+            {
+                viewportRect ??= scrollRect.viewport;
+                if (viewportRect == null)
+                {
+                    viewportRect = FindChildByName(scrollRect.transform, "Viewport") as RectTransform;
+                    if (viewportRect != null)
+                    {
+                        scrollRect.viewport = viewportRect;
+                    }
+                }
+            }
+
             if (rowsRoot == null)
             {
                 return;
@@ -324,6 +340,20 @@ namespace FantasyGuildmaster.UI
             }
 
             return $"{name}  |  {squad.state}  |  {hp}";
+        }
+
+        private int CountActiveRows()
+        {
+            var active = 0;
+            foreach (var pair in _rowsBySquadId)
+            {
+                if (pair.Value != null && pair.Value.gameObject.activeInHierarchy)
+                {
+                    active++;
+                }
+            }
+
+            return active;
         }
     }
 }
