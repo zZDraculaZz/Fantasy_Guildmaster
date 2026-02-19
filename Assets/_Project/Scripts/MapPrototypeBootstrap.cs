@@ -32,9 +32,9 @@ public class MapPrototypeBootstrap : MonoBehaviour
 
     private readonly List<Region> _regions = new()
     {
-        new Region { id="north_march", name="Северная Марка", undead=35, cult=10, uiPos=new Vector2(-350, 200) },
-        new Region { id="ashen_fens",  name="Пепельные Топи", undead=60, cult=40, uiPos=new Vector2(-150, -50) },
-        new Region { id="iron_coast",  name="Железный Берег", undead=15, cult=25, uiPos=new Vector2(200, 120) }
+        if (Object.FindFirstObjectByType<EventSystem>() != null) return;
+        new Region { id="ashen_fens",  name="ГЏГҐГЇГҐГ«ГјГ­Г»ГҐ Г’Г®ГЇГЁ", undead=60, cult=40, uiPos=new Vector2(-150, -50) },
+        new Region { id="iron_coast",  name="Г†ГҐГ«ГҐГ§Г­Г»Г© ГЃГҐГ°ГҐГЈ", undead=15, cult=25, uiPos=new Vector2(200, 120) }
     };
 
     private void Awake()
@@ -45,13 +45,13 @@ public class MapPrototypeBootstrap : MonoBehaviour
         EnsureEventSystem();
         var canvas = EnsureCanvas();
 
-        // Чтобы не плодить UI при повторном запуске (если Enter Play Mode без domain reload)
+        // Г—ГІГ®ГЎГ» Г­ГҐ ГЇГ«Г®Г¤ГЁГІГј UI ГЇГ°ГЁ ГЇГ®ГўГІГ®Г°Г­Г®Г¬ Г§Г ГЇГіГ±ГЄГҐ (ГҐГ±Г«ГЁ Enter Play Mode ГЎГҐГ§ domain reload)
         var existing = canvas.transform.Find("MapUI");
         if (existing != null) return;
 
         BuildUI(canvas.transform);
 
-        // Выберем первый регион по умолчанию
+        // Г‚Г»ГЎГҐГ°ГҐГ¬ ГЇГҐГ°ГўГ»Г© Г°ГҐГЈГЁГ®Г­ ГЇГ® ГіГ¬Г®Г«Г·Г Г­ГЁГѕ
         if (_regions.Count > 0) SelectRegion(_regions[0]);
     }
 
@@ -61,8 +61,8 @@ public class MapPrototypeBootstrap : MonoBehaviour
 
         var esGo = new GameObject("EventSystem", typeof(EventSystem));
 
-        // Если установлен New Input System — добавим его модуль (если доступен),
-        // иначе используем старый StandaloneInputModule.
+        // Г…Г±Г«ГЁ ГіГ±ГІГ Г­Г®ГўГ«ГҐГ­ New Input System вЂ” Г¤Г®ГЎГ ГўГЁГ¬ ГҐГЈГ® Г¬Г®Г¤ГіГ«Гј (ГҐГ±Г«ГЁ Г¤Г®Г±ГІГіГЇГҐГ­),
+        // ГЁГ­Г Г·ГҐ ГЁГ±ГЇГ®Г«ГјГ§ГіГҐГ¬ Г±ГІГ Г°Г»Г© StandaloneInputModule.
         var inputSystemModuleType = Type.GetType("UnityEngine.InputSystem.UI.InputSystemUIInputModule, Unity.InputSystem");
         if (inputSystemModuleType != null)
             esGo.AddComponent(inputSystemModuleType);
@@ -83,7 +83,7 @@ public class MapPrototypeBootstrap : MonoBehaviour
         var scaler = canvasGo.AddComponent<CanvasScaler>();
         scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
         scaler.referenceResolution = referenceResolution;
-        scaler.matchWidthOrHeight = 0.5f; // середина
+        scaler.matchWidthOrHeight = 0.5f; // Г±ГҐГ°ГҐГ¤ГЁГ­Г 
 
         canvasGo.AddComponent<GraphicRaycaster>();
         return canvas;
@@ -159,7 +159,7 @@ public class MapPrototypeBootstrap : MonoBehaviour
             rt.anchorMin = new Vector2(0.5f, 0.5f);
             rt.anchorMax = new Vector2(0.5f, 0.5f);
             rt.pivot = new Vector2(0.5f, 0.5f);
-            rt.anchoredPosition = r.uiPos; // ключевой параметр позиционирования :contentReference[oaicite:4]{index=4}
+            rt.anchoredPosition = r.uiPos; // ГЄГ«ГѕГ·ГҐГўГ®Г© ГЇГ Г°Г Г¬ГҐГІГ° ГЇГ®Г§ГЁГ¶ГЁГ®Г­ГЁГ°Г®ГўГ Г­ГЁГї :contentReference[oaicite:4]{index=4}
 
             var img = btnGo.AddComponent<Image>();
             img.color = new Color(0.85f, 0.15f, 0.15f, 0.60f);
@@ -179,8 +179,8 @@ public class MapPrototypeBootstrap : MonoBehaviour
         if (_regionName == null) return;
 
         _regionName.text = r.name;
-        _undead.text = $"Нежить: {r.undead}";
-        _cult.text = $"Культ: {r.cult}";
+        _undead.text = $"ГЌГҐГ¦ГЁГІГј: {r.undead}";
+        _cult.text = $"ГЉГіГ«ГјГІ: {r.cult}";
     }
 
     // ---------- UI helpers ----------
