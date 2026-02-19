@@ -96,6 +96,12 @@ namespace FantasyGuildmaster.Map
 
         private void Start()
         {
+            if (_markersByRegion.Count == 0)
+            {
+                SpawnMarkers();
+                SyncAllContractIcons();
+            }
+
             var count = squadRoster != null ? squadRoster.GetSquads().Count : 0;
             Debug.Log($"[RosterDebug] MapController roster squadsCount={count}");
         }
@@ -463,21 +469,9 @@ namespace FantasyGuildmaster.Map
 
         private void SpawnMarkers()
         {
-            if (markersRoot == null)
+            if (!EnsureMarkersRoot())
             {
-                Debug.LogWarning("[MapController] markersRoot is not assigned, creating runtime fallback root.");
-                var fallback = new GameObject("MarkersRoot", typeof(RectTransform));
-                markersRoot = fallback.GetComponent<RectTransform>();
-
-                var scrollContent = transform.Find("MapCanvas/MapLayer/MapScrollRect/Viewport/Content") as RectTransform;
-                markersRoot.SetParent(scrollContent != null ? scrollContent : (mapRect != null ? mapRect : transform), false);
-                markersRoot.anchorMin = Vector2.zero;
-                markersRoot.anchorMax = Vector2.one;
-                markersRoot.offsetMin = Vector2.zero;
-                markersRoot.offsetMax = Vector2.zero;
-                markersRoot.localScale = Vector3.one;
-                markersRoot.localPosition = Vector3.zero;
-                markersRoot.SetAsLastSibling();
+                return;
             }
 
             markersRoot.SetAsLastSibling();
@@ -510,7 +504,61 @@ namespace FantasyGuildmaster.Map
                 marker.name = $"RegionMarker_{region.id}";
                 marker.Setup(region, mapRect, SelectRegion);
                 _markersByRegion[region.id] = marker;
+                Debug.Log($"[MapController] Marker spawned: regionId={region.id}, markerPath={GetHierarchyPath(marker.transform)}, parent={GetHierarchyPath(marker.transform.parent)}");
             }
+
+            Debug.Log($"[MapController] Markers spawned total={_markersByRegion.Count}");
+        }
+
+        private bool EnsureMarkersRoot()
+        {
+            if (markersRoot != null)
+            {
+                return true;
+            }
+
+            var parent = FindMarkersParent();
+            if (parent == null)
+            {
+                Debug.LogWarning("[MapController] markersRoot is not assigned and UI parent was not found yet. Marker spawn deferred.");
+                return false;
+            }
+
+            var fallback = new GameObject("MarkersRoot", typeof(RectTransform));
+            markersRoot = fallback.GetComponent<RectTransform>();
+            markersRoot.SetParent(parent, false);
+            markersRoot.anchorMin = Vector2.zero;
+            markersRoot.anchorMax = Vector2.one;
+            markersRoot.offsetMin = Vector2.zero;
+            markersRoot.offsetMax = Vector2.zero;
+            markersRoot.localScale = Vector3.one;
+            markersRoot.localPosition = Vector3.zero;
+            markersRoot.SetAsLastSibling();
+            Debug.Log($"[MapController] Created fallback markersRoot under {GetHierarchyPath(parent)}");
+            return true;
+        }
+
+        private RectTransform FindMarkersParent()
+        {
+            var scrollRect = GetComponentInChildren<ScrollRect>(true);
+            if (scrollRect != null && scrollRect.content != null)
+            {
+                return scrollRect.content;
+            }
+
+            var mapLayout = transform.Find("MapCanvas/MapLayout") as RectTransform;
+            if (mapLayout != null)
+            {
+                return mapLayout;
+            }
+
+            var mapCanvas = transform.Find("MapCanvas") as RectTransform;
+            if (mapCanvas != null)
+            {
+                return mapCanvas;
+            }
+
+            return null;
         }
 
         private static string GetHierarchyPath(Transform node)
