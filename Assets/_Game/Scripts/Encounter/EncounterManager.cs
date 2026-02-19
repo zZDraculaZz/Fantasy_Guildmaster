@@ -25,6 +25,7 @@ namespace FantasyGuildmaster.Encounter
         private Func<string, SquadData> _resolveSquad;
         private Action<int> _addGold;
         private Action<string> _onSquadDestroyed;
+        private Action _onSquadChanged;
         private bool _isPresentingEncounter;
         private Canvas _fallbackCanvas;
 
@@ -40,11 +41,12 @@ namespace FantasyGuildmaster.Encounter
             encounterPanel = panel;
         }
 
-        public void Configure(Func<string, SquadData> resolveSquad, Action<int> addGold, Action<string> onSquadDestroyed)
+        public void Configure(Func<string, SquadData> resolveSquad, Action<int> addGold, Action<string> onSquadDestroyed, Action onSquadChanged = null)
         {
             _resolveSquad = resolveSquad;
             _addGold = addGold;
             _onSquadDestroyed = onSquadDestroyed;
+            _onSquadChanged = onSquadChanged;
         }
 
         public void EnqueueEncounter(string regionId, string squadId, Action onEncounterClosed)
@@ -180,6 +182,8 @@ namespace FantasyGuildmaster.Encounter
                     _onSquadDestroyed?.Invoke(squad.id);
                     result += "\nSquad destroyed";
                 }
+
+                _onSquadChanged?.Invoke();
             }
 
             encounterPanel.ShowResult(result, () =>

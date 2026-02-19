@@ -29,6 +29,7 @@ namespace FantasyGuildmaster.Map
         [SerializeField] private EncounterManager encounterManager;
         [SerializeField] private GameManager gameManager;
         [SerializeField] private GameState gameState;
+        [SerializeField] private SquadRoster squadRoster;
         [SerializeField] private GameClock gameClock;
         [SerializeField] private SquadStatusHUD squadStatusHud;
 
@@ -37,7 +38,6 @@ namespace FantasyGuildmaster.Map
         private readonly Dictionary<string, RegionMarker> _markersByRegion = new();
         private readonly Dictionary<string, List<ContractIcon>> _iconsByRegion = new();
         private readonly Dictionary<string, ContractIcon> _iconByContractId = new();
-        private readonly List<SquadData> _squads = new();
         private readonly List<TravelTask> _travelTasks = new();
         private readonly Dictionary<string, TravelToken> _travelTokenBySquadId = new();
 
@@ -51,7 +51,7 @@ namespace FantasyGuildmaster.Map
             EnsureGuildHqRegion();
             BuildRegionIndex();
             SeedContracts();
-            SeedSquads();
+            EnsureSquadRoster();
             SpawnMarkers();
             InitializePools();
             SyncAllContractIcons();
@@ -70,7 +70,7 @@ namespace FantasyGuildmaster.Map
 
             if (encounterManager != null)
             {
-                encounterManager.Configure(FindSquad, AddGold, HandleSquadDestroyed);
+                encounterManager.Configure(FindSquad, AddGold, HandleSquadDestroyed, NotifyRosterChanged);
             }
 
             if (detailsPanel != null)
@@ -91,6 +91,12 @@ namespace FantasyGuildmaster.Map
             {
                 SelectRegion(firstPlayableRegion);
             }
+        }
+
+        private void Start()
+        {
+            var count = squadRoster != null ? squadRoster.GetSquads().Count : 0;
+            Debug.Log($"[RosterDebug] MapController roster squadsCount={count}");
         }
 
         private void OnDestroy()
@@ -213,6 +219,7 @@ namespace FantasyGuildmaster.Map
 
                 squad.currentRegionId = task.toRegionId;
                 squad.state = SquadState.ResolvingEncounter;
+                NotifyRosterChanged();
 
                 if (encounterManager != null)
                 {
@@ -239,6 +246,7 @@ namespace FantasyGuildmaster.Map
 
             squad.currentRegionId = GuildHqId;
             squad.state = SquadState.IdleAtHQ;
+            NotifyRosterChanged();
             AddGold(task.contractReward);
             RemoveTravelToken(task.squadId);
             CompleteContract(task.fromRegionId, task.contractId);
@@ -256,6 +264,7 @@ namespace FantasyGuildmaster.Map
 
             StartTravelTask(squad, regionId, GuildHqId, contractId, contractReward, TravelPhase.Return);
             squad.state = SquadState.ReturningToHQ;
+            NotifyRosterChanged();
 
             if (DEBUG_TRAVEL)
             {
@@ -509,6 +518,7 @@ namespace FantasyGuildmaster.Map
             {
                 StartTravelTask(squad, GuildHqId, region.id, contract.id, contract.reward, TravelPhase.Outbound);
                 squad.state = SquadState.TravelingToRegion;
+                NotifyRosterChanged();
 
                 detailsPanel?.BlockContract(contract.id);
 
@@ -732,22 +742,39 @@ namespace FantasyGuildmaster.Map
             }
         }
 
-        private void SeedSquads()
+        private void EnsureSquadRoster()
         {
-            _squads.Clear();
-            _squads.Add(new SquadData { id = "squad_iron_hawks", name = "Iron Hawks", membersCount = 6, hp = 100, maxHp = 100, state = SquadState.IdleAtHQ, currentRegionId = GuildHqId });
-            _squads.Add(new SquadData { id = "squad_ash_blades", name = "Ash Blades", membersCount = 5, hp = 100, maxHp = 100, state = SquadState.IdleAtHQ, currentRegionId = GuildHqId });
-            _squads.Add(new SquadData { id = "squad_grim_lantern", name = "Grim Lantern", membersCount = 4, hp = 100, maxHp = 100, state = SquadState.IdleAtHQ, currentRegionId = GuildHqId });
+            if (squadRoster == null)
+            {
+                squadRoster = FindFirstObjectByType<SquadRoster>();
+                if (squadRoster == null)
+                {
+                    squadRoster = gameObject.AddComponent<SquadRoster>();
+                }
+            }
+
+            squadRoster.SeedDefaultSquadsIfEmpty();
+        }
+
+        private List<SquadData> GetRosterSquads()
+        {
+            return squadRoster != null ? squadRoster.GetSquads() : new List<SquadData>();
+        }
+
+        private void NotifyRosterChanged()
+        {
+            squadRoster?.NotifyChanged();
         }
 
         private List<SquadData> GetIdleSquads()
         {
+            var squads = GetRosterSquads();
             var list = new List<SquadData>();
-            for (var i = 0; i < _squads.Count; i++)
+            for (var i = 0; i < squads.Count; i++)
             {
-                if (_squads[i].state == SquadState.IdleAtHQ && !_squads[i].IsDestroyed)
+                if (squads[i].state == SquadState.IdleAtHQ && !squads[i].IsDestroyed)
                 {
-                    list.Add(_squads[i]);
+                    list.Add(squads[i]);
                 }
             }
 
@@ -756,11 +783,12 @@ namespace FantasyGuildmaster.Map
 
         private SquadData FindSquad(string squadId)
         {
-            for (var i = 0; i < _squads.Count; i++)
+            var squads = GetRosterSquads();
+            for (var i = 0; i < squads.Count; i++)
             {
-                if (_squads[i].id == squadId)
+                if (squads[i].id == squadId)
                 {
-                    return _squads[i];
+                    return squads[i];
                 }
             }
 
@@ -799,6 +827,7 @@ namespace FantasyGuildmaster.Map
             squad.state = SquadState.Destroyed;
             squad.currentRegionId = GuildHqId;
             squad.hp = 0;
+            NotifyRosterChanged();
             Debug.Log($"[TravelDebug] Squad destroyed: {squad.name}");
         }
 
@@ -917,12 +946,12 @@ namespace FantasyGuildmaster.Map
             }
 
             var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            squadStatusHud.Sync(_squads, _travelTasks, ResolveRegionName, now);
+            squadStatusHud.Sync(GetRosterSquads(), _travelTasks, ResolveRegionName, now);
         }
 
         public IReadOnlyList<SquadData> GetSquads()
         {
-            return _squads;
+            return GetRosterSquads();
         }
 
         public IReadOnlyList<TravelTask> GetTravelTasks()

@@ -27,6 +27,7 @@ namespace FantasyGuildmaster.UI
         private readonly Dictionary<string, SquadStatusRow> _rowsBySquadId = new();
 
         private MapController _mapController;
+        private SquadRoster _squadRoster;
         private GameClock _gameClock;
         private bool _debugLogged;
 
@@ -42,12 +43,21 @@ namespace FantasyGuildmaster.UI
 
         private void Start()
         {
-            StartCoroutine(RebuildAfterOneFrame());
+            StartCoroutine(RebuildWhenRosterReady());
         }
 
-        private IEnumerator RebuildAfterOneFrame()
+        private IEnumerator RebuildWhenRosterReady()
         {
             yield return null;
+
+            var waited = 0f;
+            while ((_squadRoster == null || _squadRoster.Squads.Count == 0) && waited < 2f)
+            {
+                HardBind();
+                waited += Time.unscaledDeltaTime;
+                yield return null;
+            }
+
             RebuildRows();
             RefreshNow();
         }
@@ -64,6 +74,11 @@ namespace FantasyGuildmaster.UI
             {
                 _gameClock.TickSecond += OnTickSecond;
             }
+
+            if (_squadRoster != null)
+            {
+                _squadRoster.OnRosterChanged += OnRosterChanged;
+            }
         }
 
         private void OnDisable()
@@ -76,6 +91,11 @@ namespace FantasyGuildmaster.UI
             if (_gameClock != null)
             {
                 _gameClock.TickSecond -= OnTickSecond;
+            }
+
+            if (_squadRoster != null)
+            {
+                _squadRoster.OnRosterChanged -= OnRosterChanged;
             }
         }
 
@@ -137,7 +157,7 @@ namespace FantasyGuildmaster.UI
                 return;
             }
 
-            var squads = _mapController.GetSquads();
+            var squads = _squadRoster != null ? _squadRoster.GetSquads() : _mapController.GetSquads();
             if (squads == null || squads.Count == 0)
             {
                 Debug.LogWarning("[HUDDebug] RebuildRows skipped: squads list is empty");
@@ -159,7 +179,7 @@ namespace FantasyGuildmaster.UI
                 }
             }
 
-            var squads = _mapController.GetSquads();
+            var squads = _squadRoster != null ? _squadRoster.GetSquads() : _mapController.GetSquads();
             var tasks = _mapController.GetTravelTasks();
             if (squads == null)
             {
@@ -182,17 +202,42 @@ namespace FantasyGuildmaster.UI
                 gameState = FindFirstObjectByType<GameState>();
             }
 
+            var foundRoster = FindFirstObjectByType<SquadRoster>();
+            if (_squadRoster != foundRoster)
+            {
+                if (_squadRoster != null)
+                {
+                    _squadRoster.OnRosterChanged -= OnRosterChanged;
+                }
+
+                _squadRoster = foundRoster;
+
+                if (_squadRoster != null && isActiveAndEnabled)
+                {
+                    _squadRoster.OnRosterChanged += OnRosterChanged;
+                }
+            }
+
             _gameClock = FindFirstObjectByType<GameClock>();
 
             if (!_debugLogged)
             {
-                var squadCount = _mapController?.GetSquads()?.Count ?? 0;
-                var contentName = rowsRoot != null ? rowsRoot.name : "null";
-                var rowName = rowPrefab != null ? rowPrefab.name : "null";
-                Debug.Log($"[HUDDebug] MapController found={_mapController != null}, squadsCount={squadCount}");
-                Debug.Log($"[HUDDebug] Content={contentName}, RowPrefab={rowName}");
-                _debugLogged = true;
+                var squadCount = _squadRoster != null ? _squadRoster.Squads.Count : (_mapController?.GetSquads()?.Count ?? 0);
+                if (squadCount > 0)
+                {
+                    var contentName = rowsRoot != null ? rowsRoot.name : "null";
+                    var rowName = rowPrefab != null ? rowPrefab.name : "null";
+                    Debug.Log($"[HUDDebug] MapController found={_mapController != null}, squadsCount={squadCount}");
+                    Debug.Log($"[HUDDebug] Content={contentName}, RowPrefab={rowName}");
+                    _debugLogged = true;
+                }
             }
+        }
+
+        private void OnRosterChanged()
+        {
+            RebuildRows();
+            RefreshNow();
         }
 
         private void OnTickSecond()

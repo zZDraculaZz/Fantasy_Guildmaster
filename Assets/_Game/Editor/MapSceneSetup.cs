@@ -43,6 +43,7 @@ namespace FantasyGuildmaster.Editor
             var clock = root.GetComponent<GameClock>() ?? root.AddComponent<GameClock>();
             var gameManager = root.GetComponent<GameManager>() ?? root.AddComponent<GameManager>();
             var gameState = root.GetComponent<GameState>() ?? root.AddComponent<GameState>();
+            var squadRoster = root.GetComponent<SquadRoster>() ?? root.AddComponent<SquadRoster>();
             var controller = root.GetComponent<MapController>() ?? root.AddComponent<MapController>();
 
             var canvas = EnsureCanvas(root.transform);
@@ -63,7 +64,7 @@ namespace FantasyGuildmaster.Editor
             EnsureGuildHqMarker(markersRoot);
 
             AssignEncounterManager(encounterManager, encounterPanel);
-            AssignMapController(controller, mapRect, markersRoot, contractIconsRoot, travelTokensRoot, markerPrefab, contractIconPrefab, travelTokenPrefab, detailsPanel, squadSelectPanel, squadStatusHud, encounterManager, gameManager, gameState, clock);
+            AssignMapController(controller, mapRect, markersRoot, contractIconsRoot, travelTokensRoot, markerPrefab, contractIconPrefab, travelTokenPrefab, detailsPanel, squadSelectPanel, squadStatusHud, encounterManager, gameManager, gameState, squadRoster, clock);
 
             EditorUtility.SetDirty(root);
             EditorUtility.SetDirty(canvas.gameObject);
@@ -776,7 +777,7 @@ namespace FantasyGuildmaster.Editor
             rect.localScale = Vector3.one;
         }
 
-        private static void AssignMapController(MapController controller, RectTransform mapRect, RectTransform markersRoot, RectTransform contractIconsRoot, RectTransform travelTokensRoot, RegionMarker markerPrefab, ContractIcon contractIconPrefab, TravelToken travelTokenPrefab, RegionDetailsPanel detailsPanel, SquadSelectPanel squadSelectPanel, SquadStatusHUD squadStatusHud, EncounterManager encounterManager, GameManager gameManager, GameState gameState, GameClock clock)
+        private static void AssignMapController(MapController controller, RectTransform mapRect, RectTransform markersRoot, RectTransform contractIconsRoot, RectTransform travelTokensRoot, RegionMarker markerPrefab, ContractIcon contractIconPrefab, TravelToken travelTokenPrefab, RegionDetailsPanel detailsPanel, SquadSelectPanel squadSelectPanel, SquadStatusHUD squadStatusHud, EncounterManager encounterManager, GameManager gameManager, GameState gameState, SquadRoster squadRoster, GameClock clock)
         {
             var so = new SerializedObject(controller);
             so.FindProperty("mapRect").objectReferenceValue = mapRect;
@@ -792,6 +793,7 @@ namespace FantasyGuildmaster.Editor
             so.FindProperty("encounterManager").objectReferenceValue = encounterManager;
             so.FindProperty("gameManager").objectReferenceValue = gameManager;
             so.FindProperty("gameState").objectReferenceValue = gameState;
+            so.FindProperty("squadRoster").objectReferenceValue = squadRoster;
             so.FindProperty("gameClock").objectReferenceValue = clock;
             so.ApplyModifiedPropertiesWithoutUndo();
         }
