@@ -1,5 +1,4 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using FantasyGuildmaster.Core;
 using FantasyGuildmaster.Map;
@@ -46,7 +45,6 @@ namespace FantasyGuildmaster.UI
             if (gameState != null)
             {
                 gameState.OnGoldChanged += UpdateGoldText;
-                UpdateGoldText(gameState.Gold);
             }
 
             if (_squadRoster != null)
@@ -94,7 +92,6 @@ namespace FantasyGuildmaster.UI
             }
 
             gameState = state;
-
             if (gameState != null && isActiveAndEnabled)
             {
                 gameState.OnGoldChanged += UpdateGoldText;
@@ -167,9 +164,13 @@ namespace FantasyGuildmaster.UI
 
         private void UpdateGoldText(int gold)
         {
-            if (goldText != null)
+            _mapController = FindFirstObjectByType<MapController>();
+            _squadRoster = FindFirstObjectByType<SquadRoster>();
+            _gameClock = FindFirstObjectByType<GameClock>();
+
+            if (gameState == null)
             {
-                goldText.text = $"Gold: {gold}";
+                gameState = FindFirstObjectByType<GameState>();
             }
         }
 
