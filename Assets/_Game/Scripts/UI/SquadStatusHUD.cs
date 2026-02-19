@@ -32,7 +32,7 @@ namespace FantasyGuildmaster.UI
             StartCoroutine(RefreshNextFrame());
         }
 
-        private IEnumerator RefreshNextFrame()
+        private System.Collections.IEnumerator RefreshNextFrame()
         {
             yield return null;
             RefreshNow();
@@ -119,7 +119,7 @@ namespace FantasyGuildmaster.UI
             Render(squads, tasks, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
         }
 
-        private IEnumerator RefreshEachSecond()
+        private System.Collections.IEnumerator RefreshEachSecond()
         {
             while (enabled)
             {
@@ -164,20 +164,16 @@ namespace FantasyGuildmaster.UI
 
         private void UpdateGoldText(int gold)
         {
-            _mapController = FindFirstObjectByType<MapController>();
-            _squadRoster = FindFirstObjectByType<SquadRoster>();
-            _gameClock = FindFirstObjectByType<GameClock>();
-
-            if (gameState == null)
+            if (bodyText != null)
             {
-                gameState = FindFirstObjectByType<GameState>();
+                return;
             }
-        }
 
         private void EnsureBodyText()
         {
             if (bodyText != null)
             {
+                bodyText = existing.GetComponent<TMP_Text>() ?? existing.gameObject.AddComponent<TextMeshProUGUI>();
                 return;
             }
 
