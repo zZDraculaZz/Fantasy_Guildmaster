@@ -99,6 +99,13 @@ namespace FantasyGuildmaster.UI
             var c = text.color;
             text.color = new Color(c.r, c.g, c.b, 1f);
             text.canvasRenderer.cullTransparentMesh = false;
+            var rect = text.rectTransform;
+            rect.localScale = Vector3.one;
+            rect.localRotation = Quaternion.identity;
+            rect.anchorMin = new Vector2(0.5f, 0.5f);
+            rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.anchoredPosition = new Vector2(rect.anchoredPosition.x, 0f);
             text.ForceMeshUpdate();
         }
     }
