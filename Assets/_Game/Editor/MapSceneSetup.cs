@@ -599,10 +599,18 @@ namespace FantasyGuildmaster.Editor
             var panelRect = (RectTransform)panelGo.transform;
             Stretch(panelRect);
 
-            var canvasGroup = panelGo.GetComponent<CanvasGroup>() ?? panelGo.AddComponent<CanvasGroup>();
-            canvasGroup.alpha = 1f;
-            canvasGroup.interactable = true;
-            canvasGroup.blocksRaycasts = true;
+            var canvasGroup = panelGo.GetComponent<CanvasGroup>();
+            if (canvasGroup == null)
+            {
+                canvasGroup = panelGo.AddComponent<CanvasGroup>();
+            }
+
+            if (canvasGroup != null)
+            {
+                canvasGroup.alpha = 1f;
+                canvasGroup.interactable = true;
+                canvasGroup.blocksRaycasts = true;
+            }
 
             var bg = panelGo.GetComponent<Image>() ?? panelGo.AddComponent<Image>();
             bg.color = new Color(0f, 0f, 0f, 0.86f);
