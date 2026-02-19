@@ -56,10 +56,11 @@ namespace FantasyGuildmaster.Editor
                 var regionExisting = CountExistingFiles("Assets/_Game/Resources/Icons/Regions", RegionIcons);
                 var contractExisting = CountExistingFiles("Assets/_Game/Resources/Icons/Contracts", ContractIcons);
                 var uiExisting = CountExistingFiles("Assets/_Game/Resources/Icons/UI", UiIcons);
-                Debug.Log($"[PlaceholderIconsGenerator] Created 0 icons. overwrite={overwrite}, existing counts: regions={regionExisting}/{RegionIcons.Length}, contracts={contractExisting}/{ContractIcons.Length}, ui={uiExisting}/{UiIcons.Length}. Paths: Assets/_Game/Resources/Icons/Regions, Assets/_Game/Resources/Icons/Contracts, Assets/_Game/Resources/Icons/UI");
+                Debug.Log($"[PlaceholderIconsGenerator] No new icons created (overwrite={overwrite}). Existing counts: regions={regionExisting}/{RegionIcons.Length}, contracts={contractExisting}/{ContractIcons.Length}, ui={uiExisting}/{UiIcons.Length}.");
+                return created;
             }
 
-            Debug.Log($"Created {created} icons");
+            Debug.Log($"[PlaceholderIconsGenerator] Created {created} icons.");
             return created;
         }
 
