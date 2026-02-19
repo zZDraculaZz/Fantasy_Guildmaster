@@ -433,6 +433,8 @@ namespace FantasyGuildmaster.UI
 
         private void EnsureContentRootReady()
         {
+            var previousRowsRoot = rowsRoot;
+
             if (scrollRect != null)
             {
                 viewportRect ??= scrollRect.viewport;
@@ -477,6 +479,22 @@ namespace FantasyGuildmaster.UI
                 }
 
                 rowsRoot = contentUnderViewport;
+            }
+
+            if (rowsRoot != null && previousRowsRoot != rowsRoot)
+            {
+                foreach (var row in _rowsBySquadId.Values)
+                {
+                    if (row == null)
+                    {
+                        continue;
+                    }
+
+                    row.transform.SetParent(rowsRoot, false);
+                    row.transform.localScale = Vector3.one;
+                }
+
+                _lastRosterSignature = string.Empty;
             }
 
             if (rowsRoot == null)
