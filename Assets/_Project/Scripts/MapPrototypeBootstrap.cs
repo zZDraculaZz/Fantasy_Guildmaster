@@ -32,7 +32,7 @@ public class MapPrototypeBootstrap : MonoBehaviour
 
     private readonly List<Region> _regions = new()
     {
-        if (Object.FindFirstObjectByType<EventSystem>() != null) return;
+        new Region { id="north_march", name="Ñåâåðíàÿ Ìàðêà", undead=35, cult=10, uiPos=new Vector2(-350, 200) },
         new Region { id="ashen_fens",  name="Ïåïåëüíûå Òîïè", undead=60, cult=40, uiPos=new Vector2(-150, -50) },
         new Region { id="iron_coast",  name="Æåëåçíûé Áåðåã", undead=15, cult=25, uiPos=new Vector2(200, 120) }
     };
@@ -57,11 +57,11 @@ public class MapPrototypeBootstrap : MonoBehaviour
 
     private void EnsureEventSystem()
     {
-        if (FindObjectOfType<EventSystem>() != null) return;
+        if (Object.FindFirstObjectByType<EventSystem>() != null) return;
 
         var esGo = new GameObject("EventSystem", typeof(EventSystem));
 
-        // Åñëè óñòàíîâëåí New Input System — äîáàâèì åãî ìîäóëü (åñëè äîñòóïåí),
+        // Åñëè óñòàíîâëåí New Input System  äîáàâèì åãî ìîäóëü (åñëè äîñòóïåí),
         // èíà÷å èñïîëüçóåì ñòàðûé StandaloneInputModule.
         var inputSystemModuleType = Type.GetType("UnityEngine.InputSystem.UI.InputSystemUIInputModule, Unity.InputSystem");
         if (inputSystemModuleType != null)
