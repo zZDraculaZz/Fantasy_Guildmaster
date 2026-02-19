@@ -468,12 +468,20 @@ namespace FantasyGuildmaster.Map
                 Debug.LogWarning("[MapController] markersRoot is not assigned, creating runtime fallback root.");
                 var fallback = new GameObject("MarkersRoot", typeof(RectTransform));
                 markersRoot = fallback.GetComponent<RectTransform>();
-                markersRoot.SetParent(mapRect != null ? mapRect : transform, false);
+
+                var scrollContent = transform.Find("MapCanvas/MapLayer/MapScrollRect/Viewport/Content") as RectTransform;
+                markersRoot.SetParent(scrollContent != null ? scrollContent : (mapRect != null ? mapRect : transform), false);
                 markersRoot.anchorMin = Vector2.zero;
                 markersRoot.anchorMax = Vector2.one;
                 markersRoot.offsetMin = Vector2.zero;
                 markersRoot.offsetMax = Vector2.zero;
+                markersRoot.localScale = Vector3.one;
+                markersRoot.localPosition = Vector3.zero;
+                markersRoot.SetAsLastSibling();
             }
+
+            markersRoot.SetAsLastSibling();
+            Debug.Log($"[MapController] markersRoot path={GetHierarchyPath(markersRoot)}");
 
             if (regionMarkerPrefab == null)
             {
@@ -503,6 +511,24 @@ namespace FantasyGuildmaster.Map
                 marker.Setup(region, mapRect, SelectRegion);
                 _markersByRegion[region.id] = marker;
             }
+        }
+
+        private static string GetHierarchyPath(Transform node)
+        {
+            if (node == null)
+            {
+                return "<null>";
+            }
+
+            var path = node.name;
+            var cursor = node.parent;
+            while (cursor != null)
+            {
+                path = $"{cursor.name}/{path}";
+                cursor = cursor.parent;
+            }
+
+            return path;
         }
 
         private void ResolveRuntimeReferences()
