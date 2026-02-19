@@ -427,6 +427,16 @@ namespace FantasyGuildmaster.UI
                 row.name = $"Row_{squad.id}";
                 row.transform.SetParent(rowsRoot, false);
                 row.transform.localScale = Vector3.one;
+                row.transform.localRotation = Quaternion.identity;
+                var rowRect = row.transform as RectTransform;
+                if (rowRect != null)
+                {
+                    rowRect.anchorMin = new Vector2(0f, 0.5f);
+                    rowRect.anchorMax = new Vector2(1f, 0.5f);
+                    rowRect.pivot = new Vector2(0.5f, 0.5f);
+                    rowRect.anchoredPosition = Vector2.zero;
+                }
+
                 row.transform.SetAsLastSibling();
                 row.gameObject.SetActive(true);
                 EnsureRowLayoutElement(row);
@@ -446,7 +456,12 @@ namespace FantasyGuildmaster.UI
 
         private void EnsureScrollHierarchy()
         {
-            if (scrollRect == null)
+            var localScroll = transform.Find("RowsScrollRect")?.GetComponent<ScrollRect>();
+            if (localScroll != null)
+            {
+                scrollRect = localScroll;
+            }
+            else if (scrollRect == null)
             {
                 scrollRect = GetComponentInChildren<ScrollRect>(true);
             }
@@ -469,27 +484,45 @@ namespace FantasyGuildmaster.UI
 
                 var viewportGo = new GameObject("Viewport", typeof(RectTransform), typeof(Image), typeof(Mask), typeof(RectMask2D));
                 viewportGo.transform.SetParent(scrollGo.transform, false);
-                viewportRect = viewportGo.GetComponent<RectTransform>();
-                viewportRect.anchorMin = Vector2.zero;
-                viewportRect.anchorMax = Vector2.one;
-                viewportRect.offsetMin = Vector2.zero;
-                viewportRect.offsetMax = Vector2.zero;
-                viewportRect.anchoredPosition = Vector2.zero;
-
-                var viewportMask = viewportGo.GetComponent<Mask>();
-                viewportMask.showMaskGraphic = false;
-                viewportGo.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0f);
 
                 var contentGo = new GameObject("Content", typeof(RectTransform));
                 contentGo.transform.SetParent(viewportGo.transform, false);
-                rowsRoot = contentGo.GetComponent<RectTransform>();
 
                 scrollRect = scrollGo.GetComponent<ScrollRect>();
-                scrollRect.viewport = viewportRect;
-                scrollRect.content = rowsRoot;
-                scrollRect.horizontal = false;
-                scrollRect.vertical = true;
             }
+
+            viewportRect = scrollRect.transform.Find("Viewport") as RectTransform;
+            if (viewportRect == null)
+            {
+                var viewportGo = new GameObject("Viewport", typeof(RectTransform), typeof(Image), typeof(Mask), typeof(RectMask2D));
+                viewportGo.transform.SetParent(scrollRect.transform, false);
+                viewportRect = viewportGo.GetComponent<RectTransform>();
+            }
+
+            viewportRect.anchorMin = Vector2.zero;
+            viewportRect.anchorMax = Vector2.one;
+            viewportRect.offsetMin = Vector2.zero;
+            viewportRect.offsetMax = Vector2.zero;
+            viewportRect.anchoredPosition = Vector2.zero;
+
+            var viewportMask = viewportRect.GetComponent<Mask>() ?? viewportRect.gameObject.AddComponent<Mask>();
+            viewportMask.showMaskGraphic = false;
+            var viewportImage = viewportRect.GetComponent<Image>() ?? viewportRect.gameObject.AddComponent<Image>();
+            viewportImage.color = new Color(0f, 0f, 0f, 0f);
+            _ = viewportRect.GetComponent<RectMask2D>() ?? viewportRect.gameObject.AddComponent<RectMask2D>();
+
+            rowsRoot = viewportRect.Find("Content") as RectTransform;
+            if (rowsRoot == null)
+            {
+                var contentGo = new GameObject("Content", typeof(RectTransform));
+                contentGo.transform.SetParent(viewportRect, false);
+                rowsRoot = contentGo.GetComponent<RectTransform>();
+            }
+
+            scrollRect.viewport = viewportRect;
+            scrollRect.content = rowsRoot;
+            scrollRect.horizontal = false;
+            scrollRect.vertical = true;
         }
 
         private void EnsureContentRootReady()
