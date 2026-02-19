@@ -4,6 +4,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
 using TMPro;
+using UObject = UnityEngine.Object;
 
 public class MapPrototypeBootstrap : MonoBehaviour
 {
@@ -57,7 +58,8 @@ public class MapPrototypeBootstrap : MonoBehaviour
 
     private void EnsureEventSystem()
     {
-        if (Object.FindFirstObjectByType<EventSystem>() != null) return;
+        // Explicit UnityEngine.Object alias avoids CS0104 ambiguity with System.Object/object.
+        if (UObject.FindFirstObjectByType<EventSystem>() != null) return;
 
         var esGo = new GameObject("EventSystem", typeof(EventSystem));
 
