@@ -19,6 +19,8 @@ namespace FantasyGuildmaster.Map
 
         [SerializeField] private RectTransform mapRect;
         [SerializeField] private RectTransform markersRoot;
+        [SerializeField] private RectTransform markersRootParent;
+        [SerializeField] private ScrollRect mapScrollRect;
         [SerializeField] private RectTransform contractIconsRoot;
         [SerializeField] private RectTransform travelTokensRoot;
         [SerializeField] private RegionMarker regionMarkerPrefab;
@@ -535,18 +537,75 @@ namespace FantasyGuildmaster.Map
             markersRoot.localPosition = Vector3.zero;
             markersRoot.SetAsLastSibling();
             Debug.Log($"[MapController] Created fallback markersRoot under {GetHierarchyPath(parent)}");
+            Debug.Log($"[MapController] markersRoot parent path={GetHierarchyPath(markersRoot.parent)}");
             return true;
         }
 
         private RectTransform FindMarkersParent()
         {
-            var scrollRect = GetComponentInChildren<ScrollRect>(true);
-            if (scrollRect != null && scrollRect.content != null)
+            if (markersRootParent != null)
             {
-                return scrollRect.content;
+                return markersRootParent;
             }
 
-            var mapLayout = transform.Find("MapCanvas/MapLayout") as RectTransform;
+            if (mapScrollRect != null && mapScrollRect.content != null)
+            {
+                Debug.Log($"[MapController] Found map scroll rect: {GetHierarchyPath(mapScrollRect.transform)}");
+                return mapScrollRect.content;
+            }
+
+            var scrollRects = GetComponentsInChildren<ScrollRect>(true);
+            for (var i = 0; i < scrollRects.Length; i++)
+            {
+                var candidate = scrollRects[i];
+                if (candidate == null)
+                {
+                    continue;
+                }
+
+                var candidatePath = GetHierarchyPath(candidate.transform);
+                var isOverlay = candidatePath.IndexOf("OverlayLayer", StringComparison.OrdinalIgnoreCase) >= 0
+                    || candidatePath.IndexOf("RegionDetails", StringComparison.OrdinalIgnoreCase) >= 0
+                    || candidatePath.IndexOf("Contracts", StringComparison.OrdinalIgnoreCase) >= 0;
+
+                if (isOverlay)
+                {
+                    Debug.Log($"[MapController] Ignored overlay scroll rect: {candidatePath}");
+                    continue;
+                }
+
+                var isMapScroll = candidate.name.IndexOf("MapScrollRect", StringComparison.OrdinalIgnoreCase) >= 0
+                    || candidatePath.IndexOf("MapScrollRect", StringComparison.OrdinalIgnoreCase) >= 0
+                    || candidatePath.IndexOf("MapLayer", StringComparison.OrdinalIgnoreCase) >= 0
+                    || candidatePath.IndexOf("MapLayout", StringComparison.OrdinalIgnoreCase) >= 0;
+
+                if (!isMapScroll)
+                {
+                    continue;
+                }
+
+                if (candidate.content != null)
+                {
+                    Debug.Log($"[MapController] Found map scroll rect: {candidatePath}");
+                    mapScrollRect = candidate;
+                    return candidate.content;
+                }
+            }
+
+            var namedMapScrollRect = transform.Find("MapCanvas/MapLayer/MapScrollRect") as RectTransform
+                ?? transform.Find("MapCanvas/MapLayout/MapScrollRect") as RectTransform;
+            if (namedMapScrollRect != null)
+            {
+                mapScrollRect = namedMapScrollRect.GetComponent<ScrollRect>();
+                if (mapScrollRect != null && mapScrollRect.content != null)
+                {
+                    Debug.Log($"[MapController] Found map scroll rect: {GetHierarchyPath(mapScrollRect.transform)}");
+                    return mapScrollRect.content;
+                }
+            }
+
+            var mapLayout = transform.Find("MapCanvas/MapLayer") as RectTransform
+                ?? transform.Find("MapCanvas/MapLayout") as RectTransform;
             if (mapLayout != null)
             {
                 return mapLayout;
@@ -588,6 +647,21 @@ namespace FantasyGuildmaster.Map
                 {
                     mapRect = mapImage;
                 }
+            }
+
+            if (mapScrollRect == null)
+            {
+                var mapScrollRectTransform = transform.Find("MapCanvas/MapLayer/MapScrollRect")
+                    ?? transform.Find("MapCanvas/MapLayout/MapScrollRect");
+                if (mapScrollRectTransform != null)
+                {
+                    mapScrollRect = mapScrollRectTransform.GetComponent<ScrollRect>();
+                }
+            }
+
+            if (markersRootParent == null && mapScrollRect != null)
+            {
+                markersRootParent = mapScrollRect.content;
             }
 
             if (markersRoot == null)
