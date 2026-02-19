@@ -433,6 +433,21 @@ namespace FantasyGuildmaster.UI
 
         private void EnsureContentRootReady()
         {
+            var previousRowsRoot = rowsRoot;
+
+            if (scrollRect != null)
+            {
+                viewportRect ??= scrollRect.viewport;
+                if (viewportRect == null)
+                {
+                    viewportRect = FindChildByName(scrollRect.transform, "Viewport") as RectTransform;
+                    if (viewportRect != null)
+                    {
+                        scrollRect.viewport = viewportRect;
+                    }
+                }
+            }
+
             if (rowsRoot == null)
             {
                 if (scrollRect != null && scrollRect.content != null)
@@ -451,6 +466,35 @@ namespace FantasyGuildmaster.UI
 
                     rowsRoot = content;
                 }
+            }
+
+            if (viewportRect != null && rowsRoot != null && rowsRoot.parent != viewportRect)
+            {
+                var contentUnderViewport = viewportRect.Find("Content") as RectTransform;
+                if (contentUnderViewport == null)
+                {
+                    var contentGo = new GameObject("Content", typeof(RectTransform));
+                    contentUnderViewport = contentGo.GetComponent<RectTransform>();
+                    contentUnderViewport.SetParent(viewportRect, false);
+                }
+
+                rowsRoot = contentUnderViewport;
+            }
+
+            if (rowsRoot != null && previousRowsRoot != rowsRoot)
+            {
+                foreach (var row in _rowsBySquadId.Values)
+                {
+                    if (row == null)
+                    {
+                        continue;
+                    }
+
+                    row.transform.SetParent(rowsRoot, false);
+                    row.transform.localScale = Vector3.one;
+                }
+
+                _lastRosterSignature = string.Empty;
             }
 
             if (rowsRoot == null)
