@@ -4,6 +4,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
 using TMPro;
+using UObject = UnityEngine.Object;
 
 public class MapPrototypeBootstrap : MonoBehaviour
 {
@@ -57,7 +58,8 @@ public class MapPrototypeBootstrap : MonoBehaviour
 
     private void EnsureEventSystem()
     {
-        if (Object.FindFirstObjectByType<EventSystem>() != null) return;
+        // Explicit UnityEngine.Object alias avoids CS0104 ambiguity with System.Object/object.
+        if (UObject.FindFirstObjectByType<EventSystem>() != null) return;
 
         var esGo = new GameObject("EventSystem", typeof(EventSystem));
 
@@ -101,7 +103,8 @@ public class MapPrototypeBootstrap : MonoBehaviour
         StretchFull(bgRt);
 
         var bgImg = bg.AddComponent<Image>();
-        bgImg.color = new Color(0.08f, 0.08f, 0.10f, 1f);
+        // Keep background transparent when no sprite is assigned so it does not hide the scene map.
+        bgImg.color = mapSprite != null ? new Color(0.08f, 0.08f, 0.10f, 1f) : Color.clear;
         if (mapSprite != null)
         {
             bgImg.sprite = mapSprite;
