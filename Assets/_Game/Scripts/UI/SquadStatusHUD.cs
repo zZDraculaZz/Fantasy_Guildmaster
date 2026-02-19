@@ -158,13 +158,20 @@ namespace FantasyGuildmaster.UI
             }
 
             var squads = _squadRoster != null ? _squadRoster.GetSquads() : _mapController.GetSquads();
-            if (squads == null || squads.Count == 0)
+            var squadsCount = squads != null ? squads.Count : 0;
+            Debug.Log($"[HUDDebug] RebuildRows squadsCount={squadsCount}");
+            if (squads == null || squadsCount == 0)
             {
-                Debug.LogWarning("[HUDDebug] RebuildRows skipped: squads list is empty");
                 return;
             }
 
             EnsureRowsMatchSquads(squads);
+            LayoutRebuilder.ForceRebuildLayoutImmediate(rowsRoot);
+            var contentHeight = rowsRoot.rect.height;
+            var firstRow = rowsRoot.childCount > 0 ? rowsRoot.GetChild(0) as RectTransform : null;
+            var firstRowHeight = firstRow != null ? firstRow.rect.height : 0f;
+            Debug.Log($"[HUDDebug] Rows alive={_rowsBySquadId.Count}, contentChildCount={rowsRoot.childCount}");
+            Debug.Log($"[HUDDebug] Content rect height={contentHeight:0.##}, firstRowHeight={firstRowHeight:0.##}");
             RefreshPanelHeight();
         }
 
@@ -354,6 +361,11 @@ namespace FantasyGuildmaster.UI
 
         private void EnsureRowsMatchSquads(IReadOnlyList<SquadData> squads)
         {
+            if (rowsRoot == null || squads == null)
+            {
+                return;
+            }
+
             var validIds = new HashSet<string>();
             for (var i = 0; i < squads.Count; i++)
             {
@@ -365,34 +377,32 @@ namespace FantasyGuildmaster.UI
 
                 validIds.Add(squad.id);
 
-                if (_rowsBySquadId.ContainsKey(squad.id))
+                if (!_rowsBySquadId.TryGetValue(squad.id, out var row) || row == null)
                 {
-                    continue;
+                    row = Instantiate(rowPrefab);
+                    _rowsBySquadId[squad.id] = row;
                 }
 
-                var row = Instantiate(rowPrefab, rowsRoot);
-                row.name = $"SquadStatusRow_{squad.id}";
+                row.name = $"Row_{squad.id}";
+                row.transform.SetParent(rowsRoot, false);
+                row.transform.localScale = Vector3.one;
+                row.transform.SetAsLastSibling();
                 row.gameObject.SetActive(true);
-                _rowsBySquadId[squad.id] = row;
+                EnsureRowLayoutElement(row);
+                row.SetData(string.IsNullOrWhiteSpace(squad.name) ? squad.id : squad.name, "IDLE 00:00", $"{Mathf.Max(0, squad.hp)}/{Mathf.Max(1, squad.maxHp)}", Color.white);
             }
 
-            var toRemove = new List<string>();
-            foreach (var pair in _rowsBySquadId)
+            if (squads.Count > 0)
             {
-                if (!validIds.Contains(pair.Key))
+                foreach (var pair in _rowsBySquadId)
                 {
-                    if (pair.Value != null)
+                    if (pair.Value == null)
                     {
-                        Destroy(pair.Value.gameObject);
+                        continue;
                     }
 
-                    toRemove.Add(pair.Key);
+                    pair.Value.gameObject.SetActive(validIds.Contains(pair.Key));
                 }
-            }
-
-            for (var i = 0; i < toRemove.Count; i++)
-            {
-                _rowsBySquadId.Remove(toRemove[i]);
             }
         }
 
@@ -448,11 +458,22 @@ namespace FantasyGuildmaster.UI
 
             if (viewportRect != null)
             {
+                var viewportImage = viewportRect.GetComponent<Image>() ?? viewportRect.gameObject.AddComponent<Image>();
+                viewportImage.color = new Color(0f, 0f, 0f, 0f);
+                _ = viewportRect.GetComponent<Mask>() ?? viewportRect.gameObject.AddComponent<Mask>();
+                _ = viewportRect.GetComponent<RectMask2D>() ?? viewportRect.gameObject.AddComponent<RectMask2D>();
+
                 var viewportFitter = viewportRect.GetComponent<ContentSizeFitter>();
                 if (viewportFitter != null)
                 {
                     Destroy(viewportFitter);
                 }
+            }
+
+            var rootFitter = GetComponent<ContentSizeFitter>();
+            if (rootFitter != null)
+            {
+                Destroy(rootFitter);
             }
         }
 
@@ -480,6 +501,19 @@ namespace FantasyGuildmaster.UI
             return null;
         }
 
+        private static void EnsureRowLayoutElement(SquadStatusRow row)
+        {
+            if (row == null)
+            {
+                return;
+            }
+
+            var layout = row.GetComponent<LayoutElement>() ?? row.gameObject.AddComponent<LayoutElement>();
+            layout.minHeight = 32f;
+            layout.preferredHeight = 32f;
+            layout.flexibleHeight = 0f;
+        }
+
         private void EnsureRowPrefab()
         {
             if (rowPrefab != null || rowsRoot == null)
@@ -503,17 +537,18 @@ namespace FantasyGuildmaster.UI
             rowLayout.childForceExpandWidth = false;
 
             var rootLayoutElement = rowGo.GetComponent<LayoutElement>();
-            rootLayoutElement.minHeight = 34f;
+            rootLayoutElement.minHeight = 32f;
+            rootLayoutElement.preferredHeight = 32f;
 
-            var name = CreateRuntimeText("SquadName", rowGo.transform, TextAlignmentOptions.Left, 14f);
+            var name = CreateRuntimeText("NameText", rowGo.transform, TextAlignmentOptions.Left, 14f);
             var nameLayout = name.gameObject.AddComponent<LayoutElement>();
             nameLayout.preferredWidth = 110f;
 
-            var statusTimer = CreateRuntimeText("StatusTimer", rowGo.transform, TextAlignmentOptions.Left, 14f);
+            var statusTimer = CreateRuntimeText("StatusText", rowGo.transform, TextAlignmentOptions.Left, 14f);
             var statusLayout = statusTimer.gameObject.AddComponent<LayoutElement>();
             statusLayout.flexibleWidth = 1f;
 
-            var hp = CreateRuntimeText("Hp", rowGo.transform, TextAlignmentOptions.Right, 14f);
+            var hp = CreateRuntimeText("HpText", rowGo.transform, TextAlignmentOptions.Right, 14f);
             var hpLayout = hp.gameObject.AddComponent<LayoutElement>();
             hpLayout.preferredWidth = 72f;
 

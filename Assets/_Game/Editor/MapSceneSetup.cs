@@ -289,15 +289,17 @@ namespace FantasyGuildmaster.Editor
             layout.childForceExpandHeight = false;
             layout.childForceExpandWidth = false;
 
-            root.GetComponent<LayoutElement>().minHeight = 34f;
+            var rowLayoutElement = root.GetComponent<LayoutElement>();
+            rowLayoutElement.minHeight = 32f;
+            rowLayoutElement.preferredHeight = 32f;
 
-            var squadName = CreateText("SquadName", root.transform, "Iron Hawks", 14f, TextAlignmentOptions.Left);
+            var squadName = CreateText("NameText", root.transform, "Iron Hawks", 14f, TextAlignmentOptions.Left);
             squadName.gameObject.AddComponent<LayoutElement>().preferredWidth = 110f;
 
-            var statusTimer = CreateText("StatusTimer", root.transform, "OUT 00:12", 14f, TextAlignmentOptions.Left);
+            var statusTimer = CreateText("StatusText", root.transform, "OUT 00:12", 14f, TextAlignmentOptions.Left);
             statusTimer.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
 
-            var hp = CreateText("Hp", root.transform, "100/100", 14f, TextAlignmentOptions.Right);
+            var hp = CreateText("HpText", root.transform, "100/100", 14f, TextAlignmentOptions.Right);
             hp.gameObject.AddComponent<LayoutElement>().preferredWidth = 72f;
 
             var row = root.GetComponent<SquadStatusRow>();
