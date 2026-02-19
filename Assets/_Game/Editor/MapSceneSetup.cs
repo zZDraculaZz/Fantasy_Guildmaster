@@ -701,9 +701,21 @@ namespace FantasyGuildmaster.Editor
             Stretch((RectTransform)label.transform, 2f);
             label.color = Color.white;
 
-            var canvasGroup = markerGo.GetComponent<CanvasGroup>() ?? markerGo.AddComponent<CanvasGroup>();
-            canvasGroup.blocksRaycasts = false;
-            canvasGroup.interactable = false;
+            var canvasGroup = markerGo.GetComponent<CanvasGroup>();
+            if (canvasGroup == null)
+            {
+                canvasGroup = markerGo.AddComponent<CanvasGroup>();
+            }
+
+            if (canvasGroup != null)
+            {
+                canvasGroup.blocksRaycasts = false;
+                canvasGroup.interactable = false;
+            }
+            else
+            {
+                Debug.LogWarning("[MapSceneSetup] Failed to ensure CanvasGroup on GuildHQMarker.");
+            }
         }
 
         private static RectTransform EnsureMapArea(Transform parent, out RectTransform markersRoot, out RectTransform contractIconsRoot, out RectTransform travelTokensRoot)
