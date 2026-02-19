@@ -1,5 +1,4 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using FantasyGuildmaster.Core;
 using FantasyGuildmaster.Map;
@@ -46,7 +45,6 @@ namespace FantasyGuildmaster.UI
             if (gameState != null)
             {
                 gameState.OnGoldChanged += UpdateGoldText;
-                UpdateGoldText(gameState.Gold);
             }
 
             if (_squadRoster != null)
@@ -94,7 +92,6 @@ namespace FantasyGuildmaster.UI
             }
 
             gameState = state;
-
             if (gameState != null && isActiveAndEnabled)
             {
                 gameState.OnGoldChanged += UpdateGoldText;
@@ -167,16 +164,16 @@ namespace FantasyGuildmaster.UI
 
         private void UpdateGoldText(int gold)
         {
-            if (goldText != null)
+            if (bodyText != null)
             {
-                goldText.text = $"Gold: {gold}";
+                return;
             }
-        }
 
         private void EnsureBodyText()
         {
             if (bodyText != null)
             {
+                bodyText = existing.GetComponent<TMP_Text>() ?? existing.gameObject.AddComponent<TextMeshProUGUI>();
                 return;
             }
 
