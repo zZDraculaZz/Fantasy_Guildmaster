@@ -25,6 +25,7 @@ namespace FantasyGuildmaster.UI
         private const float HudHeight = 260f;
 
         private readonly Dictionary<string, SquadStatusRow> _rowsBySquadId = new();
+        private SquadStatusRow _runtimeRowPrefab;
 
         private MapController _mapController;
         private SquadRoster _squadRoster;
@@ -675,8 +676,14 @@ namespace FantasyGuildmaster.UI
 
         private void EnsureRowPrefab()
         {
-            if (rowPrefab != null || rowsRoot == null)
+            if (rowsRoot == null)
             {
+                return;
+            }
+
+            if (_runtimeRowPrefab != null)
+            {
+                rowPrefab = _runtimeRowPrefab;
                 return;
             }
 
@@ -713,7 +720,8 @@ namespace FantasyGuildmaster.UI
 
             var row = rowGo.GetComponent<SquadStatusRow>();
             row.ConfigureRuntime(name, statusTimer, hp);
-            rowPrefab = row;
+            _runtimeRowPrefab = row;
+            rowPrefab = _runtimeRowPrefab;
         }
 
         private static TMP_Text CreateRuntimeText(string objectName, Transform parent, TextAlignmentOptions alignment, float fontSize)
