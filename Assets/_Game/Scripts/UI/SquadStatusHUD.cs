@@ -433,6 +433,19 @@ namespace FantasyGuildmaster.UI
 
         private void EnsureContentRootReady()
         {
+            if (scrollRect != null)
+            {
+                viewportRect ??= scrollRect.viewport;
+                if (viewportRect == null)
+                {
+                    viewportRect = FindChildByName(scrollRect.transform, "Viewport") as RectTransform;
+                    if (viewportRect != null)
+                    {
+                        scrollRect.viewport = viewportRect;
+                    }
+                }
+            }
+
             if (rowsRoot == null)
             {
                 if (scrollRect != null && scrollRect.content != null)
@@ -451,6 +464,19 @@ namespace FantasyGuildmaster.UI
 
                     rowsRoot = content;
                 }
+            }
+
+            if (viewportRect != null && rowsRoot != null && rowsRoot.parent != viewportRect)
+            {
+                var contentUnderViewport = viewportRect.Find("Content") as RectTransform;
+                if (contentUnderViewport == null)
+                {
+                    var contentGo = new GameObject("Content", typeof(RectTransform));
+                    contentUnderViewport = contentGo.GetComponent<RectTransform>();
+                    contentUnderViewport.SetParent(viewportRect, false);
+                }
+
+                rowsRoot = contentUnderViewport;
             }
 
             if (rowsRoot == null)
