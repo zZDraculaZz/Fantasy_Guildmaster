@@ -920,6 +920,16 @@ namespace FantasyGuildmaster.Map
             squadStatusHud.Sync(_squads, _travelTasks, ResolveRegionName, now);
         }
 
+        public IReadOnlyList<SquadData> GetSquads()
+        {
+            return _squads;
+        }
+
+        public IReadOnlyList<TravelTask> GetTravelTasks()
+        {
+            return _travelTasks;
+        }
+
         private string ResolveRegionName(string regionId)
         {
             if (string.IsNullOrEmpty(regionId))

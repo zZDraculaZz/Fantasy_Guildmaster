@@ -393,7 +393,7 @@ namespace FantasyGuildmaster.Editor
             var contentRect = (RectTransform)contractsContent.transform;
             contentRect.anchorMin = new Vector2(0f, 1f);
             contentRect.anchorMax = new Vector2(1f, 1f);
-            contentRect.pivot = new Vector2(0.5f, 1f);
+            contentRect.pivot = new Vector2(0f, 1f);
             contentRect.anchoredPosition = Vector2.zero;
             contentRect.sizeDelta = new Vector2(0f, 0f);
 
@@ -535,11 +535,11 @@ namespace FantasyGuildmaster.Editor
             var viewportMask = viewport.GetComponent<Mask>() ?? viewport.AddComponent<Mask>();
             viewportMask.showMaskGraphic = false;
 
-            var content = FindOrCreateUI("RowsContent", viewport.transform);
+            var content = FindOrCreateUI("Content", viewport.transform);
             var contentRect = (RectTransform)content.transform;
             contentRect.anchorMin = new Vector2(0f, 1f);
             contentRect.anchorMax = new Vector2(1f, 1f);
-            contentRect.pivot = new Vector2(0.5f, 1f);
+            contentRect.pivot = new Vector2(0f, 1f);
             contentRect.anchoredPosition = Vector2.zero;
             contentRect.sizeDelta = Vector2.zero;
 

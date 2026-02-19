@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using FantasyGuildmaster.Core;
 using FantasyGuildmaster.Map;
@@ -25,10 +26,30 @@ namespace FantasyGuildmaster.UI
 
         private readonly Dictionary<string, SquadStatusRow> _rowsBySquadId = new();
 
+        private MapController _mapController;
+        private GameClock _gameClock;
+        private bool _debugLogged;
+
         private void Awake()
         {
             ApplyCompactLayout();
+            EnsureContentRootReady();
+            EnsureRowPrefab();
+            HardBind();
             UpdateGoldText(gameState != null ? gameState.Gold : 0);
+            RebuildRows();
+        }
+
+        private void Start()
+        {
+            StartCoroutine(RebuildAfterOneFrame());
+        }
+
+        private IEnumerator RebuildAfterOneFrame()
+        {
+            yield return null;
+            RebuildRows();
+            RefreshNow();
         }
 
         private void OnEnable()
@@ -38,6 +59,11 @@ namespace FantasyGuildmaster.UI
                 gameState.OnGoldChanged += UpdateGoldText;
                 UpdateGoldText(gameState.Gold);
             }
+
+            if (_gameClock != null)
+            {
+                _gameClock.TickSecond += OnTickSecond;
+            }
         }
 
         private void OnDisable()
@@ -45,6 +71,11 @@ namespace FantasyGuildmaster.UI
             if (gameState != null)
             {
                 gameState.OnGoldChanged -= UpdateGoldText;
+            }
+
+            if (_gameClock != null)
+            {
+                _gameClock.TickSecond -= OnTickSecond;
             }
         }
 
@@ -77,8 +108,7 @@ namespace FantasyGuildmaster.UI
             }
 
             ApplyCompactLayout();
-
-            rowsRoot ??= scrollRect != null ? scrollRect.content : null;
+            EnsureContentRootReady();
             EnsureRowPrefab();
 
             if (squads == null || rowsRoot == null || rowPrefab == null)
@@ -86,6 +116,92 @@ namespace FantasyGuildmaster.UI
                 return;
             }
 
+            EnsureRowsMatchSquads(squads);
+            UpdateRows(squads, tasks, nowUnix);
+            RefreshPanelHeight();
+        }
+
+        public void RebuildRows()
+        {
+            EnsureContentRootReady();
+            EnsureRowPrefab();
+
+            if (_mapController == null)
+            {
+                _mapController = FindFirstObjectByType<MapController>();
+            }
+
+            if (_mapController == null)
+            {
+                Debug.LogWarning("[HUDDebug] RebuildRows skipped: MapController not found");
+                return;
+            }
+
+            var squads = _mapController.GetSquads();
+            if (squads == null || squads.Count == 0)
+            {
+                Debug.LogWarning("[HUDDebug] RebuildRows skipped: squads list is empty");
+                return;
+            }
+
+            EnsureRowsMatchSquads(squads);
+            RefreshPanelHeight();
+        }
+
+        public void RefreshNow()
+        {
+            if (_mapController == null)
+            {
+                _mapController = FindFirstObjectByType<MapController>();
+                if (_mapController == null)
+                {
+                    return;
+                }
+            }
+
+            var squads = _mapController.GetSquads();
+            var tasks = _mapController.GetTravelTasks();
+            if (squads == null)
+            {
+                return;
+            }
+
+            EnsureContentRootReady();
+            EnsureRowPrefab();
+            EnsureRowsMatchSquads(squads);
+            UpdateRows(squads, tasks, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+            RefreshPanelHeight();
+        }
+
+        private void HardBind()
+        {
+            _mapController = FindFirstObjectByType<MapController>();
+
+            if (gameState == null)
+            {
+                gameState = FindFirstObjectByType<GameState>();
+            }
+
+            _gameClock = FindFirstObjectByType<GameClock>();
+
+            if (!_debugLogged)
+            {
+                var squadCount = _mapController?.GetSquads()?.Count ?? 0;
+                var contentName = rowsRoot != null ? rowsRoot.name : "null";
+                var rowName = rowPrefab != null ? rowPrefab.name : "null";
+                Debug.Log($"[HUDDebug] MapController found={_mapController != null}, squadsCount={squadCount}");
+                Debug.Log($"[HUDDebug] Content={contentName}, RowPrefab={rowName}");
+                _debugLogged = true;
+            }
+        }
+
+        private void OnTickSecond()
+        {
+            RefreshNow();
+        }
+
+        private void UpdateRows(IReadOnlyList<SquadData> squads, IReadOnlyList<TravelTask> tasks, long nowUnix)
+        {
             var taskBySquad = new Dictionary<string, TravelTask>();
             if (tasks != null)
             {
@@ -98,8 +214,6 @@ namespace FantasyGuildmaster.UI
                     }
                 }
             }
-
-            EnsureRowsMatchSquads(squads);
 
             for (var i = 0; i < squads.Count; i++)
             {
@@ -119,8 +233,6 @@ namespace FantasyGuildmaster.UI
                 BuildStatus(squad, task, out var statusTimer, out var statusColor, out var hpTextValue, nowUnix);
                 row.SetData(string.IsNullOrWhiteSpace(squad.name) ? squad.id : squad.name, statusTimer, hpTextValue, statusColor);
             }
-
-            RefreshPanelHeight();
         }
 
         private void UpdateGoldText(int gold)
@@ -155,7 +267,8 @@ namespace FantasyGuildmaster.UI
             {
                 rowsRoot.anchorMin = new Vector2(0f, 1f);
                 rowsRoot.anchorMax = new Vector2(1f, 1f);
-                rowsRoot.pivot = new Vector2(0.5f, 1f);
+                rowsRoot.pivot = new Vector2(0f, 1f);
+                rowsRoot.anchoredPosition = Vector2.zero;
             }
 
             if (viewportRect != null)
@@ -236,6 +349,90 @@ namespace FantasyGuildmaster.UI
             {
                 _rowsBySquadId.Remove(toRemove[i]);
             }
+        }
+
+        private void EnsureContentRootReady()
+        {
+            if (rowsRoot == null)
+            {
+                if (scrollRect != null && scrollRect.content != null)
+                {
+                    rowsRoot = scrollRect.content;
+                }
+                else
+                {
+                    var content = FindChildByName(transform, "Content") as RectTransform;
+
+                    if (content == null && viewportRect != null)
+                    {
+                        var contentGo = new GameObject("Content", typeof(RectTransform));
+                        content = contentGo.GetComponent<RectTransform>();
+                        content.SetParent(viewportRect, false);
+                    }
+
+                    rowsRoot = content;
+                }
+            }
+
+            if (rowsRoot == null)
+            {
+                return;
+            }
+
+            rowsRoot.anchorMin = new Vector2(0f, 1f);
+            rowsRoot.anchorMax = new Vector2(1f, 1f);
+            rowsRoot.pivot = new Vector2(0f, 1f);
+            rowsRoot.anchoredPosition = Vector2.zero;
+
+            var contentLayout = rowsRoot.GetComponent<VerticalLayoutGroup>() ?? rowsRoot.gameObject.AddComponent<VerticalLayoutGroup>();
+            contentLayout.padding = new RectOffset(8, 8, 8, 8);
+            contentLayout.spacing = 6f;
+            contentLayout.childControlWidth = true;
+            contentLayout.childControlHeight = true;
+            contentLayout.childForceExpandWidth = true;
+            contentLayout.childForceExpandHeight = false;
+
+            var fitter = rowsRoot.GetComponent<ContentSizeFitter>() ?? rowsRoot.gameObject.AddComponent<ContentSizeFitter>();
+            fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+            fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+            if (scrollRect != null)
+            {
+                scrollRect.content = rowsRoot;
+            }
+
+            if (viewportRect != null)
+            {
+                var viewportFitter = viewportRect.GetComponent<ContentSizeFitter>();
+                if (viewportFitter != null)
+                {
+                    Destroy(viewportFitter);
+                }
+            }
+        }
+
+        private static Transform FindChildByName(Transform root, string childName)
+        {
+            if (root == null)
+            {
+                return null;
+            }
+
+            if (root.name == childName)
+            {
+                return root;
+            }
+
+            for (var i = 0; i < root.childCount; i++)
+            {
+                var found = FindChildByName(root.GetChild(i), childName);
+                if (found != null)
+                {
+                    return found;
+                }
+            }
+
+            return null;
         }
 
         private void EnsureRowPrefab()
