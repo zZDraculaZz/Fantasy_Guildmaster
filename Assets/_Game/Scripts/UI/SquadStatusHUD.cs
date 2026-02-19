@@ -678,6 +678,7 @@ namespace FantasyGuildmaster.UI
         {
             if (rowsRoot == null)
             {
+                rowPrefab = _runtimeRowPrefab;
                 return;
             }
 
@@ -722,13 +723,47 @@ namespace FantasyGuildmaster.UI
             row.ConfigureRuntime(name, statusTimer, hp);
             _runtimeRowPrefab = row;
             rowPrefab = _runtimeRowPrefab;
+
+            foreach (var pair in _rowsBySquadId)
+            {
+                if (pair.Value != null)
+                {
+                    Destroy(pair.Value.gameObject);
+                }
+            }
+
+            _rowsBySquadId.Clear();
+            _lastRosterSignature = string.Empty;
         }
 
-        private static TMP_Text CreateRuntimeText(string objectName, Transform parent, TextAlignmentOptions alignment, float fontSize)
+        private TMP_Text CreateRuntimeText(string objectName, Transform parent, TextAlignmentOptions alignment, float fontSize)
         {
             var go = new GameObject(objectName, typeof(RectTransform), typeof(TextMeshProUGUI));
             go.transform.SetParent(parent, false);
             var text = go.GetComponent<TextMeshProUGUI>();
+
+            var styleSource = goldText != null ? goldText : titleText;
+            if (styleSource == null)
+            {
+                styleSource = FindChildByName(transform, "GoldText")?.GetComponent<TMP_Text>()
+                    ?? FindChildByName(transform, "Title")?.GetComponent<TMP_Text>();
+            }
+
+            if (styleSource != null)
+            {
+                text.font = styleSource.font;
+                text.fontSharedMaterial = styleSource.fontSharedMaterial;
+                text.enableAutoSizing = false;
+                text.raycastTarget = false;
+            }
+            else if (TMP_Settings.defaultFontAsset != null)
+            {
+                text.font = TMP_Settings.defaultFontAsset;
+                text.fontSharedMaterial = TMP_Settings.defaultFontAsset.material;
+                text.enableAutoSizing = false;
+                text.raycastTarget = false;
+            }
+
             text.alignment = alignment;
             text.fontSize = fontSize;
             text.color = Color.white;
