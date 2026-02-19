@@ -462,6 +462,24 @@ namespace FantasyGuildmaster.Map
 
         private void SpawnMarkers()
         {
+            if (markersRoot == null)
+            {
+                Debug.LogWarning("[MapController] markersRoot is not assigned, creating runtime fallback root.");
+                var fallback = new GameObject("MarkersRoot", typeof(RectTransform));
+                markersRoot = fallback.GetComponent<RectTransform>();
+                markersRoot.SetParent(mapRect != null ? mapRect : transform, false);
+                markersRoot.anchorMin = Vector2.zero;
+                markersRoot.anchorMax = Vector2.one;
+                markersRoot.offsetMin = Vector2.zero;
+                markersRoot.offsetMax = Vector2.zero;
+            }
+
+            if (regionMarkerPrefab == null)
+            {
+                Debug.LogError("[MapController] regionMarkerPrefab is not assigned. Marker spawn skipped.");
+                return;
+            }
+
             for (var i = markersRoot.childCount - 1; i >= 0; i--)
             {
                 var child = markersRoot.GetChild(i);

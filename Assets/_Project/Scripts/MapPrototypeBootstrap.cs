@@ -103,7 +103,8 @@ public class MapPrototypeBootstrap : MonoBehaviour
         StretchFull(bgRt);
 
         var bgImg = bg.AddComponent<Image>();
-        bgImg.color = new Color(0.08f, 0.08f, 0.10f, 1f);
+        // Keep background transparent when no sprite is assigned so it does not hide the scene map.
+        bgImg.color = mapSprite != null ? new Color(0.08f, 0.08f, 0.10f, 1f) : Color.clear;
         if (mapSprite != null)
         {
             bgImg.sprite = mapSprite;
