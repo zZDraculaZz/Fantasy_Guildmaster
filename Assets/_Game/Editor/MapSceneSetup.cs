@@ -482,17 +482,17 @@ namespace FantasyGuildmaster.Editor
         {
             var panelGo = FindOrCreateUI("SquadStatusHUD", parent);
             var panelRect = (RectTransform)panelGo.transform;
-            panelRect.anchorMin = new Vector2(0f, 0f);
+            panelRect.anchorMin = new Vector2(0f, 1f);
             panelRect.anchorMax = new Vector2(0f, 1f);
-            panelRect.pivot = new Vector2(0f, 0.5f);
-            panelRect.sizeDelta = new Vector2(360f, 0f);
-            panelRect.anchoredPosition = new Vector2(8f, 0f);
+            panelRect.pivot = new Vector2(0f, 1f);
+            panelRect.anchoredPosition = new Vector2(16f, -16f);
+            panelRect.sizeDelta = new Vector2(280f, 140f);
 
             var image = panelGo.GetComponent<Image>() ?? panelGo.AddComponent<Image>();
             image.color = new Color(0.05f, 0.09f, 0.16f, 0.84f);
 
             var layout = panelGo.GetComponent<VerticalLayoutGroup>() ?? panelGo.AddComponent<VerticalLayoutGroup>();
-            layout.padding = new RectOffset(12, 12, 12, 12);
+            layout.padding = new RectOffset(8, 8, 8, 8);
             layout.spacing = 6f;
             layout.childControlWidth = true;
             layout.childControlHeight = false;
@@ -502,13 +502,23 @@ namespace FantasyGuildmaster.Editor
             var title = panelGo.transform.Find("Title") != null
                 ? panelGo.transform.Find("Title").GetComponent<TextMeshProUGUI>()
                 : CreateText("Title", panelGo.transform, "Squads", 20f, TextAlignmentOptions.Left);
+            var titleLayout = title.GetComponent<LayoutElement>() ?? title.gameObject.AddComponent<LayoutElement>();
+            titleLayout.minHeight = 28f;
 
             var scrollGo = FindOrCreateUI("RowsScrollRect", panelGo.transform);
             var scrollRect = scrollGo.GetComponent<ScrollRect>() ?? scrollGo.AddComponent<ScrollRect>();
             var scrollImage = scrollGo.GetComponent<Image>() ?? scrollGo.AddComponent<Image>();
             scrollImage.color = new Color(0f, 0f, 0f, 0.2f);
-            var scrollLayout = scrollGo.GetComponent<LayoutElement>() ?? scrollGo.AddComponent<LayoutElement>();
-            scrollLayout.flexibleHeight = 1f;
+            var scrollRectTransform = (RectTransform)scrollGo.transform;
+            scrollRectTransform.anchorMin = new Vector2(0f, 1f);
+            scrollRectTransform.anchorMax = new Vector2(1f, 1f);
+            scrollRectTransform.pivot = new Vector2(0.5f, 1f);
+            scrollRectTransform.anchoredPosition = Vector2.zero;
+            scrollRectTransform.sizeDelta = new Vector2(0f, 220f);
+            var viewportLayout = scrollGo.GetComponent<LayoutElement>() ?? scrollGo.AddComponent<LayoutElement>();
+            viewportLayout.preferredHeight = 220f;
+            viewportLayout.minHeight = 52f;
+            viewportLayout.flexibleHeight = 0f;
 
             var viewport = FindOrCreateUI("Viewport", scrollGo.transform);
             var viewportRect = (RectTransform)viewport.transform;
@@ -524,15 +534,19 @@ namespace FantasyGuildmaster.Editor
             contentRect.anchorMax = new Vector2(1f, 1f);
             contentRect.pivot = new Vector2(0.5f, 1f);
             contentRect.anchoredPosition = Vector2.zero;
-            contentRect.sizeDelta = new Vector2(0f, 0f);
-            var fitter = content.GetComponent<ContentSizeFitter>() ?? content.AddComponent<ContentSizeFitter>();
-            fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            contentRect.sizeDelta = Vector2.zero;
+
             var contentLayout = content.GetComponent<VerticalLayoutGroup>() ?? content.AddComponent<VerticalLayoutGroup>();
-            contentLayout.spacing = 4f;
+            contentLayout.padding = new RectOffset(8, 8, 8, 8);
+            contentLayout.spacing = 6f;
             contentLayout.childControlWidth = true;
             contentLayout.childControlHeight = true;
             contentLayout.childForceExpandWidth = true;
             contentLayout.childForceExpandHeight = false;
+
+            var fitter = content.GetComponent<ContentSizeFitter>() ?? content.AddComponent<ContentSizeFitter>();
+            fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+            fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
             scrollRect.viewport = viewportRect;
             scrollRect.content = contentRect;
@@ -540,7 +554,7 @@ namespace FantasyGuildmaster.Editor
             scrollRect.vertical = true;
 
             var hud = panelGo.GetComponent<SquadStatusHUD>() ?? panelGo.AddComponent<SquadStatusHUD>();
-            AssignSquadStatusHud(hud, title, contentRect, rowPrefab);
+            AssignSquadStatusHud(hud, title, panelRect, scrollRect, viewportRect, contentRect, viewportLayout, rowPrefab);
             return hud;
         }
 
@@ -825,11 +839,15 @@ namespace FantasyGuildmaster.Editor
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 
-        private static void AssignSquadStatusHud(SquadStatusHUD hud, TMP_Text title, RectTransform rowsRoot, SquadStatusRow rowPrefab)
+        private static void AssignSquadStatusHud(SquadStatusHUD hud, TMP_Text title, RectTransform rootRect, ScrollRect scrollRect, RectTransform viewportRect, RectTransform rowsRoot, LayoutElement viewportLayout, SquadStatusRow rowPrefab)
         {
             var so = new SerializedObject(hud);
             so.FindProperty("titleText").objectReferenceValue = title;
+            so.FindProperty("rootRect").objectReferenceValue = rootRect;
+            so.FindProperty("scrollRect").objectReferenceValue = scrollRect;
+            so.FindProperty("viewportRect").objectReferenceValue = viewportRect;
             so.FindProperty("rowsRoot").objectReferenceValue = rowsRoot;
+            so.FindProperty("viewportLayoutElement").objectReferenceValue = viewportLayout;
             so.FindProperty("rowPrefab").objectReferenceValue = rowPrefab;
             so.ApplyModifiedPropertiesWithoutUndo();
         }

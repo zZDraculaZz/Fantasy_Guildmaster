@@ -3,16 +3,26 @@ using System.Collections.Generic;
 using FantasyGuildmaster.Map;
 using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace FantasyGuildmaster.UI
 {
     public sealed class SquadStatusHUD : MonoBehaviour
     {
         [SerializeField] private TMP_Text titleText;
+        [SerializeField] private RectTransform rootRect;
+        [SerializeField] private ScrollRect scrollRect;
+        [SerializeField] private RectTransform viewportRect;
         [SerializeField] private RectTransform rowsRoot;
+        [SerializeField] private LayoutElement viewportLayoutElement;
         [SerializeField] private SquadStatusRow rowPrefab;
 
         private readonly Dictionary<string, SquadStatusRow> _rowsBySquadId = new();
+
+        private void Awake()
+        {
+            ApplyCompactLayout();
+        }
 
         public void Sync(IReadOnlyList<SquadData> squads, IReadOnlyList<TravelTask> tasks, Func<string, string> resolveRegionName, long nowUnix)
         {
@@ -20,6 +30,8 @@ namespace FantasyGuildmaster.UI
             {
                 titleText.text = "Squads";
             }
+
+            ApplyCompactLayout();
 
             if (squads == null || rowsRoot == null || rowPrefab == null)
             {
@@ -54,10 +66,75 @@ namespace FantasyGuildmaster.UI
                     continue;
                 }
 
+                row.gameObject.SetActive(true);
                 taskBySquad.TryGetValue(squad.id, out var task);
                 BuildStatus(squad, task, resolveRegionName, nowUnix, out var status, out var timer, out var statusColor);
-                row.SetData(squad.name, status, timer, statusColor);
+                row.SetData(string.IsNullOrWhiteSpace(squad.name) ? squad.id : squad.name, status, timer, statusColor);
             }
+
+            RefreshPanelHeight();
+        }
+
+        private void ApplyCompactLayout()
+        {
+            rootRect ??= transform as RectTransform;
+            if (rootRect == null)
+            {
+                return;
+            }
+
+            rootRect.anchorMin = new Vector2(0f, 1f);
+            rootRect.anchorMax = new Vector2(0f, 1f);
+            rootRect.pivot = new Vector2(0f, 1f);
+            rootRect.anchoredPosition = new Vector2(16f, -16f);
+
+            if (Mathf.Abs(rootRect.sizeDelta.x - 280f) > 0.01f)
+            {
+                rootRect.sizeDelta = new Vector2(280f, Mathf.Max(140f, rootRect.sizeDelta.y));
+            }
+
+            if (rowsRoot != null)
+            {
+                rowsRoot.anchorMin = new Vector2(0f, 1f);
+                rowsRoot.anchorMax = new Vector2(1f, 1f);
+                rowsRoot.pivot = new Vector2(0.5f, 1f);
+            }
+
+            if (viewportRect != null)
+            {
+                viewportRect.anchorMin = new Vector2(0f, 1f);
+                viewportRect.anchorMax = new Vector2(1f, 1f);
+                viewportRect.pivot = new Vector2(0.5f, 1f);
+            }
+
+        }
+
+        private void RefreshPanelHeight()
+        {
+            if (rowsRoot == null || rootRect == null)
+            {
+                return;
+            }
+
+            LayoutRebuilder.ForceRebuildLayoutImmediate(rowsRoot);
+            var contentHeight = LayoutUtility.GetPreferredHeight(rowsRoot);
+            var useScroll = _rowsBySquadId.Count > 5;
+            var viewportHeight = useScroll ? 220f : Mathf.Min(220f, Mathf.Max(52f, contentHeight + 4f));
+
+            if (viewportLayoutElement != null)
+            {
+                viewportLayoutElement.preferredHeight = viewportHeight;
+                viewportLayoutElement.minHeight = viewportHeight;
+                viewportLayoutElement.flexibleHeight = 0f;
+            }
+
+            if (scrollRect != null)
+            {
+                scrollRect.vertical = useScroll;
+                scrollRect.enabled = true;
+            }
+
+            rootRect.sizeDelta = new Vector2(280f, Mathf.Max(140f, 58f + viewportHeight));
         }
 
         private void EnsureRowsMatchSquads(IReadOnlyList<SquadData> squads)
@@ -80,6 +157,7 @@ namespace FantasyGuildmaster.UI
 
                 var row = Instantiate(rowPrefab, rowsRoot);
                 row.name = $"SquadStatusRow_{squad.id}";
+                row.gameObject.SetActive(true);
                 _rowsBySquadId[squad.id] = row;
             }
 
