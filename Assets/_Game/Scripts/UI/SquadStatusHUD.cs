@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using FantasyGuildmaster.Core;
 using FantasyGuildmaster.Map;
 using TMPro;
 using UnityEngine;
@@ -10,18 +11,62 @@ namespace FantasyGuildmaster.UI
     public sealed class SquadStatusHUD : MonoBehaviour
     {
         [SerializeField] private TMP_Text titleText;
+        [SerializeField] private TMP_Text goldText;
         [SerializeField] private RectTransform rootRect;
         [SerializeField] private ScrollRect scrollRect;
         [SerializeField] private RectTransform viewportRect;
         [SerializeField] private RectTransform rowsRoot;
         [SerializeField] private LayoutElement viewportLayoutElement;
         [SerializeField] private SquadStatusRow rowPrefab;
+        [SerializeField] private GameState gameState;
+
+        private const float CompactWidth = 280f;
+        private const float CompactMinHeight = 140f;
 
         private readonly Dictionary<string, SquadStatusRow> _rowsBySquadId = new();
 
         private void Awake()
         {
             ApplyCompactLayout();
+            UpdateGoldText(gameState != null ? gameState.Gold : 0);
+        }
+
+        private void OnEnable()
+        {
+            if (gameState != null)
+            {
+                gameState.OnGoldChanged += UpdateGoldText;
+                UpdateGoldText(gameState.Gold);
+            }
+        }
+
+        private void OnDisable()
+        {
+            if (gameState != null)
+            {
+                gameState.OnGoldChanged -= UpdateGoldText;
+            }
+        }
+
+        public void BindGameState(GameState state)
+        {
+            if (gameState == state)
+            {
+                return;
+            }
+
+            if (gameState != null)
+            {
+                gameState.OnGoldChanged -= UpdateGoldText;
+            }
+
+            gameState = state;
+
+            if (gameState != null && isActiveAndEnabled)
+            {
+                gameState.OnGoldChanged += UpdateGoldText;
+                UpdateGoldText(gameState.Gold);
+            }
         }
 
         public void Sync(IReadOnlyList<SquadData> squads, IReadOnlyList<TravelTask> tasks, Func<string, string> resolveRegionName, long nowUnix)
@@ -32,6 +77,9 @@ namespace FantasyGuildmaster.UI
             }
 
             ApplyCompactLayout();
+
+            rowsRoot ??= scrollRect != null ? scrollRect.content : null;
+            EnsureRowPrefab();
 
             if (squads == null || rowsRoot == null || rowPrefab == null)
             {
@@ -68,11 +116,19 @@ namespace FantasyGuildmaster.UI
 
                 row.gameObject.SetActive(true);
                 taskBySquad.TryGetValue(squad.id, out var task);
-                BuildStatus(squad, task, resolveRegionName, nowUnix, out var status, out var timer, out var statusColor);
-                row.SetData(string.IsNullOrWhiteSpace(squad.name) ? squad.id : squad.name, status, timer, statusColor);
+                BuildStatus(squad, task, out var statusTimer, out var statusColor, out var hpTextValue, nowUnix);
+                row.SetData(string.IsNullOrWhiteSpace(squad.name) ? squad.id : squad.name, statusTimer, hpTextValue, statusColor);
             }
 
             RefreshPanelHeight();
+        }
+
+        private void UpdateGoldText(int gold)
+        {
+            if (goldText != null)
+            {
+                goldText.text = $"Gold: {gold}";
+            }
         }
 
         private void ApplyCompactLayout()
@@ -87,11 +143,13 @@ namespace FantasyGuildmaster.UI
             rootRect.anchorMax = new Vector2(0f, 1f);
             rootRect.pivot = new Vector2(0f, 1f);
             rootRect.anchoredPosition = new Vector2(16f, -16f);
+            rootRect.localScale = Vector3.one;
+            rootRect.sizeDelta = new Vector2(CompactWidth, Mathf.Max(CompactMinHeight, rootRect.sizeDelta.y));
 
-            if (Mathf.Abs(rootRect.sizeDelta.x - 280f) > 0.01f)
-            {
-                rootRect.sizeDelta = new Vector2(280f, Mathf.Max(140f, rootRect.sizeDelta.y));
-            }
+            var layoutElement = GetComponent<LayoutElement>() ?? gameObject.AddComponent<LayoutElement>();
+            layoutElement.ignoreLayout = true;
+            layoutElement.minWidth = CompactWidth;
+            layoutElement.preferredWidth = CompactWidth;
 
             if (rowsRoot != null)
             {
@@ -106,7 +164,6 @@ namespace FantasyGuildmaster.UI
                 viewportRect.anchorMax = new Vector2(1f, 1f);
                 viewportRect.pivot = new Vector2(0.5f, 1f);
             }
-
         }
 
         private void RefreshPanelHeight()
@@ -134,7 +191,7 @@ namespace FantasyGuildmaster.UI
                 scrollRect.enabled = true;
             }
 
-            rootRect.sizeDelta = new Vector2(280f, Mathf.Max(140f, 58f + viewportHeight));
+            rootRect.sizeDelta = new Vector2(CompactWidth, Mathf.Max(CompactMinHeight, 86f + viewportHeight));
         }
 
         private void EnsureRowsMatchSquads(IReadOnlyList<SquadData> squads)
@@ -181,31 +238,98 @@ namespace FantasyGuildmaster.UI
             }
         }
 
-        private static void BuildStatus(SquadData squad, TravelTask task, Func<string, string> resolveRegionName, long nowUnix, out string status, out string timer, out Color statusColor)
+        private void EnsureRowPrefab()
         {
-            timer = task != null ? FormatTimer(task.endUnix - nowUnix) : "—";
+            if (rowPrefab != null || rowsRoot == null)
+            {
+                return;
+            }
+
+            var rowGo = new GameObject("SquadStatusRow_Runtime", typeof(RectTransform), typeof(Image), typeof(HorizontalLayoutGroup), typeof(LayoutElement), typeof(SquadStatusRow));
+            rowGo.transform.SetParent(rowsRoot, false);
+            rowGo.SetActive(false);
+
+            var image = rowGo.GetComponent<Image>();
+            image.color = new Color(1f, 1f, 1f, 0.06f);
+
+            var rowLayout = rowGo.GetComponent<HorizontalLayoutGroup>();
+            rowLayout.padding = new RectOffset(8, 8, 5, 5);
+            rowLayout.spacing = 8f;
+            rowLayout.childControlWidth = true;
+            rowLayout.childControlHeight = true;
+            rowLayout.childForceExpandHeight = false;
+            rowLayout.childForceExpandWidth = false;
+
+            var rootLayoutElement = rowGo.GetComponent<LayoutElement>();
+            rootLayoutElement.minHeight = 34f;
+
+            var name = CreateRuntimeText("SquadName", rowGo.transform, TextAlignmentOptions.Left, 14f);
+            var nameLayout = name.gameObject.AddComponent<LayoutElement>();
+            nameLayout.preferredWidth = 110f;
+
+            var statusTimer = CreateRuntimeText("StatusTimer", rowGo.transform, TextAlignmentOptions.Left, 14f);
+            var statusLayout = statusTimer.gameObject.AddComponent<LayoutElement>();
+            statusLayout.flexibleWidth = 1f;
+
+            var hp = CreateRuntimeText("Hp", rowGo.transform, TextAlignmentOptions.Right, 14f);
+            var hpLayout = hp.gameObject.AddComponent<LayoutElement>();
+            hpLayout.preferredWidth = 72f;
+
+            var row = rowGo.GetComponent<SquadStatusRow>();
+            row.ConfigureRuntime(name, statusTimer, hp);
+            rowPrefab = row;
+        }
+
+        private static TMP_Text CreateRuntimeText(string objectName, Transform parent, TextAlignmentOptions alignment, float fontSize)
+        {
+            var go = new GameObject(objectName, typeof(RectTransform), typeof(TextMeshProUGUI));
+            go.transform.SetParent(parent, false);
+            var text = go.GetComponent<TextMeshProUGUI>();
+            text.alignment = alignment;
+            text.fontSize = fontSize;
+            text.color = Color.white;
+            text.text = objectName;
+            return text;
+        }
+
+        private static void BuildStatus(SquadData squad, TravelTask task, out string statusTimer, out Color statusColor, out string hpTextValue, long nowUnix)
+        {
+            if (squad.IsDestroyed)
+            {
+                statusTimer = "DESTROYED";
+                statusColor = new Color(0.75f, 0.2f, 0.2f, 1f);
+                hpTextValue = "--";
+                return;
+            }
+
+            hpTextValue = $"{Mathf.Max(0, squad.hp)}/{Mathf.Max(1, squad.maxHp)}";
+
+            if (task != null)
+            {
+                var phaseLabel = task.phase == TravelPhase.Outbound ? "OUT" : "RET";
+                statusTimer = $"{phaseLabel} {FormatTimer(task.endUnix - nowUnix)}";
+                statusColor = task.phase == TravelPhase.Outbound
+                    ? new Color(0.96f, 0.84f, 0.28f, 1f)
+                    : new Color(0.99f, 0.61f, 0.26f, 1f);
+                return;
+            }
 
             switch (squad.state)
             {
-                case SquadState.TravelingToRegion:
-                {
-                    var regionName = task != null ? resolveRegionName?.Invoke(task.toRegionId) : resolveRegionName?.Invoke(squad.currentRegionId);
-                    status = $"Traveling to {(!string.IsNullOrWhiteSpace(regionName) ? regionName : "region")}";
-                    statusColor = new Color(0.96f, 0.84f, 0.28f, 1f);
-                    return;
-                }
-                case SquadState.ReturningToHQ:
-                    status = "Returning to HQ";
-                    statusColor = new Color(0.99f, 0.61f, 0.26f, 1f);
-                    return;
                 case SquadState.ResolvingEncounter:
-                    status = "In Encounter";
-                    timer = "—";
+                    statusTimer = "WAIT";
                     statusColor = new Color(0.94f, 0.32f, 0.32f, 1f);
                     return;
+                case SquadState.ReturningToHQ:
+                    statusTimer = "RET";
+                    statusColor = new Color(0.99f, 0.61f, 0.26f, 1f);
+                    return;
+                case SquadState.TravelingToRegion:
+                    statusTimer = "OUT";
+                    statusColor = new Color(0.96f, 0.84f, 0.28f, 1f);
+                    return;
                 default:
-                    status = "Idle at HQ";
-                    timer = "—";
+                    statusTimer = "IDLE";
                     statusColor = new Color(0.41f, 0.9f, 0.5f, 1f);
                     return;
             }

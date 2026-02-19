@@ -171,11 +171,12 @@ namespace FantasyGuildmaster.Encounter
                 _addGold?.Invoke(option.goldReward);
             }
 
-            if (option.hpLoss > 0 && squad != null)
+            if (!success && option.hpLoss > 0 && squad != null)
             {
                 squad.hp = Mathf.Max(0, squad.hp - option.hpLoss);
                 if (squad.hp <= 0)
                 {
+                    squad.state = SquadState.Destroyed;
                     _onSquadDestroyed?.Invoke(squad.id);
                     result += "\nSquad destroyed";
                 }

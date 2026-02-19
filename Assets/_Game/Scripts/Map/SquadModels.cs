@@ -7,7 +7,8 @@ namespace FantasyGuildmaster.Map
         IdleAtHQ = 0,
         TravelingToRegion = 1,
         ResolvingEncounter = 2,
-        ReturningToHQ = 3
+        ReturningToHQ = 3,
+        Destroyed = 4
     }
 
     public enum TravelPhase
@@ -23,8 +24,11 @@ namespace FantasyGuildmaster.Map
         public string name;
         public int membersCount;
         public int hp;
+        public int maxHp;
         public SquadState state;
         public string currentRegionId;
+
+        public bool IsDestroyed => hp <= 0 || state == SquadState.Destroyed;
     }
 
     [Serializable]

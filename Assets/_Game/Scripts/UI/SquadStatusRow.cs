@@ -6,26 +6,33 @@ namespace FantasyGuildmaster.UI
     public sealed class SquadStatusRow : MonoBehaviour
     {
         [SerializeField] private TMP_Text squadNameText;
-        [SerializeField] private TMP_Text statusText;
-        [SerializeField] private TMP_Text timerText;
+        [SerializeField] private TMP_Text statusTimerText;
+        [SerializeField] private TMP_Text hpText;
 
-        public void SetData(string squadName, string status, string timer, Color statusColor)
+        public void ConfigureRuntime(TMP_Text squadName, TMP_Text statusTimer, TMP_Text hp)
+        {
+            squadNameText = squadName;
+            statusTimerText = statusTimer;
+            hpText = hp;
+        }
+
+        public void SetData(string squadName, string statusTimer, string hp, Color statusColor)
         {
             if (squadNameText != null)
             {
                 squadNameText.text = squadName;
             }
 
-            if (statusText != null)
+            if (statusTimerText != null)
             {
-                statusText.text = status;
-                statusText.color = statusColor;
+                statusTimerText.text = statusTimer;
+                statusTimerText.color = statusColor;
             }
 
-            if (timerText != null)
+            if (hpText != null)
             {
-                timerText.text = string.IsNullOrWhiteSpace(timer) ? "—" : timer;
-                timerText.color = statusColor;
+                hpText.text = hp;
+                hpText.color = statusColor;
             }
         }
     }

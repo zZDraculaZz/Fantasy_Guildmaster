@@ -28,6 +28,7 @@ namespace FantasyGuildmaster.Map
         [SerializeField] private SquadSelectPanel squadSelectPanel;
         [SerializeField] private EncounterManager encounterManager;
         [SerializeField] private GameManager gameManager;
+        [SerializeField] private GameState gameState;
         [SerializeField] private GameClock gameClock;
         [SerializeField] private SquadStatusHUD squadStatusHud;
 
@@ -55,6 +56,17 @@ namespace FantasyGuildmaster.Map
             InitializePools();
             SyncAllContractIcons();
             EnsureEncounterDependencies();
+
+            if (gameState == null)
+            {
+                gameState = FindFirstObjectByType<GameState>();
+                if (gameState == null)
+                {
+                    gameState = gameObject.AddComponent<GameState>();
+                }
+            }
+
+            squadStatusHud?.BindGameState(gameState);
 
             if (encounterManager != null)
             {
@@ -723,9 +735,9 @@ namespace FantasyGuildmaster.Map
         private void SeedSquads()
         {
             _squads.Clear();
-            _squads.Add(new SquadData { id = "squad_iron_hawks", name = "Iron Hawks", membersCount = 6, hp = 100, state = SquadState.IdleAtHQ, currentRegionId = GuildHqId });
-            _squads.Add(new SquadData { id = "squad_ash_blades", name = "Ash Blades", membersCount = 5, hp = 100, state = SquadState.IdleAtHQ, currentRegionId = GuildHqId });
-            _squads.Add(new SquadData { id = "squad_grim_lantern", name = "Grim Lantern", membersCount = 4, hp = 100, state = SquadState.IdleAtHQ, currentRegionId = GuildHqId });
+            _squads.Add(new SquadData { id = "squad_iron_hawks", name = "Iron Hawks", membersCount = 6, hp = 100, maxHp = 100, state = SquadState.IdleAtHQ, currentRegionId = GuildHqId });
+            _squads.Add(new SquadData { id = "squad_ash_blades", name = "Ash Blades", membersCount = 5, hp = 100, maxHp = 100, state = SquadState.IdleAtHQ, currentRegionId = GuildHqId });
+            _squads.Add(new SquadData { id = "squad_grim_lantern", name = "Grim Lantern", membersCount = 4, hp = 100, maxHp = 100, state = SquadState.IdleAtHQ, currentRegionId = GuildHqId });
         }
 
         private List<SquadData> GetIdleSquads()
@@ -733,7 +745,7 @@ namespace FantasyGuildmaster.Map
             var list = new List<SquadData>();
             for (var i = 0; i < _squads.Count; i++)
             {
-                if (_squads[i].state == SquadState.IdleAtHQ && _squads[i].hp > 0)
+                if (_squads[i].state == SquadState.IdleAtHQ && !_squads[i].IsDestroyed)
                 {
                     list.Add(_squads[i]);
                 }
@@ -757,6 +769,8 @@ namespace FantasyGuildmaster.Map
 
         private void AddGold(int amount)
         {
+            gameState?.AddGold(amount);
+
             if (gameManager != null)
             {
                 gameManager.AddGold(amount);
@@ -782,10 +796,10 @@ namespace FantasyGuildmaster.Map
                 RestoreContractAvailability(failedRegionId, failedTask.contractId);
             }
 
-            squad.state = SquadState.IdleAtHQ;
+            squad.state = SquadState.Destroyed;
             squad.currentRegionId = GuildHqId;
             squad.hp = 0;
-            Debug.Log("Squad destroyed");
+            Debug.Log($"[TravelDebug] Squad destroyed: {squad.name}");
         }
 
         private void CompleteContract(string regionId, string contractId)
