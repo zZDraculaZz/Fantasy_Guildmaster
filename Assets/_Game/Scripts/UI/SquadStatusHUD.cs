@@ -163,8 +163,20 @@ namespace FantasyGuildmaster.UI
                 return;
             }
 
+            if (squads.Count > 0 && _rowsBySquadId.Count == 0)
+            {
+                RebuildRowsIfNeeded(force: true);
+            }
+
             var tasks = _mapController.GetTravelTasks();
             UpdateRows(squads, tasks, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+
+            if (squads.Count > 0 && CountActiveRows() == 0)
+            {
+                RebuildRowsIfNeeded(force: true);
+                UpdateRows(squads, tasks, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+            }
+
             RefreshPanelHeight();
         }
 
@@ -431,8 +443,58 @@ namespace FantasyGuildmaster.UI
             }
         }
 
+
+        private void EnsureScrollHierarchy()
+        {
+            if (scrollRect == null)
+            {
+                scrollRect = GetComponentInChildren<ScrollRect>(true);
+            }
+
+            if (scrollRect == null)
+            {
+                var scrollGo = new GameObject("RowsScrollRect", typeof(RectTransform), typeof(Image), typeof(ScrollRect), typeof(LayoutElement));
+                scrollGo.transform.SetParent(transform, false);
+                var scrollRectTransform = (RectTransform)scrollGo.transform;
+                scrollRectTransform.anchorMin = new Vector2(0f, 1f);
+                scrollRectTransform.anchorMax = new Vector2(1f, 1f);
+                scrollRectTransform.pivot = new Vector2(0.5f, 1f);
+                scrollRectTransform.anchoredPosition = Vector2.zero;
+                scrollRectTransform.sizeDelta = Vector2.zero;
+
+                var layout = scrollGo.GetComponent<LayoutElement>();
+                layout.minHeight = 120f;
+                layout.preferredHeight = 120f;
+                layout.flexibleHeight = 1f;
+
+                var viewportGo = new GameObject("Viewport", typeof(RectTransform), typeof(Image), typeof(Mask), typeof(RectMask2D));
+                viewportGo.transform.SetParent(scrollGo.transform, false);
+                viewportRect = viewportGo.GetComponent<RectTransform>();
+                viewportRect.anchorMin = Vector2.zero;
+                viewportRect.anchorMax = Vector2.one;
+                viewportRect.offsetMin = Vector2.zero;
+                viewportRect.offsetMax = Vector2.zero;
+                viewportRect.anchoredPosition = Vector2.zero;
+
+                var viewportMask = viewportGo.GetComponent<Mask>();
+                viewportMask.showMaskGraphic = false;
+                viewportGo.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0f);
+
+                var contentGo = new GameObject("Content", typeof(RectTransform));
+                contentGo.transform.SetParent(viewportGo.transform, false);
+                rowsRoot = contentGo.GetComponent<RectTransform>();
+
+                scrollRect = scrollGo.GetComponent<ScrollRect>();
+                scrollRect.viewport = viewportRect;
+                scrollRect.content = rowsRoot;
+                scrollRect.horizontal = false;
+                scrollRect.vertical = true;
+            }
+        }
+
         private void EnsureContentRootReady()
         {
+            EnsureScrollHierarchy();
             var previousRowsRoot = rowsRoot;
 
             if (scrollRect != null)
@@ -755,6 +817,20 @@ namespace FantasyGuildmaster.UI
             var minutes = clamped / 60;
             var seconds = clamped % 60;
             return $"{minutes:00}:{seconds:00}";
+        }
+
+        private int CountActiveRows()
+        {
+            var active = 0;
+            foreach (var pair in _rowsBySquadId)
+            {
+                if (pair.Value != null && pair.Value.gameObject.activeInHierarchy)
+                {
+                    active++;
+                }
+            }
+
+            return active;
         }
     }
 }
