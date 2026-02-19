@@ -396,7 +396,7 @@ namespace FantasyGuildmaster.Editor
             var contentRect = (RectTransform)contractsContent.transform;
             contentRect.anchorMin = new Vector2(0f, 1f);
             contentRect.anchorMax = new Vector2(1f, 1f);
-            contentRect.pivot = new Vector2(0f, 1f);
+            contentRect.pivot = new Vector2(0.5f, 1f);
             contentRect.anchoredPosition = Vector2.zero;
             contentRect.sizeDelta = new Vector2(0f, 0f);
 
@@ -434,10 +434,15 @@ namespace FantasyGuildmaster.Editor
             image.color = new Color(0f, 0f, 0f, 0.82f);
 
             var layout = panelGo.GetComponent<VerticalLayoutGroup>() ?? panelGo.AddComponent<VerticalLayoutGroup>();
+            var panelFitter = panelGo.GetComponent<ContentSizeFitter>();
+            if (panelFitter != null)
+            {
+                Object.DestroyImmediate(panelFitter);
+            }
             layout.padding = new RectOffset(12, 12, 12, 12);
             layout.spacing = 8f;
             layout.childControlWidth = true;
-            layout.childControlHeight = false;
+            layout.childControlHeight = true;
             layout.childForceExpandWidth = true;
             layout.childForceExpandHeight = false;
 
@@ -490,16 +495,21 @@ namespace FantasyGuildmaster.Editor
             panelRect.anchorMax = new Vector2(0f, 1f);
             panelRect.pivot = new Vector2(0f, 1f);
             panelRect.anchoredPosition = new Vector2(16f, -16f);
-            panelRect.sizeDelta = new Vector2(280f, 140f);
+            panelRect.sizeDelta = new Vector2(300f, 260f);
 
             var image = panelGo.GetComponent<Image>() ?? panelGo.AddComponent<Image>();
             image.color = new Color(0.05f, 0.09f, 0.16f, 0.84f);
 
             var layout = panelGo.GetComponent<VerticalLayoutGroup>() ?? panelGo.AddComponent<VerticalLayoutGroup>();
+            var panelFitter = panelGo.GetComponent<ContentSizeFitter>();
+            if (panelFitter != null)
+            {
+                Object.DestroyImmediate(panelFitter);
+            }
             layout.padding = new RectOffset(8, 8, 8, 8);
             layout.spacing = 6f;
             layout.childControlWidth = true;
-            layout.childControlHeight = false;
+            layout.childControlHeight = true;
             layout.childForceExpandWidth = true;
             layout.childForceExpandHeight = false;
 
@@ -507,16 +517,25 @@ namespace FantasyGuildmaster.Editor
                 ? panelGo.transform.Find("Title").GetComponent<TextMeshProUGUI>()
                 : CreateText("Title", panelGo.transform, "Squads", 20f, TextAlignmentOptions.Left);
             var titleLayout = title.GetComponent<LayoutElement>() ?? title.gameObject.AddComponent<LayoutElement>();
-            titleLayout.minHeight = 26f;
+            titleLayout.minHeight = 28f;
+            titleLayout.preferredHeight = 28f;
+            titleLayout.flexibleHeight = 0f;
 
             var goldText = panelGo.transform.Find("GoldText") != null
                 ? panelGo.transform.Find("GoldText").GetComponent<TextMeshProUGUI>()
                 : CreateText("GoldText", panelGo.transform, "Gold: 100", 16f, TextAlignmentOptions.Left);
             var goldLayout = goldText.GetComponent<LayoutElement>() ?? goldText.gameObject.AddComponent<LayoutElement>();
             goldLayout.minHeight = 22f;
+            goldLayout.preferredHeight = 22f;
+            goldLayout.flexibleHeight = 0f;
 
             var scrollGo = FindOrCreateUI("RowsScrollRect", panelGo.transform);
             var scrollRect = scrollGo.GetComponent<ScrollRect>() ?? scrollGo.AddComponent<ScrollRect>();
+            var scrollFitter = scrollGo.GetComponent<ContentSizeFitter>();
+            if (scrollFitter != null)
+            {
+                Object.DestroyImmediate(scrollFitter);
+            }
             var scrollImage = scrollGo.GetComponent<Image>() ?? scrollGo.AddComponent<Image>();
             scrollImage.color = new Color(0f, 0f, 0f, 0f);
             var scrollRectTransform = (RectTransform)scrollGo.transform;
@@ -524,11 +543,11 @@ namespace FantasyGuildmaster.Editor
             scrollRectTransform.anchorMax = new Vector2(1f, 1f);
             scrollRectTransform.pivot = new Vector2(0.5f, 1f);
             scrollRectTransform.anchoredPosition = Vector2.zero;
-            scrollRectTransform.sizeDelta = new Vector2(0f, 220f);
+            scrollRectTransform.sizeDelta = Vector2.zero;
             var viewportLayout = scrollGo.GetComponent<LayoutElement>() ?? scrollGo.AddComponent<LayoutElement>();
-            viewportLayout.preferredHeight = 220f;
-            viewportLayout.minHeight = 52f;
-            viewportLayout.flexibleHeight = 0f;
+            viewportLayout.preferredHeight = 120f;
+            viewportLayout.minHeight = 120f;
+            viewportLayout.flexibleHeight = 1f;
 
             var viewport = FindOrCreateUI("Viewport", scrollGo.transform);
             var viewportRect = (RectTransform)viewport.transform;
@@ -537,12 +556,13 @@ namespace FantasyGuildmaster.Editor
             viewportImage.color = new Color(0f, 0f, 0f, 0f);
             var viewportMask = viewport.GetComponent<Mask>() ?? viewport.AddComponent<Mask>();
             viewportMask.showMaskGraphic = false;
+            _ = viewport.GetComponent<RectMask2D>() ?? viewport.AddComponent<RectMask2D>();
 
             var content = FindOrCreateUI("Content", viewport.transform);
             var contentRect = (RectTransform)content.transform;
             contentRect.anchorMin = new Vector2(0f, 1f);
             contentRect.anchorMax = new Vector2(1f, 1f);
-            contentRect.pivot = new Vector2(0f, 1f);
+            contentRect.pivot = new Vector2(0.5f, 1f);
             contentRect.anchoredPosition = Vector2.zero;
             contentRect.sizeDelta = Vector2.zero;
 
@@ -584,10 +604,15 @@ namespace FantasyGuildmaster.Editor
             bg.color = new Color(0f, 0f, 0f, 0.86f);
 
             var layout = panelGo.GetComponent<VerticalLayoutGroup>() ?? panelGo.AddComponent<VerticalLayoutGroup>();
+            var panelFitter = panelGo.GetComponent<ContentSizeFitter>();
+            if (panelFitter != null)
+            {
+                Object.DestroyImmediate(panelFitter);
+            }
             layout.padding = new RectOffset(14, 14, 14, 14);
             layout.spacing = 8f;
             layout.childControlWidth = true;
-            layout.childControlHeight = false;
+            layout.childControlHeight = true;
             layout.childForceExpandWidth = true;
             layout.childForceExpandHeight = false;
 

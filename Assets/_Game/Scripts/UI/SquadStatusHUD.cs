@@ -21,32 +21,32 @@ namespace FantasyGuildmaster.UI
         [SerializeField] private SquadStatusRow rowPrefab;
         [SerializeField] private GameState gameState;
 
-        private const float CompactWidth = 280f;
-        private const float CompactMinHeight = 140f;
+        private const float HudWidth = 300f;
+        private const float HudHeight = 260f;
 
         private readonly Dictionary<string, SquadStatusRow> _rowsBySquadId = new();
 
         private MapController _mapController;
         private SquadRoster _squadRoster;
         private GameClock _gameClock;
-        private bool _debugLogged;
+        private string _lastRosterSignature = string.Empty;
+        private bool _loggedInitialRebuild;
 
         private void Awake()
         {
-            ApplyCompactLayout();
+            ApplyFixedHudLayout();
             EnsureContentRootReady();
             EnsureRowPrefab();
             HardBind();
             UpdateGoldText(gameState != null ? gameState.Gold : 0);
-            RebuildRows();
         }
 
         private void Start()
         {
-            StartCoroutine(RebuildWhenRosterReady());
+            StartCoroutine(WaitAndInitializeRows());
         }
 
-        private IEnumerator RebuildWhenRosterReady()
+        private IEnumerator WaitAndInitializeRows()
         {
             yield return null;
 
@@ -58,7 +58,7 @@ namespace FantasyGuildmaster.UI
                 yield return null;
             }
 
-            RebuildRows();
+            RebuildRowsIfNeeded(force: true);
             RefreshNow();
         }
 
@@ -122,56 +122,26 @@ namespace FantasyGuildmaster.UI
 
         public void Sync(IReadOnlyList<SquadData> squads, IReadOnlyList<TravelTask> tasks, Func<string, string> resolveRegionName, long nowUnix)
         {
+            ApplyFixedHudLayout();
+            EnsureContentRootReady();
+            EnsureRowPrefab();
+
             if (titleText != null)
             {
                 titleText.text = "Squads";
             }
 
-            ApplyCompactLayout();
-            EnsureContentRootReady();
-            EnsureRowPrefab();
-
-            if (squads == null || rowsRoot == null || rowPrefab == null)
+            if (squads == null)
             {
                 return;
             }
 
-            EnsureRowsMatchSquads(squads);
+            if (HasRosterCompositionChanged(squads))
+            {
+                RebuildRowsIfNeeded(force: true);
+            }
+
             UpdateRows(squads, tasks, nowUnix);
-            RefreshPanelHeight();
-        }
-
-        public void RebuildRows()
-        {
-            EnsureContentRootReady();
-            EnsureRowPrefab();
-
-            if (_mapController == null)
-            {
-                _mapController = FindFirstObjectByType<MapController>();
-            }
-
-            if (_mapController == null)
-            {
-                Debug.LogWarning("[HUDDebug] RebuildRows skipped: MapController not found");
-                return;
-            }
-
-            var squads = _squadRoster != null ? _squadRoster.GetSquads() : _mapController.GetSquads();
-            var squadsCount = squads != null ? squads.Count : 0;
-            Debug.Log($"[HUDDebug] RebuildRows squadsCount={squadsCount}");
-            if (squads == null || squadsCount == 0)
-            {
-                return;
-            }
-
-            EnsureRowsMatchSquads(squads);
-            LayoutRebuilder.ForceRebuildLayoutImmediate(rowsRoot);
-            var contentHeight = rowsRoot.rect.height;
-            var firstRow = rowsRoot.childCount > 0 ? rowsRoot.GetChild(0) as RectTransform : null;
-            var firstRowHeight = firstRow != null ? firstRow.rect.height : 0f;
-            Debug.Log($"[HUDDebug] Rows alive={_rowsBySquadId.Count}, contentChildCount={rowsRoot.childCount}");
-            Debug.Log($"[HUDDebug] Content rect height={contentHeight:0.##}, firstRowHeight={firstRowHeight:0.##}");
             RefreshPanelHeight();
         }
 
@@ -187,17 +157,55 @@ namespace FantasyGuildmaster.UI
             }
 
             var squads = _squadRoster != null ? _squadRoster.GetSquads() : _mapController.GetSquads();
-            var tasks = _mapController.GetTravelTasks();
             if (squads == null)
             {
                 return;
             }
 
-            EnsureContentRootReady();
-            EnsureRowPrefab();
-            EnsureRowsMatchSquads(squads);
+            var tasks = _mapController.GetTravelTasks();
             UpdateRows(squads, tasks, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
             RefreshPanelHeight();
+        }
+
+        private void RebuildRowsIfNeeded(bool force = false)
+        {
+            EnsureContentRootReady();
+            EnsureRowPrefab();
+
+            if (_mapController == null)
+            {
+                _mapController = FindFirstObjectByType<MapController>();
+            }
+
+            if (_mapController == null)
+            {
+                return;
+            }
+
+            var squads = _squadRoster != null ? _squadRoster.GetSquads() : _mapController.GetSquads();
+            if (squads == null || squads.Count == 0)
+            {
+                return;
+            }
+
+            var signature = BuildRosterSignature(squads);
+            if (!force && signature == _lastRosterSignature)
+            {
+                return;
+            }
+
+            EnsureRowsMatchSquads(squads);
+            _lastRosterSignature = signature;
+
+            if (!_loggedInitialRebuild)
+            {
+                Debug.Log($"[HUDDebug] RebuildRows squadsCount={squads.Count}");
+                _loggedInitialRebuild = true;
+            }
+            else
+            {
+                Debug.Log($"[HUDDebug] RebuildRows composition changed: {signature}");
+            }
         }
 
         private void HardBind()
@@ -226,24 +234,12 @@ namespace FantasyGuildmaster.UI
             }
 
             _gameClock = FindFirstObjectByType<GameClock>();
-
-            if (!_debugLogged)
-            {
-                var squadCount = _squadRoster != null ? _squadRoster.Squads.Count : (_mapController?.GetSquads()?.Count ?? 0);
-                if (squadCount > 0)
-                {
-                    var contentName = rowsRoot != null ? rowsRoot.name : "null";
-                    var rowName = rowPrefab != null ? rowPrefab.name : "null";
-                    Debug.Log($"[HUDDebug] MapController found={_mapController != null}, squadsCount={squadCount}");
-                    Debug.Log($"[HUDDebug] Content={contentName}, RowPrefab={rowName}");
-                    _debugLogged = true;
-                }
-            }
         }
 
         private void OnRosterChanged()
         {
-            RebuildRows();
+            HardBind();
+            RebuildRowsIfNeeded();
             RefreshNow();
         }
 
@@ -295,7 +291,7 @@ namespace FantasyGuildmaster.UI
             }
         }
 
-        private void ApplyCompactLayout()
+        private void ApplyFixedHudLayout()
         {
             rootRect ??= transform as RectTransform;
             if (rootRect == null)
@@ -308,26 +304,67 @@ namespace FantasyGuildmaster.UI
             rootRect.pivot = new Vector2(0f, 1f);
             rootRect.anchoredPosition = new Vector2(16f, -16f);
             rootRect.localScale = Vector3.one;
-            rootRect.sizeDelta = new Vector2(CompactWidth, Mathf.Max(CompactMinHeight, rootRect.sizeDelta.y));
+            rootRect.sizeDelta = new Vector2(HudWidth, HudHeight);
 
-            var layoutElement = GetComponent<LayoutElement>() ?? gameObject.AddComponent<LayoutElement>();
-            layoutElement.ignoreLayout = true;
-            layoutElement.minWidth = CompactWidth;
-            layoutElement.preferredWidth = CompactWidth;
+            var rootLayoutElement = GetComponent<LayoutElement>() ?? gameObject.AddComponent<LayoutElement>();
+            rootLayoutElement.ignoreLayout = true;
+            rootLayoutElement.minWidth = HudWidth;
+            rootLayoutElement.preferredWidth = HudWidth;
+            rootLayoutElement.minHeight = HudHeight;
+            rootLayoutElement.preferredHeight = HudHeight;
 
-            if (rowsRoot != null)
+            var rootLayout = GetComponent<VerticalLayoutGroup>() ?? gameObject.AddComponent<VerticalLayoutGroup>();
+            rootLayout.padding = new RectOffset(8, 8, 8, 8);
+            rootLayout.spacing = 6f;
+            rootLayout.childControlWidth = true;
+            rootLayout.childControlHeight = true;
+            rootLayout.childForceExpandWidth = true;
+            rootLayout.childForceExpandHeight = false;
+
+            var rootFitter = GetComponent<ContentSizeFitter>();
+            if (rootFitter != null)
             {
-                rowsRoot.anchorMin = new Vector2(0f, 1f);
-                rowsRoot.anchorMax = new Vector2(1f, 1f);
-                rowsRoot.pivot = new Vector2(0f, 1f);
-                rowsRoot.anchoredPosition = Vector2.zero;
+                Destroy(rootFitter);
             }
 
-            if (viewportRect != null)
+            if (titleText != null)
             {
-                viewportRect.anchorMin = new Vector2(0f, 1f);
-                viewportRect.anchorMax = new Vector2(1f, 1f);
-                viewportRect.pivot = new Vector2(0.5f, 1f);
+                var titleLayout = titleText.GetComponent<LayoutElement>() ?? titleText.gameObject.AddComponent<LayoutElement>();
+                titleLayout.minHeight = 28f;
+                titleLayout.preferredHeight = 28f;
+                titleLayout.flexibleHeight = 0f;
+            }
+
+            if (goldText != null)
+            {
+                var goldLayout = goldText.GetComponent<LayoutElement>() ?? goldText.gameObject.AddComponent<LayoutElement>();
+                goldLayout.minHeight = 22f;
+                goldLayout.preferredHeight = 22f;
+                goldLayout.flexibleHeight = 0f;
+            }
+
+            if (scrollRect != null)
+            {
+                var scrollRectTransform = scrollRect.transform as RectTransform;
+                if (scrollRectTransform != null)
+                {
+                    scrollRectTransform.anchorMin = new Vector2(0f, 1f);
+                    scrollRectTransform.anchorMax = new Vector2(1f, 1f);
+                    scrollRectTransform.pivot = new Vector2(0.5f, 1f);
+                    scrollRectTransform.anchoredPosition = Vector2.zero;
+                    scrollRectTransform.sizeDelta = Vector2.zero;
+                }
+
+                viewportLayoutElement ??= scrollRect.gameObject.GetComponent<LayoutElement>() ?? scrollRect.gameObject.AddComponent<LayoutElement>();
+                viewportLayoutElement.minHeight = 120f;
+                viewportLayoutElement.preferredHeight = 120f;
+                viewportLayoutElement.flexibleHeight = 1f;
+
+                var scrollFitter = scrollRect.GetComponent<ContentSizeFitter>();
+                if (scrollFitter != null)
+                {
+                    Destroy(scrollFitter);
+                }
             }
         }
 
@@ -339,24 +376,14 @@ namespace FantasyGuildmaster.UI
             }
 
             LayoutRebuilder.ForceRebuildLayoutImmediate(rowsRoot);
-            var contentHeight = LayoutUtility.GetPreferredHeight(rowsRoot);
-            var useScroll = _rowsBySquadId.Count > 5;
-            var viewportHeight = useScroll ? 220f : Mathf.Min(220f, Mathf.Max(52f, contentHeight + 4f));
-
-            if (viewportLayoutElement != null)
-            {
-                viewportLayoutElement.preferredHeight = viewportHeight;
-                viewportLayoutElement.minHeight = viewportHeight;
-                viewportLayoutElement.flexibleHeight = 0f;
-            }
 
             if (scrollRect != null)
             {
-                scrollRect.vertical = useScroll;
+                scrollRect.vertical = _rowsBySquadId.Count > 5;
                 scrollRect.enabled = true;
             }
 
-            rootRect.sizeDelta = new Vector2(CompactWidth, Mathf.Max(CompactMinHeight, 86f + viewportHeight));
+            rootRect.sizeDelta = new Vector2(HudWidth, HudHeight);
         }
 
         private void EnsureRowsMatchSquads(IReadOnlyList<SquadData> squads)
@@ -389,20 +416,16 @@ namespace FantasyGuildmaster.UI
                 row.transform.SetAsLastSibling();
                 row.gameObject.SetActive(true);
                 EnsureRowLayoutElement(row);
-                row.SetData(string.IsNullOrWhiteSpace(squad.name) ? squad.id : squad.name, "IDLE 00:00", $"{Mathf.Max(0, squad.hp)}/{Mathf.Max(1, squad.maxHp)}", Color.white);
             }
 
-            if (squads.Count > 0)
+            foreach (var pair in _rowsBySquadId)
             {
-                foreach (var pair in _rowsBySquadId)
+                if (pair.Value == null)
                 {
-                    if (pair.Value == null)
-                    {
-                        continue;
-                    }
-
-                    pair.Value.gameObject.SetActive(validIds.Contains(pair.Key));
+                    continue;
                 }
+
+                pair.Value.gameObject.SetActive(validIds.Contains(pair.Key));
             }
         }
 
@@ -417,7 +440,6 @@ namespace FantasyGuildmaster.UI
                 else
                 {
                     var content = FindChildByName(transform, "Content") as RectTransform;
-
                     if (content == null && viewportRect != null)
                     {
                         var contentGo = new GameObject("Content", typeof(RectTransform));
@@ -436,7 +458,7 @@ namespace FantasyGuildmaster.UI
 
             rowsRoot.anchorMin = new Vector2(0f, 1f);
             rowsRoot.anchorMax = new Vector2(1f, 1f);
-            rowsRoot.pivot = new Vector2(0f, 1f);
+            rowsRoot.pivot = new Vector2(0.5f, 1f);
             rowsRoot.anchoredPosition = Vector2.zero;
 
             var contentLayout = rowsRoot.GetComponent<VerticalLayoutGroup>() ?? rowsRoot.gameObject.AddComponent<VerticalLayoutGroup>();
@@ -447,20 +469,22 @@ namespace FantasyGuildmaster.UI
             contentLayout.childForceExpandWidth = true;
             contentLayout.childForceExpandHeight = false;
 
-            var fitter = rowsRoot.GetComponent<ContentSizeFitter>() ?? rowsRoot.gameObject.AddComponent<ContentSizeFitter>();
-            fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
-            fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            var contentFitter = rowsRoot.GetComponent<ContentSizeFitter>() ?? rowsRoot.gameObject.AddComponent<ContentSizeFitter>();
+            contentFitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+            contentFitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
             if (scrollRect != null)
             {
                 scrollRect.content = rowsRoot;
+                scrollRect.horizontal = false;
+                scrollRect.vertical = true;
+                viewportRect ??= scrollRect.viewport;
             }
 
             if (viewportRect != null)
             {
                 var viewportImage = viewportRect.GetComponent<Image>() ?? viewportRect.gameObject.AddComponent<Image>();
                 viewportImage.color = new Color(0f, 0f, 0f, 0f);
-                _ = viewportRect.GetComponent<Mask>() ?? viewportRect.gameObject.AddComponent<Mask>();
                 _ = viewportRect.GetComponent<RectMask2D>() ?? viewportRect.gameObject.AddComponent<RectMask2D>();
 
                 var viewportFitter = viewportRect.GetComponent<ContentSizeFitter>();
@@ -468,12 +492,6 @@ namespace FantasyGuildmaster.UI
                 {
                     Destroy(viewportFitter);
                 }
-            }
-
-            var rootFitter = GetComponent<ContentSizeFitter>();
-            if (rootFitter != null)
-            {
-                Destroy(rootFitter);
             }
         }
 
@@ -536,19 +554,19 @@ namespace FantasyGuildmaster.UI
             rowLayout.childForceExpandHeight = false;
             rowLayout.childForceExpandWidth = false;
 
-            var rootLayoutElement = rowGo.GetComponent<LayoutElement>();
-            rootLayoutElement.minHeight = 32f;
-            rootLayoutElement.preferredHeight = 32f;
+            var rowLayoutElement = rowGo.GetComponent<LayoutElement>();
+            rowLayoutElement.minHeight = 32f;
+            rowLayoutElement.preferredHeight = 32f;
 
-            var name = CreateRuntimeText("NameText", rowGo.transform, TextAlignmentOptions.Left, 14f);
+            var name = CreateRuntimeText("NameText", rowGo.transform, TextAlignmentOptions.MidlineLeft, 14f);
             var nameLayout = name.gameObject.AddComponent<LayoutElement>();
             nameLayout.preferredWidth = 110f;
 
-            var statusTimer = CreateRuntimeText("StatusText", rowGo.transform, TextAlignmentOptions.Left, 14f);
+            var statusTimer = CreateRuntimeText("StatusText", rowGo.transform, TextAlignmentOptions.MidlineLeft, 14f);
             var statusLayout = statusTimer.gameObject.AddComponent<LayoutElement>();
             statusLayout.flexibleWidth = 1f;
 
-            var hp = CreateRuntimeText("HpText", rowGo.transform, TextAlignmentOptions.Right, 14f);
+            var hp = CreateRuntimeText("HpText", rowGo.transform, TextAlignmentOptions.MidlineRight, 14f);
             var hpLayout = hp.gameObject.AddComponent<LayoutElement>();
             hpLayout.preferredWidth = 72f;
 
@@ -567,6 +585,32 @@ namespace FantasyGuildmaster.UI
             text.color = Color.white;
             text.text = objectName;
             return text;
+        }
+
+        private static string BuildRosterSignature(IReadOnlyList<SquadData> squads)
+        {
+            if (squads == null || squads.Count == 0)
+            {
+                return string.Empty;
+            }
+
+            var ids = new List<string>(squads.Count);
+            for (var i = 0; i < squads.Count; i++)
+            {
+                var id = squads[i]?.id;
+                if (!string.IsNullOrEmpty(id))
+                {
+                    ids.Add(id);
+                }
+            }
+
+            ids.Sort(StringComparer.Ordinal);
+            return string.Join("|", ids);
+        }
+
+        private bool HasRosterCompositionChanged(IReadOnlyList<SquadData> squads)
+        {
+            return BuildRosterSignature(squads) != _lastRosterSignature;
         }
 
         private static void BuildStatus(SquadData squad, TravelTask task, out string statusTimer, out Color statusColor, out string hpTextValue, long nowUnix)
