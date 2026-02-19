@@ -53,13 +53,14 @@ namespace FantasyGuildmaster.Editor
             var detailsPanel = EnsureDetailsPanel(overlayLayer, contractPrefab);
             var squadSelectPanel = EnsureSquadSelectPanel(overlayLayer);
             var squadStatusHud = EnsureSquadStatusHud(overlayLayer, squadStatusRowPrefab, gameState);
+            var squadDetailsPanel = EnsureSquadDetailsPanel(overlayLayer);
             var encounterPanel = EnsureEncounterPanel(overlayLayer);
             var encounterManager = root.GetComponent<EncounterManager>() ?? root.AddComponent<EncounterManager>();
             var mapRect = EnsureMapArea(mapLayer, out var markersRoot, out var contractIconsRoot, out var travelTokensRoot);
             EnsureGuildHqMarker(markersRoot);
 
             AssignEncounterManager(encounterManager, encounterPanel);
-            AssignMapController(controller, mapRect, markersRoot, contractIconsRoot, travelTokensRoot, markerPrefab, contractIconPrefab, travelTokenPrefab, detailsPanel, squadSelectPanel, squadStatusHud, encounterManager, gameManager, gameState, squadRoster, clock);
+            AssignMapController(controller, mapRect, markersRoot, contractIconsRoot, travelTokensRoot, markerPrefab, contractIconPrefab, travelTokenPrefab, detailsPanel, squadSelectPanel, squadStatusHud, squadDetailsPanel, encounterManager, gameManager, gameState, squadRoster, clock);
 
             EditorUtility.SetDirty(root);
             EditorUtility.SetDirty(canvas.gameObject);
@@ -568,6 +569,48 @@ namespace FantasyGuildmaster.Editor
             return hud;
         }
 
+        private static SquadDetailsPanel EnsureSquadDetailsPanel(Transform parent)
+        {
+            var panelGo = FindOrCreateUI("SquadDetailsPanel", parent);
+            var panelRect = (RectTransform)panelGo.transform;
+            panelRect.anchorMin = new Vector2(0f, 1f);
+            panelRect.anchorMax = new Vector2(0f, 1f);
+            panelRect.pivot = new Vector2(0f, 1f);
+            panelRect.anchoredPosition = new Vector2(16f, -286f);
+            panelRect.sizeDelta = new Vector2(300f, 220f);
+
+            var image = panelGo.GetComponent<Image>() ?? panelGo.AddComponent<Image>();
+            image.color = new Color(0.04f, 0.08f, 0.14f, 0.88f);
+
+            var layout = panelGo.GetComponent<VerticalLayoutGroup>() ?? panelGo.AddComponent<VerticalLayoutGroup>();
+            layout.padding = new RectOffset(8, 8, 8, 8);
+            layout.spacing = 6f;
+            layout.childControlWidth = true;
+            layout.childControlHeight = true;
+            layout.childForceExpandWidth = true;
+            layout.childForceExpandHeight = false;
+
+            var title = panelGo.transform.Find("Title") != null
+                ? panelGo.transform.Find("Title").GetComponent<TextMeshProUGUI>()
+                : CreateText("Title", panelGo.transform, "Squad Details", 19f, TextAlignmentOptions.Left);
+            var titleLayout = title.GetComponent<LayoutElement>() ?? title.gameObject.AddComponent<LayoutElement>();
+            titleLayout.minHeight = 26f;
+            titleLayout.preferredHeight = 26f;
+
+            var body = panelGo.transform.Find("BodyText") != null
+                ? panelGo.transform.Find("BodyText").GetComponent<TextMeshProUGUI>()
+                : CreateText("BodyText", panelGo.transform, "Select a squad in Squad HUD.", 15f, TextAlignmentOptions.TopLeft);
+            body.textWrappingMode = TextWrappingModes.Normal;
+            var bodyLayout = body.GetComponent<LayoutElement>() ?? body.gameObject.AddComponent<LayoutElement>();
+            bodyLayout.minHeight = 160f;
+            bodyLayout.preferredHeight = 160f;
+            bodyLayout.flexibleHeight = 1f;
+
+            var panel = panelGo.GetComponent<SquadDetailsPanel>() ?? panelGo.AddComponent<SquadDetailsPanel>();
+            AssignSquadDetailsPanel(panel, title, body);
+            return panel;
+        }
+
         private static EncounterPanel EnsureEncounterPanel(Transform parent)
         {
             var panelGo = FindOrCreateUI("EncounterPanel", parent);
@@ -805,7 +848,7 @@ namespace FantasyGuildmaster.Editor
             rect.localScale = Vector3.one;
         }
 
-        private static void AssignMapController(MapController controller, RectTransform mapRect, RectTransform markersRoot, RectTransform contractIconsRoot, RectTransform travelTokensRoot, RegionMarker markerPrefab, ContractIcon contractIconPrefab, TravelToken travelTokenPrefab, RegionDetailsPanel detailsPanel, SquadSelectPanel squadSelectPanel, SquadStatusHUD squadStatusHud, EncounterManager encounterManager, GameManager gameManager, GameState gameState, SquadRoster squadRoster, GameClock clock)
+        private static void AssignMapController(MapController controller, RectTransform mapRect, RectTransform markersRoot, RectTransform contractIconsRoot, RectTransform travelTokensRoot, RegionMarker markerPrefab, ContractIcon contractIconPrefab, TravelToken travelTokenPrefab, RegionDetailsPanel detailsPanel, SquadSelectPanel squadSelectPanel, SquadStatusHUD squadStatusHud, SquadDetailsPanel squadDetailsPanel, EncounterManager encounterManager, GameManager gameManager, GameState gameState, SquadRoster squadRoster, GameClock clock)
         {
             var so = new SerializedObject(controller);
             so.FindProperty("mapRect").objectReferenceValue = mapRect;
@@ -818,6 +861,7 @@ namespace FantasyGuildmaster.Editor
             so.FindProperty("detailsPanel").objectReferenceValue = detailsPanel;
             so.FindProperty("squadSelectPanel").objectReferenceValue = squadSelectPanel;
             so.FindProperty("squadStatusHud").objectReferenceValue = squadStatusHud;
+            so.FindProperty("squadDetailsPanel").objectReferenceValue = squadDetailsPanel;
             so.FindProperty("encounterManager").objectReferenceValue = encounterManager;
             so.FindProperty("gameManager").objectReferenceValue = gameManager;
             so.FindProperty("gameState").objectReferenceValue = gameState;
@@ -883,6 +927,28 @@ namespace FantasyGuildmaster.Editor
             TryAssignObjectReference(so, "titleText", title);
             TryAssignObjectReference(so, "goldText", goldText);
             TryAssignObjectReference(so, "bodyText", bodyText);
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        private static void TryAssignObjectReference(SerializedObject serializedObject, string propertyName, UnityEngine.Object value)
+        {
+            if (serializedObject == null)
+            {
+                return;
+            }
+
+            var property = serializedObject.FindProperty(propertyName);
+            if (property != null)
+            {
+                property.objectReferenceValue = value;
+            }
+        }
+
+        private static void AssignSquadDetailsPanel(SquadDetailsPanel panel, TMP_Text title, TMP_Text body)
+        {
+            var so = new SerializedObject(panel);
+            TryAssignObjectReference(so, "titleText", title);
+            TryAssignObjectReference(so, "bodyText", body);
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 

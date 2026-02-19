@@ -34,6 +34,7 @@ namespace FantasyGuildmaster.Map
         [SerializeField] private SquadRoster squadRoster;
         [SerializeField] private GameClock gameClock;
         [SerializeField] private SquadStatusHUD squadStatusHud;
+        [SerializeField] private SquadDetailsPanel squadDetailsPanel;
 
         private readonly Dictionary<string, List<ContractData>> _contractsByRegion = new();
         private readonly Dictionary<string, RegionData> _regionById = new();
@@ -46,6 +47,7 @@ namespace FantasyGuildmaster.Map
         private GameData _gameData;
         private ContractIconPool _iconPool;
         private TravelTokenPool _travelTokenPool;
+        private string _selectedSquadId;
 
         private void Awake()
         {
@@ -55,6 +57,7 @@ namespace FantasyGuildmaster.Map
             BuildRegionIndex();
             SeedContracts();
             EnsureSquadRoster();
+            EnsureSelectedSquad();
             SpawnMarkers();
             InitializePools();
             SyncAllContractIcons();
@@ -70,6 +73,7 @@ namespace FantasyGuildmaster.Map
             }
 
             squadStatusHud?.BindGameState(gameState);
+            squadDetailsPanel?.BindMap(this);
 
             if (encounterManager != null)
             {
@@ -602,19 +606,6 @@ namespace FantasyGuildmaster.Map
                     Debug.Log($"[MapController] Found map scroll rect: {GetHierarchyPath(mapScrollRect.transform)}");
                     return mapScrollRect.content;
                 }
-            }
-
-            var mapLayout = transform.Find("MapCanvas/MapLayer") as RectTransform
-                ?? transform.Find("MapCanvas/MapLayout") as RectTransform;
-            if (mapLayout != null)
-            {
-                return mapLayout;
-            }
-
-            var mapCanvas = transform.Find("MapCanvas") as RectTransform;
-            if (mapCanvas != null)
-            {
-                return mapCanvas;
             }
 
             return null;
@@ -1192,13 +1183,13 @@ namespace FantasyGuildmaster.Map
 
         private void RefreshSquadStatusHud()
         {
-            if (squadStatusHud == null)
+            var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            if (squadStatusHud != null)
             {
-                return;
+                squadStatusHud.Sync(GetRosterSquads(), _travelTasks, ResolveRegionName, now);
             }
 
-            var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            squadStatusHud.Sync(GetRosterSquads(), _travelTasks, ResolveRegionName, now);
+            squadDetailsPanel?.Refresh();
         }
 
         public IReadOnlyList<SquadData> GetSquads()
@@ -1224,6 +1215,54 @@ namespace FantasyGuildmaster.Map
             }
 
             return regionId;
+        }
+
+        private void EnsureSelectedSquad()
+        {
+            if (!string.IsNullOrWhiteSpace(_selectedSquadId))
+            {
+                return;
+            }
+
+            var squads = GetRosterSquads();
+            if (squads != null && squads.Count > 0)
+            {
+                _selectedSquadId = squads[0].id;
+            }
+        }
+
+        public void SetSelectedSquad(string squadId)
+        {
+            if (string.IsNullOrWhiteSpace(squadId) || _selectedSquadId == squadId)
+            {
+                return;
+            }
+
+            _selectedSquadId = squadId;
+            squadDetailsPanel?.Refresh();
+            RefreshSquadStatusHud();
+        }
+
+        public string GetSelectedSquadId()
+        {
+            EnsureSelectedSquad();
+            return _selectedSquadId;
+        }
+
+        public SquadData GetSelectedSquad()
+        {
+            EnsureSelectedSquad();
+            return FindSquad(_selectedSquadId);
+        }
+
+        public TravelTask GetTravelTaskForSquad(string squadId)
+        {
+            return FindTaskForSquad(squadId);
+        }
+
+        public string GetRegionNameById(string regionId)
+        {
+            return ResolveRegionName(regionId);
         }
 
         private static string ToTimerText(int remainingSeconds)
