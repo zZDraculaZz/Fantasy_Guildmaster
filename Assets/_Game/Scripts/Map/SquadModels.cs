@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace FantasyGuildmaster.Map
 {
@@ -18,6 +19,16 @@ namespace FantasyGuildmaster.Map
     }
 
     [Serializable]
+    public sealed class SquadMemberData
+    {
+        public string id;
+        public string name;
+        public int hp = 100;
+        public int maxHp = 100;
+        public string status = "Ready";
+    }
+
+    [Serializable]
     public sealed class SquadData
     {
         public string id;
@@ -27,6 +38,7 @@ namespace FantasyGuildmaster.Map
         public int maxHp;
         public SquadState state;
         public string currentRegionId;
+        public List<SquadMemberData> members = new();
 
         public bool IsDestroyed => hp <= 0 || state == SquadState.Destroyed;
     }
