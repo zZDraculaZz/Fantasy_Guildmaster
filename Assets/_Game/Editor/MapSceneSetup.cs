@@ -655,7 +655,27 @@ namespace FantasyGuildmaster.Editor
 
             var continueButton = content.transform.Find("ContinueButton") != null
                 ? content.transform.Find("ContinueButton").GetComponent<Button>()
-                : CreateButton(content.transform, "ContinueButton", "Continue");
+                : null;
+            if (continueButton == null)
+            {
+                var continueGo = FindOrCreateUI("ContinueButton", content.transform);
+                continueButton = continueGo.GetComponent<Button>() ?? continueGo.AddComponent<Button>();
+            }
+
+            if (continueButton != null)
+            {
+                var continueGo = continueButton.gameObject;
+                var continueImage = continueGo.GetComponent<Image>() ?? continueGo.AddComponent<Image>();
+                continueImage.color = new Color(0.15f, 0.35f, 0.18f, 0.9f);
+
+                var continueLabel = continueGo.transform.Find("Label") != null
+                    ? continueGo.transform.Find("Label").GetComponent<TextMeshProUGUI>()
+                    : CreateText("Label", continueGo.transform, "Continue", 16f, TextAlignmentOptions.Center);
+                Stretch((RectTransform)continueLabel.transform, 4f);
+
+                var continueLayout = continueGo.GetComponent<LayoutElement>() ?? continueGo.AddComponent<LayoutElement>();
+                continueLayout.minHeight = 36f;
+            }
 
             var panel = panelGo.GetComponent<MissionReportPanel>() ?? panelGo.AddComponent<MissionReportPanel>();
             panel.ConfigureRuntimeBindings(panelGo, blocker, title, body, continueButton);
