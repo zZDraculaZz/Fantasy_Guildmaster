@@ -54,13 +54,14 @@ namespace FantasyGuildmaster.Editor
             var squadSelectPanel = EnsureSquadSelectPanel(overlayLayer);
             var squadStatusHud = EnsureSquadStatusHud(overlayLayer, squadStatusRowPrefab, gameState);
             var squadDetailsPanel = EnsureSquadDetailsPanel(overlayLayer);
+            var missionReportPanel = EnsureMissionReportPanel(overlayLayer);
             var encounterPanel = EnsureEncounterPanel(overlayLayer);
             var encounterManager = root.GetComponent<EncounterManager>() ?? root.AddComponent<EncounterManager>();
             var mapRect = EnsureMapArea(mapLayer, out var markersRoot, out var contractIconsRoot, out var travelTokensRoot);
             EnsureGuildHqMarker(markersRoot);
 
             AssignEncounterManager(encounterManager, encounterPanel);
-            AssignMapController(controller, mapRect, markersRoot, contractIconsRoot, travelTokensRoot, markerPrefab, contractIconPrefab, travelTokenPrefab, detailsPanel, squadSelectPanel, squadStatusHud, squadDetailsPanel, encounterManager, gameManager, gameState, squadRoster, clock);
+            AssignMapController(controller, mapRect, markersRoot, contractIconsRoot, travelTokensRoot, markerPrefab, contractIconPrefab, travelTokenPrefab, detailsPanel, squadSelectPanel, squadStatusHud, squadDetailsPanel, missionReportPanel, encounterManager, gameManager, gameState, squadRoster, clock);
 
             EditorUtility.SetDirty(root);
             EditorUtility.SetDirty(canvas.gameObject);
@@ -614,6 +615,99 @@ namespace FantasyGuildmaster.Editor
             return panel;
         }
 
+        private static MissionReportPanel EnsureMissionReportPanel(Transform parent)
+        {
+            var panelGo = FindOrCreateUI("MissionReportPanel", parent);
+            panelGo.transform.SetAsLastSibling();
+            var panelRect = (RectTransform)panelGo.transform;
+            Stretch(panelRect);
+
+            var blocker = panelGo.GetComponent<Image>() ?? panelGo.AddComponent<Image>();
+            blocker.color = new Color(0f, 0f, 0f, 0.68f);
+            blocker.raycastTarget = true;
+
+            var content = FindOrCreateUI("Content", panelGo.transform);
+            var contentRect = (RectTransform)content.transform;
+            contentRect.anchorMin = new Vector2(0.5f, 0.5f);
+            contentRect.anchorMax = new Vector2(0.5f, 0.5f);
+            contentRect.pivot = new Vector2(0.5f, 0.5f);
+            contentRect.anchoredPosition = Vector2.zero;
+            contentRect.sizeDelta = new Vector2(760f, 460f);
+
+            var contentImage = content.GetComponent<Image>() ?? content.AddComponent<Image>();
+            contentImage.color = new Color(0.08f, 0.12f, 0.18f, 0.98f);
+
+            var layout = content.GetComponent<VerticalLayoutGroup>() ?? content.AddComponent<VerticalLayoutGroup>();
+            layout.padding = new RectOffset(22, 22, 18, 18);
+            layout.spacing = 10f;
+            layout.childControlWidth = true;
+            layout.childControlHeight = true;
+            layout.childForceExpandWidth = true;
+            layout.childForceExpandHeight = false;
+
+            var title = EnsurePanelText(content.transform, "Title", "MISSION REPORT", 34f);
+            var body = EnsurePanelText(content.transform, "Body", "Report body", 20f);
+            body.alignment = TextAlignmentOptions.TopLeft;
+            body.textWrappingMode = TextWrappingModes.Normal;
+            var bodyLayout = body.GetComponent<LayoutElement>() ?? body.gameObject.AddComponent<LayoutElement>();
+            bodyLayout.minHeight = 260f;
+            bodyLayout.flexibleHeight = 1f;
+
+            var continueButton = content.transform.Find("ContinueButton") != null
+                ? content.transform.Find("ContinueButton").GetComponent<Button>()
+                : CreateButton(content.transform, "ContinueButton", "Continue");
+
+            var panel = panelGo.GetComponent<MissionReportPanel>() ?? panelGo.AddComponent<MissionReportPanel>();
+            panel.ConfigureRuntimeBindings(panelGo, blocker, title, body, continueButton);
+            panel.Hide();
+            return panel;
+        }
+
+        private static SquadDetailsPanel EnsureSquadDetailsPanel(Transform parent)
+        {
+            var panelGo = FindOrCreateUI("SquadDetailsPanel", parent);
+            var panelRect = (RectTransform)panelGo.transform;
+            panelRect.anchorMin = new Vector2(0f, 1f);
+            panelRect.anchorMax = new Vector2(0f, 1f);
+            panelRect.pivot = new Vector2(0f, 1f);
+            panelRect.anchoredPosition = new Vector2(16f, -286f);
+            panelRect.sizeDelta = new Vector2(300f, 220f);
+
+            var image = panelGo.GetComponent<Image>() ?? panelGo.AddComponent<Image>();
+            image.color = new Color(0.04f, 0.08f, 0.14f, 0.88f);
+
+            var layout = panelGo.GetComponent<VerticalLayoutGroup>() ?? panelGo.AddComponent<VerticalLayoutGroup>();
+            layout.padding = new RectOffset(8, 8, 8, 8);
+            layout.spacing = 6f;
+            layout.childControlWidth = true;
+            layout.childControlHeight = true;
+            layout.childForceExpandWidth = true;
+            layout.childForceExpandHeight = false;
+
+            var title = panelGo.transform.Find("Title") != null
+                ? panelGo.transform.Find("Title").GetComponent<TextMeshProUGUI>()
+                : CreateText("Title", panelGo.transform, "Squad Details", 19f, TextAlignmentOptions.Left);
+            var titleLayout = title.GetComponent<LayoutElement>() ?? title.gameObject.AddComponent<LayoutElement>();
+            titleLayout.minHeight = 26f;
+            titleLayout.preferredHeight = 26f;
+
+            var body = panelGo.transform.Find("BodyText") != null
+                ? panelGo.transform.Find("BodyText").GetComponent<TextMeshProUGUI>()
+                : CreateText("BodyText", panelGo.transform, "Select a squad in Squad HUD.", 15f, TextAlignmentOptions.TopLeft);
+            body.textWrappingMode = TextWrappingModes.Normal;
+            var bodyLayout = body.GetComponent<LayoutElement>() ?? body.gameObject.AddComponent<LayoutElement>();
+            bodyLayout.minHeight = 160f;
+            bodyLayout.preferredHeight = 160f;
+            bodyLayout.flexibleHeight = 1f;
+
+            var panel = panelGo.GetComponent<SquadDetailsPanel>() ?? panelGo.AddComponent<SquadDetailsPanel>();
+            var panelSo = new SerializedObject(panel);
+            AssignOptionalObjectReference(panelSo, "titleText", title);
+            AssignOptionalObjectReference(panelSo, "bodyText", body);
+            panelSo.ApplyModifiedPropertiesWithoutUndo();
+            return panel;
+        }
+
         private static EncounterPanel EnsureEncounterPanel(Transform parent)
         {
             var panelGo = FindOrCreateUI("EncounterPanel", parent);
@@ -851,7 +945,7 @@ namespace FantasyGuildmaster.Editor
             rect.localScale = Vector3.one;
         }
 
-        private static void AssignMapController(MapController controller, RectTransform mapRect, RectTransform markersRoot, RectTransform contractIconsRoot, RectTransform travelTokensRoot, RegionMarker markerPrefab, ContractIcon contractIconPrefab, TravelToken travelTokenPrefab, RegionDetailsPanel detailsPanel, SquadSelectPanel squadSelectPanel, SquadStatusHUD squadStatusHud, SquadDetailsPanel squadDetailsPanel, EncounterManager encounterManager, GameManager gameManager, GameState gameState, SquadRoster squadRoster, GameClock clock)
+        private static void AssignMapController(MapController controller, RectTransform mapRect, RectTransform markersRoot, RectTransform contractIconsRoot, RectTransform travelTokensRoot, RegionMarker markerPrefab, ContractIcon contractIconPrefab, TravelToken travelTokenPrefab, RegionDetailsPanel detailsPanel, SquadSelectPanel squadSelectPanel, SquadStatusHUD squadStatusHud, SquadDetailsPanel squadDetailsPanel, MissionReportPanel missionReportPanel, EncounterManager encounterManager, GameManager gameManager, GameState gameState, SquadRoster squadRoster, GameClock clock)
         {
             var so = new SerializedObject(controller);
             so.FindProperty("mapRect").objectReferenceValue = mapRect;
@@ -865,6 +959,7 @@ namespace FantasyGuildmaster.Editor
             so.FindProperty("squadSelectPanel").objectReferenceValue = squadSelectPanel;
             so.FindProperty("squadStatusHud").objectReferenceValue = squadStatusHud;
             so.FindProperty("squadDetailsPanel").objectReferenceValue = squadDetailsPanel;
+            so.FindProperty("missionReportPanel").objectReferenceValue = missionReportPanel;
             so.FindProperty("encounterManager").objectReferenceValue = encounterManager;
             so.FindProperty("gameManager").objectReferenceValue = gameManager;
             so.FindProperty("gameState").objectReferenceValue = gameState;
