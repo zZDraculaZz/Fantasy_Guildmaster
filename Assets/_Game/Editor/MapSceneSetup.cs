@@ -607,7 +607,20 @@ namespace FantasyGuildmaster.Editor
             bodyLayout.flexibleHeight = 1f;
 
             var panel = panelGo.GetComponent<SquadDetailsPanel>() ?? panelGo.AddComponent<SquadDetailsPanel>();
-            AssignSquadDetailsPanel(panel, title, body);
+            var panelSo = new SerializedObject(panel);
+            var panelTitle = panelSo.FindProperty("titleText");
+            if (panelTitle != null)
+            {
+                panelTitle.objectReferenceValue = title;
+            }
+
+            var panelBody = panelSo.FindProperty("bodyText");
+            if (panelBody != null)
+            {
+                panelBody.objectReferenceValue = body;
+            }
+
+            panelSo.ApplyModifiedPropertiesWithoutUndo();
             return panel;
         }
 
@@ -924,9 +937,25 @@ namespace FantasyGuildmaster.Editor
         private static void AssignSquadStatusHud(SquadStatusHUD hud, TMP_Text title, TMP_Text goldText, TMP_Text bodyText)
         {
             var so = new SerializedObject(hud);
-            TryAssignObjectReference(so, "titleText", title);
-            TryAssignObjectReference(so, "goldText", goldText);
-            TryAssignObjectReference(so, "bodyText", bodyText);
+
+            var titleProp = so.FindProperty("titleText");
+            if (titleProp != null)
+            {
+                titleProp.objectReferenceValue = title;
+            }
+
+            var goldProp = so.FindProperty("goldText");
+            if (goldProp != null)
+            {
+                goldProp.objectReferenceValue = goldText;
+            }
+
+            var bodyProp = so.FindProperty("bodyText");
+            if (bodyProp != null)
+            {
+                bodyProp.objectReferenceValue = bodyText;
+            }
+
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 
