@@ -19,6 +19,8 @@ namespace FantasyGuildmaster.Map
 
         [SerializeField] private RectTransform mapRect;
         [SerializeField] private RectTransform markersRoot;
+        [SerializeField] private RectTransform markersRootParent;
+        [SerializeField] private ScrollRect mapScrollRect;
         [SerializeField] private RectTransform contractIconsRoot;
         [SerializeField] private RectTransform travelTokensRoot;
         [SerializeField] private RegionMarker regionMarkerPrefab;
@@ -32,6 +34,8 @@ namespace FantasyGuildmaster.Map
         [SerializeField] private SquadRoster squadRoster;
         [SerializeField] private GameClock gameClock;
         [SerializeField] private SquadStatusHUD squadStatusHud;
+        [SerializeField] private SquadDetailsPanel squadDetailsPanel;
+        [SerializeField] private MissionReportPanel missionReportPanel;
 
         private readonly Dictionary<string, List<ContractData>> _contractsByRegion = new();
         private readonly Dictionary<string, RegionData> _regionById = new();
@@ -44,6 +48,8 @@ namespace FantasyGuildmaster.Map
         private GameData _gameData;
         private ContractIconPool _iconPool;
         private TravelTokenPool _travelTokenPool;
+        private string _selectedSquadId;
+        private readonly Queue<MissionReportData> _pendingReports = new();
 
         private void Awake()
         {
@@ -53,10 +59,12 @@ namespace FantasyGuildmaster.Map
             BuildRegionIndex();
             SeedContracts();
             EnsureSquadRoster();
+            EnsureSelectedSquad();
             SpawnMarkers();
             InitializePools();
             SyncAllContractIcons();
             EnsureEncounterDependencies();
+            EnsureMissionReportPanel();
 
             if (gameState == null)
             {
@@ -68,6 +76,7 @@ namespace FantasyGuildmaster.Map
             }
 
             squadStatusHud?.BindGameState(gameState);
+            squadDetailsPanel?.BindMap(this);
 
             if (encounterManager != null)
             {
@@ -96,6 +105,12 @@ namespace FantasyGuildmaster.Map
 
         private void Start()
         {
+            if (_markersByRegion.Count == 0)
+            {
+                SpawnMarkers();
+                SyncAllContractIcons();
+            }
+
             var count = squadRoster != null ? squadRoster.GetSquads().Count : 0;
             Debug.Log($"[RosterDebug] MapController roster squadsCount={count}");
         }
@@ -248,9 +263,12 @@ namespace FantasyGuildmaster.Map
             squad.currentRegionId = GuildHqId;
             squad.state = SquadState.IdleAtHQ;
             NotifyRosterChanged();
-            AddGold(task.contractReward);
             RemoveTravelToken(task.squadId);
-            CompleteContract(task.fromRegionId, task.contractId);
+
+            var report = BuildMissionReport(task, squad);
+            _pendingReports.Enqueue(report);
+            Debug.Log($"[Report] Enqueued: squad={report.squadId} contract={report.contractId} reward={report.rewardGold}");
+            TryShowNextMissionReport();
         }
 
         private void OnEncounterResolved(string squadId, string regionId, string contractId, int contractReward)
@@ -276,6 +294,209 @@ namespace FantasyGuildmaster.Map
             {
                 detailsPanel.SetIdleSquadsCount(GetIdleSquads().Count);
             }
+        }
+
+        private MissionReportData BuildMissionReport(TravelTask task, SquadData squad)
+        {
+            var readiness = ComputeReadinessPercent(squad);
+            var membersSummary = BuildMembersSummary(squad);
+            var regionName = ResolveRegionName(task.fromRegionId);
+            var contractTitle = ResolveContractTitle(task.fromRegionId, task.contractId);
+            var outcome = readiness < 70
+                ? "Contract completed. Loot secured. Injuries reported."
+                : "Contract completed. Loot secured. Minor injuries.";
+
+            return new MissionReportData
+            {
+                squadId = squad?.id,
+                squadName = squad?.name,
+                regionId = task.fromRegionId,
+                regionName = regionName,
+                contractId = task.contractId,
+                contractTitle = contractTitle,
+                rewardGold = task.contractReward,
+                readinessBeforePercent = readiness,
+                readinessAfterPercent = readiness,
+                membersSummary = membersSummary,
+                outcomeText = outcome
+            };
+        }
+
+        private void TryShowNextMissionReport()
+        {
+            EnsureMissionReportPanel();
+            if (missionReportPanel == null || missionReportPanel.IsOpen || _pendingReports.Count == 0)
+            {
+                return;
+            }
+
+            var report = _pendingReports.Peek();
+            Debug.Log($"[Report] Showing: squad={report.squadId} contract={report.contractId} reward={report.rewardGold}");
+            missionReportPanel.Show(report, () => OnMissionReportContinue(report));
+        }
+
+        private void OnMissionReportContinue(MissionReportData report)
+        {
+            if (_pendingReports.Count > 0)
+            {
+                _pendingReports.Dequeue();
+            }
+
+            AddGold(report.rewardGold);
+            CompleteContract(report.regionId, report.contractId);
+            Debug.Log($"[Report] Applied+Closed: squad={report.squadId} contract={report.contractId} reward={report.rewardGold}");
+
+            RefreshSquadStatusHud();
+            if (detailsPanel != null)
+            {
+                detailsPanel.SetIdleSquadsCount(GetIdleSquads().Count);
+            }
+
+            if (_pendingReports.Count > 0)
+            {
+                TryShowNextMissionReport();
+            }
+            else
+            {
+                missionReportPanel?.Hide();
+            }
+        }
+
+        private void EnsureMissionReportPanel()
+        {
+            if (missionReportPanel != null)
+            {
+                return;
+            }
+
+            missionReportPanel = FindFirstObjectByType<MissionReportPanel>();
+            if (missionReportPanel != null)
+            {
+                return;
+            }
+
+            var prefab = Resources.Load<GameObject>("Prefabs/MissionReportPanel");
+            var canvas = EnsureCanvas();
+            if (canvas == null)
+            {
+                return;
+            }
+
+            if (prefab != null)
+            {
+                var instance = Instantiate(prefab, canvas.transform, false);
+                missionReportPanel = instance.GetComponent<MissionReportPanel>();
+                if (missionReportPanel != null)
+                {
+                    instance.transform.SetAsLastSibling();
+                    missionReportPanel.Hide();
+                    return;
+                }
+            }
+
+            missionReportPanel = CreateRuntimeMissionReportPanel(canvas);
+        }
+
+        private MissionReportPanel CreateRuntimeMissionReportPanel(Canvas canvas)
+        {
+            var root = new GameObject("MissionReportPanel", typeof(RectTransform), typeof(Image), typeof(MissionReportPanel));
+            root.transform.SetParent(canvas.transform, false);
+            var rootRect = root.GetComponent<RectTransform>();
+            rootRect.anchorMin = Vector2.zero;
+            rootRect.anchorMax = Vector2.one;
+            rootRect.offsetMin = Vector2.zero;
+            rootRect.offsetMax = Vector2.zero;
+            root.transform.SetAsLastSibling();
+
+            var blocker = root.GetComponent<Image>();
+            blocker.color = new Color(0f, 0f, 0f, 0.68f);
+            blocker.raycastTarget = true;
+
+            var content = new GameObject("Content", typeof(RectTransform), typeof(Image), typeof(VerticalLayoutGroup));
+            content.transform.SetParent(root.transform, false);
+            var contentRect = content.GetComponent<RectTransform>();
+            contentRect.anchorMin = new Vector2(0.5f, 0.5f);
+            contentRect.anchorMax = new Vector2(0.5f, 0.5f);
+            contentRect.pivot = new Vector2(0.5f, 0.5f);
+            contentRect.sizeDelta = new Vector2(760f, 460f);
+
+            var contentImage = content.GetComponent<Image>();
+            contentImage.color = new Color(0.08f, 0.12f, 0.18f, 0.98f);
+            var layout = content.GetComponent<VerticalLayoutGroup>();
+            layout.padding = new RectOffset(22, 22, 18, 18);
+            layout.spacing = 10f;
+            layout.childControlWidth = true;
+            layout.childControlHeight = true;
+            layout.childForceExpandWidth = true;
+            layout.childForceExpandHeight = false;
+
+            var title = CreateText(content.transform, "Title", 34f, FontStyles.Bold, TextAlignmentOptions.Center);
+            var body = CreateText(content.transform, "Body", 22f, FontStyles.Normal, TextAlignmentOptions.TopLeft);
+            body.textWrappingMode = TextWrappingModes.Normal;
+            var bodyLayout = body.gameObject.GetComponent<LayoutElement>() ?? body.gameObject.AddComponent<LayoutElement>();
+            bodyLayout.minHeight = 260f;
+            bodyLayout.flexibleHeight = 1f;
+
+            var continueButton = CreateButton(content.transform, "ContinueButton", "Continue");
+            var panel = root.GetComponent<MissionReportPanel>();
+            panel.ConfigureRuntimeBindings(root, blocker, title, body, continueButton);
+            panel.Hide();
+            return panel;
+        }
+
+        private string ResolveContractTitle(string regionId, string contractId)
+        {
+            if (!string.IsNullOrEmpty(regionId) && _contractsByRegion.TryGetValue(regionId, out var contracts))
+            {
+                for (var i = 0; i < contracts.Count; i++)
+                {
+                    if (contracts[i] != null && contracts[i].id == contractId)
+                    {
+                        return contracts[i].title;
+                    }
+                }
+            }
+
+            return contractId;
+        }
+
+        private static string BuildMembersSummary(SquadData squad)
+        {
+            if (squad?.members == null || squad.members.Count == 0)
+            {
+                return "Members not implemented yet";
+            }
+
+            return $"{squad.members.Count} members";
+        }
+
+        private static int ComputeReadinessPercent(SquadData squad)
+        {
+            if (squad?.members == null || squad.members.Count == 0)
+            {
+                return 100;
+            }
+
+            float sum = 0f;
+            var valid = 0;
+            for (var i = 0; i < squad.members.Count; i++)
+            {
+                var member = squad.members[i];
+                if (member == null || member.maxHp <= 0)
+                {
+                    continue;
+                }
+
+                sum += Mathf.Clamp01(member.hp / (float)member.maxHp);
+                valid++;
+            }
+
+            if (valid == 0)
+            {
+                return 100;
+            }
+
+            return Mathf.RoundToInt((sum / valid) * 100f);
         }
 
         private void EnsureEncounterDependencies()
@@ -463,21 +684,9 @@ namespace FantasyGuildmaster.Map
 
         private void SpawnMarkers()
         {
-            if (markersRoot == null)
+            if (!EnsureMarkersRoot())
             {
-                Debug.LogWarning("[MapController] markersRoot is not assigned, creating runtime fallback root.");
-                var fallback = new GameObject("MarkersRoot", typeof(RectTransform));
-                markersRoot = fallback.GetComponent<RectTransform>();
-
-                var scrollContent = transform.Find("MapCanvas/MapLayer/MapScrollRect/Viewport/Content") as RectTransform;
-                markersRoot.SetParent(scrollContent != null ? scrollContent : (mapRect != null ? mapRect : transform), false);
-                markersRoot.anchorMin = Vector2.zero;
-                markersRoot.anchorMax = Vector2.one;
-                markersRoot.offsetMin = Vector2.zero;
-                markersRoot.offsetMax = Vector2.zero;
-                markersRoot.localScale = Vector3.one;
-                markersRoot.localPosition = Vector3.zero;
-                markersRoot.SetAsLastSibling();
+                return;
             }
 
             markersRoot.SetAsLastSibling();
@@ -510,7 +719,105 @@ namespace FantasyGuildmaster.Map
                 marker.name = $"RegionMarker_{region.id}";
                 marker.Setup(region, mapRect, SelectRegion);
                 _markersByRegion[region.id] = marker;
+                Debug.Log($"[MapController] Marker spawned: regionId={region.id}, markerPath={GetHierarchyPath(marker.transform)}, parent={GetHierarchyPath(marker.transform.parent)}");
             }
+
+            Debug.Log($"[MapController] Markers spawned total={_markersByRegion.Count}");
+        }
+
+        private bool EnsureMarkersRoot()
+        {
+            if (markersRoot != null)
+            {
+                return true;
+            }
+
+            var parent = FindMarkersParent();
+            if (parent == null)
+            {
+                Debug.LogWarning("[MapController] markersRoot is not assigned and UI parent was not found yet. Marker spawn deferred.");
+                return false;
+            }
+
+            var fallback = new GameObject("MarkersRoot", typeof(RectTransform));
+            markersRoot = fallback.GetComponent<RectTransform>();
+            markersRoot.SetParent(parent, false);
+            markersRoot.anchorMin = Vector2.zero;
+            markersRoot.anchorMax = Vector2.one;
+            markersRoot.offsetMin = Vector2.zero;
+            markersRoot.offsetMax = Vector2.zero;
+            markersRoot.localScale = Vector3.one;
+            markersRoot.localPosition = Vector3.zero;
+            markersRoot.SetAsLastSibling();
+            Debug.Log($"[MapController] Created fallback markersRoot under {GetHierarchyPath(parent)}");
+            Debug.Log($"[MapController] markersRoot parent path={GetHierarchyPath(markersRoot.parent)}");
+            return true;
+        }
+
+        private RectTransform FindMarkersParent()
+        {
+            if (markersRootParent != null)
+            {
+                return markersRootParent;
+            }
+
+            if (mapScrollRect != null && mapScrollRect.content != null)
+            {
+                Debug.Log($"[MapController] Found map scroll rect: {GetHierarchyPath(mapScrollRect.transform)}");
+                return mapScrollRect.content;
+            }
+
+            var scrollRects = GetComponentsInChildren<ScrollRect>(true);
+            for (var i = 0; i < scrollRects.Length; i++)
+            {
+                var candidate = scrollRects[i];
+                if (candidate == null)
+                {
+                    continue;
+                }
+
+                var candidatePath = GetHierarchyPath(candidate.transform);
+                var isOverlay = candidatePath.IndexOf("OverlayLayer", StringComparison.OrdinalIgnoreCase) >= 0
+                    || candidatePath.IndexOf("RegionDetails", StringComparison.OrdinalIgnoreCase) >= 0
+                    || candidatePath.IndexOf("Contracts", StringComparison.OrdinalIgnoreCase) >= 0;
+
+                if (isOverlay)
+                {
+                    Debug.Log($"[MapController] Ignored overlay scroll rect: {candidatePath}");
+                    continue;
+                }
+
+                var isMapScroll = candidate.name.IndexOf("MapScrollRect", StringComparison.OrdinalIgnoreCase) >= 0
+                    || candidatePath.IndexOf("MapScrollRect", StringComparison.OrdinalIgnoreCase) >= 0
+                    || candidatePath.IndexOf("MapLayer", StringComparison.OrdinalIgnoreCase) >= 0
+                    || candidatePath.IndexOf("MapLayout", StringComparison.OrdinalIgnoreCase) >= 0;
+
+                if (!isMapScroll)
+                {
+                    continue;
+                }
+
+                if (candidate.content != null)
+                {
+                    Debug.Log($"[MapController] Found map scroll rect: {candidatePath}");
+                    mapScrollRect = candidate;
+                    return candidate.content;
+                }
+            }
+
+            var namedMapScrollRect = transform.Find("MapCanvas/MapLayer/MapScrollRect") as RectTransform
+                ?? transform.Find("MapCanvas/MapLayout/MapScrollRect") as RectTransform;
+            if (namedMapScrollRect != null)
+            {
+                mapScrollRect = namedMapScrollRect.GetComponent<ScrollRect>();
+                if (mapScrollRect != null && mapScrollRect.content != null)
+                {
+                    Debug.Log($"[MapController] Found map scroll rect: {GetHierarchyPath(mapScrollRect.transform)}");
+                    return mapScrollRect.content;
+                }
+            }
+
+            return null;
         }
 
         private static string GetHierarchyPath(Transform node)
@@ -540,6 +847,21 @@ namespace FantasyGuildmaster.Map
                 {
                     mapRect = mapImage;
                 }
+            }
+
+            if (mapScrollRect == null)
+            {
+                var mapScrollRectTransform = transform.Find("MapCanvas/MapLayer/MapScrollRect")
+                    ?? transform.Find("MapCanvas/MapLayout/MapScrollRect");
+                if (mapScrollRectTransform != null)
+                {
+                    mapScrollRect = mapScrollRectTransform.GetComponent<ScrollRect>();
+                }
+            }
+
+            if (markersRootParent == null && mapScrollRect != null)
+            {
+                markersRootParent = mapScrollRect.content;
             }
 
             if (markersRoot == null)
@@ -1070,13 +1392,13 @@ namespace FantasyGuildmaster.Map
 
         private void RefreshSquadStatusHud()
         {
-            if (squadStatusHud == null)
+            var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            if (squadStatusHud != null)
             {
-                return;
+                squadStatusHud.Sync(GetRosterSquads(), _travelTasks, ResolveRegionName, now);
             }
 
-            var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            squadStatusHud.Sync(GetRosterSquads(), _travelTasks, ResolveRegionName, now);
+            squadDetailsPanel?.Refresh();
         }
 
         public IReadOnlyList<SquadData> GetSquads()
@@ -1102,6 +1424,54 @@ namespace FantasyGuildmaster.Map
             }
 
             return regionId;
+        }
+
+        private void EnsureSelectedSquad()
+        {
+            if (!string.IsNullOrWhiteSpace(_selectedSquadId))
+            {
+                return;
+            }
+
+            var squads = GetRosterSquads();
+            if (squads != null && squads.Count > 0)
+            {
+                _selectedSquadId = squads[0].id;
+            }
+        }
+
+        public void SetSelectedSquad(string squadId)
+        {
+            if (string.IsNullOrWhiteSpace(squadId) || _selectedSquadId == squadId)
+            {
+                return;
+            }
+
+            _selectedSquadId = squadId;
+            squadDetailsPanel?.Refresh();
+            RefreshSquadStatusHud();
+        }
+
+        public string GetSelectedSquadId()
+        {
+            EnsureSelectedSquad();
+            return _selectedSquadId;
+        }
+
+        public SquadData GetSelectedSquad()
+        {
+            EnsureSelectedSquad();
+            return FindSquad(_selectedSquadId);
+        }
+
+        public TravelTask GetTravelTaskForSquad(string squadId)
+        {
+            return FindTaskForSquad(squadId);
+        }
+
+        public string GetRegionNameById(string regionId)
+        {
+            return ResolveRegionName(regionId);
         }
 
         private static string ToTimerText(int remainingSeconds)
