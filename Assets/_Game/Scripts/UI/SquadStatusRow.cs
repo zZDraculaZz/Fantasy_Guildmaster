@@ -93,7 +93,7 @@ namespace FantasyGuildmaster.UI
                 return;
             }
 
-            text.enableWordWrapping = false;
+            text.textWrappingMode = TextWrappingModes.NoWrap;
             text.overflowMode = TextOverflowModes.Overflow;
             text.fontSize = text.fontSize <= 0f ? 14f : text.fontSize;
             var c = text.color;
