@@ -608,18 +608,8 @@ namespace FantasyGuildmaster.Editor
 
             var panel = panelGo.GetComponent<SquadDetailsPanel>() ?? panelGo.AddComponent<SquadDetailsPanel>();
             var panelSo = new SerializedObject(panel);
-            var panelTitle = panelSo.FindProperty("titleText");
-            if (panelTitle != null)
-            {
-                panelTitle.objectReferenceValue = title;
-            }
-
-            var panelBody = panelSo.FindProperty("bodyText");
-            if (panelBody != null)
-            {
-                panelBody.objectReferenceValue = body;
-            }
-
+            AssignOptionalObjectReference(panelSo, "titleText", title);
+            AssignOptionalObjectReference(panelSo, "bodyText", body);
             panelSo.ApplyModifiedPropertiesWithoutUndo();
             return panel;
         }
@@ -937,102 +927,15 @@ namespace FantasyGuildmaster.Editor
         private static void AssignSquadStatusHud(SquadStatusHUD hud, TMP_Text title, TMP_Text goldText, TMP_Text bodyText)
         {
             var so = new SerializedObject(hud);
-
-            var titleProp = so.FindProperty("titleText");
-            if (titleProp != null)
-            {
-                titleProp.objectReferenceValue = title;
-            }
-
-            var goldProp = so.FindProperty("goldText");
-            if (goldProp != null)
-            {
-                goldProp.objectReferenceValue = goldText;
-            }
-
-            var bodyProp = so.FindProperty("bodyText");
-            if (bodyProp != null)
-            {
-                bodyProp.objectReferenceValue = bodyText;
-            }
-
+            AssignOptionalObjectReference(so, "titleText", title);
+            AssignOptionalObjectReference(so, "goldText", goldText);
+            AssignOptionalObjectReference(so, "bodyText", bodyText);
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 
-        private static void TryAssignObjectReference(SerializedObject serializedObject, string propertyName, UnityEngine.Object value)
+        private static void AssignOptionalObjectReference(SerializedObject serializedObject, string propertyName, UnityEngine.Object value)
         {
             if (serializedObject == null || string.IsNullOrWhiteSpace(propertyName))
-            {
-                return;
-            }
-
-            var property = serializedObject.FindProperty(propertyName);
-            if (property != null)
-            {
-                property.objectReferenceValue = value;
-            }
-        }
-
-        private static void AssignSquadDetailsPanel(SquadDetailsPanel panel, TMP_Text title, TMP_Text body)
-        {
-            if (panel == null)
-            {
-                return;
-            }
-
-            var so = new SerializedObject(panel);
-            TryAssignObjectReference(so, "titleText", title);
-            TryAssignObjectReference(so, "bodyText", body);
-            so.ApplyModifiedPropertiesWithoutUndo();
-        }
-
-        private static void TryAssignObjectReference(SerializedObject serializedObject, string propertyName, UnityEngine.Object value)
-        {
-            if (serializedObject == null)
-            {
-                return;
-            }
-
-            var property = serializedObject.FindProperty(propertyName);
-            if (property != null)
-            {
-                property.objectReferenceValue = value;
-            }
-        }
-
-        private static void AssignSquadDetailsPanel(SquadDetailsPanel panel, TMP_Text title, TMP_Text body)
-        {
-            var so = new SerializedObject(panel);
-            TryAssignObjectReference(so, "titleText", title);
-            TryAssignObjectReference(so, "bodyText", body);
-            so.ApplyModifiedPropertiesWithoutUndo();
-        }
-
-        private static void TryAssignObjectReference(SerializedObject serializedObject, string propertyName, UnityEngine.Object value)
-        {
-            if (serializedObject == null)
-            {
-                return;
-            }
-
-            var property = serializedObject.FindProperty(propertyName);
-            if (property != null)
-            {
-                property.objectReferenceValue = value;
-            }
-        }
-
-        private static void AssignSquadDetailsPanel(SquadDetailsPanel panel, TMP_Text title, TMP_Text body)
-        {
-            var so = new SerializedObject(panel);
-            TryAssignObjectReference(so, "titleText", title);
-            TryAssignObjectReference(so, "bodyText", body);
-            so.ApplyModifiedPropertiesWithoutUndo();
-        }
-
-        private static void TryAssignObjectReference(SerializedObject serializedObject, string propertyName, UnityEngine.Object value)
-        {
-            if (serializedObject == null)
             {
                 return;
             }
