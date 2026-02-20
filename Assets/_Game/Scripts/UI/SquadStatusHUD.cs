@@ -1,18 +1,15 @@
 using System;
-using System.Text;
 using System.Collections;
-using UnityEngine;
-using TMPro;
+using System.Text;
 using FantasyGuildmaster.Core;
 using FantasyGuildmaster.Map;
+using TMPro;
+using UnityEngine;
+using UnityEngine.EventSystems;
 
 namespace FantasyGuildmaster.UI
 {
-    /// <summary>
-    /// Minimal deterministic HUD: renders all squad statuses into a single TMP text block.
-    /// No ScrollRect, no row prefabs, no hierarchy tricks.
-    /// </summary>
-    public class SquadStatusHUD : MonoBehaviour
+    public class SquadStatusHUD : MonoBehaviour, IPointerClickHandler
     {
         [Header("Optional UI")]
         [SerializeField] private TMP_Text titleText;
@@ -35,7 +32,6 @@ namespace FantasyGuildmaster.UI
 
         private void OnEnable()
         {
-            // Delay one frame to let MapController seed roster.
             StartCoroutine(DelayedBindAndStart());
         }
 
@@ -57,27 +53,27 @@ namespace FantasyGuildmaster.UI
             RefreshNow();
 
             if (_tick == null)
+            {
                 _tick = StartCoroutine(TickRoutine());
+            }
         }
 
         private IEnumerator TickRoutine()
         {
-            var w = new WaitForSeconds(Mathf.Max(0.2f, refreshSeconds));
+            var wait = new WaitForSeconds(Mathf.Max(0.2f, refreshSeconds));
             while (enabled && gameObject.activeInHierarchy)
             {
                 RefreshNow();
-                yield return w;
+                yield return wait;
             }
         }
 
-        /// <summary>Compatibility entry point if something calls it.</summary>
         public void BindGameState(MapController mc)
         {
             _map = mc;
             RefreshNow();
         }
 
-        // Compatibility with current MapController usage.
         public void BindGameState(GameState gs)
         {
             if (_gameState != null)
@@ -94,15 +90,40 @@ namespace FantasyGuildmaster.UI
             }
         }
 
-        // Compatibility entry point used by MapController.
         public void Sync(System.Collections.Generic.IReadOnlyList<SquadData> squads, System.Collections.Generic.IReadOnlyList<TravelTask> tasks, Func<string, string> resolveRegionName, long nowUnix)
         {
             Render(squads, tasks, resolveRegionName, nowUnix);
         }
 
+        public void OnPointerClick(PointerEventData eventData)
+        {
+            if (_map == null || bodyText == null || eventData == null)
+            {
+                return;
+            }
+
+            var linkIndex = TMP_TextUtilities.FindIntersectingLink(bodyText, eventData.position, eventData.pressEventCamera);
+            if (linkIndex < 0 || linkIndex >= bodyText.textInfo.linkCount)
+            {
+                return;
+            }
+
+            var linkInfo = bodyText.textInfo.linkInfo[linkIndex];
+            var squadId = linkInfo.GetLinkID();
+            if (!string.IsNullOrWhiteSpace(squadId))
+            {
+                _map.SetSelectedSquad(squadId);
+                RefreshNow();
+            }
+        }
+
         private void BindIfNeeded()
         {
-            if (_map != null) return;
+            if (_map != null)
+            {
+                return;
+            }
+
             _map = UnityEngine.Object.FindFirstObjectByType<MapController>();
         }
 
@@ -112,7 +133,9 @@ namespace FantasyGuildmaster.UI
             BindIfNeeded();
 
             if (titleText != null && string.IsNullOrWhiteSpace(titleText.text))
+            {
                 titleText.text = "Squads";
+            }
 
             if (_map == null)
             {
@@ -120,9 +143,7 @@ namespace FantasyGuildmaster.UI
                 return;
             }
 
-            var squads = _map.GetSquads();
-            var tasks = _map.GetTravelTasks();
-            Render(squads, tasks, null, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+            Render(_map.GetSquads(), _map.GetTravelTasks(), _map.GetRegionNameById, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
         }
 
         private void Render(System.Collections.Generic.IReadOnlyList<SquadData> squads, System.Collections.Generic.IReadOnlyList<TravelTask> tasks, Func<string, string> resolveRegionName, long nowUnix)
@@ -133,102 +154,162 @@ namespace FantasyGuildmaster.UI
                 return;
             }
 
-            var sb = new StringBuilder(256);
-            for (int i = 0; i < squads.Count; i++)
+            var selectedId = _map != null ? _map.GetSelectedSquadId() : null;
+            var sb = new StringBuilder(512);
+
+            for (var i = 0; i < squads.Count; i++)
             {
-                var s = squads[i];
-                if (s == null) continue;
+                var squad = squads[i];
+                if (squad == null)
+                {
+                    continue;
+                }
 
-                string name = string.IsNullOrWhiteSpace(s.name) ? s.id : s.name;
-                string status = BuildStatusLine(s.id, tasks, resolveRegionName, nowUnix);
+                var stateText = BuildStateText(squad.id, tasks, resolveRegionName);
+                var membersText = BuildMembersText(squad);
+                var readinessText = $"Readiness {ComputeReadinessPercent(squad)}%";
+                var squadName = string.IsNullOrWhiteSpace(squad.name) ? squad.id : squad.name;
+                var line = $"{squadName} | {stateText} | {membersText} | {readinessText}";
+                var isSelected = !string.IsNullOrEmpty(selectedId) && selectedId == squad.id;
+                var color = isSelected ? "#FFE08A" : "#E9F4FF";
 
-                // HP is optional — show if available.
-                string hp = "";
-                if (s.maxHp > 0)
-                    hp = $" | HP {Mathf.Clamp(s.hp, 0, s.maxHp)}/{s.maxHp}";
-
-                sb.Append(name).Append(" | ").Append(status).Append(hp);
-                if (i < squads.Count - 1) sb.Append('\n');
+                sb.Append($"<link={squad.id}><color={color}>{line}</color></link>");
+                if (i < squads.Count - 1)
+                {
+                    sb.Append('\n');
+                }
             }
 
             bodyText.text = sb.ToString();
         }
 
-        private string BuildStatusLine(string squadId, System.Collections.Generic.IReadOnlyList<TravelTask> tasks, Func<string, string> resolveRegionName, long nowUnix)
+        private static string BuildStateText(string squadId, System.Collections.Generic.IReadOnlyList<TravelTask> tasks, Func<string, string> resolveRegionName)
         {
-            TravelTask task = null;
-            if (tasks != null)
-            {
-                for (var i = 0; i < tasks.Count; i++)
-                {
-                    if (tasks[i] != null && tasks[i].squadId == squadId)
-                    {
-                        task = tasks[i];
-                        break;
-                    }
-                }
-            }
-
+            var task = FindTaskForSquad(tasks, squadId);
             if (task == null)
+            {
                 return "Idle";
-
-            int secondsLeft = Mathf.Max(0, (int)(task.endUnix - nowUnix));
-            string eta = FormatMMSS(secondsLeft);
+            }
 
             if (task.phase == TravelPhase.Outbound)
             {
-                var toRegionId = string.IsNullOrWhiteSpace(task.toRegionId) ? "unknown" : task.toRegionId;
-                var resolved = resolveRegionName != null ? resolveRegionName(toRegionId) : toRegionId;
-                return $"Traveling → {resolved} (ETA {eta})";
+                var toRegion = resolveRegionName != null ? resolveRegionName(task.toRegionId) : task.toRegionId;
+                return $"Traveling -> {Truncate(toRegion, 12)} (OUT)";
             }
 
-            if (task.phase == TravelPhase.Return)
-                return $"Returning (ETA {eta})";
-
-            return $"Busy (ETA {eta})";
+            return "Returning (RET)";
         }
 
-        private static string FormatMMSS(int totalSeconds)
+        private static TravelTask FindTaskForSquad(System.Collections.Generic.IReadOnlyList<TravelTask> tasks, string squadId)
         {
-            int m = totalSeconds / 60;
-            int s = totalSeconds % 60;
-            return $"{m:00}:{s:00}";
+            if (tasks == null)
+            {
+                return null;
+            }
+
+            for (var i = 0; i < tasks.Count; i++)
+            {
+                var task = tasks[i];
+                if (task != null && task.squadId == squadId)
+                {
+                    return task;
+                }
+            }
+
+            return null;
+        }
+
+        private static string BuildMembersText(SquadData squad)
+        {
+            var members = squad != null ? squad.members : null;
+            if (members == null || members.Count == 0)
+            {
+                return "Members ?";
+            }
+
+            return $"Members {members.Count}";
+        }
+
+        private static int ComputeReadinessPercent(SquadData squad)
+        {
+            var members = squad != null ? squad.members : null;
+            if (members == null || members.Count == 0)
+            {
+                return 100;
+            }
+
+            float sum = 0f;
+            var validCount = 0;
+            for (var i = 0; i < members.Count; i++)
+            {
+                var member = members[i];
+                if (member == null || member.maxHp <= 0)
+                {
+                    continue;
+                }
+
+                validCount++;
+                sum += Mathf.Clamp01(member.hp / (float)member.maxHp);
+            }
+
+            if (validCount == 0)
+            {
+                return 100;
+            }
+
+            return Mathf.RoundToInt((sum / validCount) * 100f);
+        }
+
+        private static string Truncate(string value, int maxChars)
+        {
+            if (string.IsNullOrWhiteSpace(value) || value.Length <= maxChars)
+            {
+                return string.IsNullOrWhiteSpace(value) ? "Unknown" : value;
+            }
+
+            return value.Substring(0, Math.Max(1, maxChars - 1)) + "…";
         }
 
         private void EnsureBodyText()
         {
-            if (bodyText != null) return;
-
-            // Try find existing child
-            var t = transform.Find("BodyText");
-            if (t != null) bodyText = t.GetComponent<TMP_Text>();
+            if (bodyText == null)
+            {
+                var existing = transform.Find("BodyText");
+                if (existing != null)
+                {
+                    bodyText = existing.GetComponent<TMP_Text>();
+                }
+            }
 
             if (bodyText == null)
             {
                 var go = new GameObject("BodyText", typeof(RectTransform), typeof(TextMeshProUGUI));
                 go.transform.SetParent(transform, false);
-
-                var rt = (RectTransform)go.transform;
-                rt.anchorMin = new Vector2(0f, 0f);
-                rt.anchorMax = new Vector2(1f, 1f);
-                rt.pivot = new Vector2(0f, 1f);
-                rt.offsetMin = new Vector2(12f, 12f);
-                rt.offsetMax = new Vector2(-12f, -12f);
-
                 bodyText = go.GetComponent<TextMeshProUGUI>();
             }
 
-            // Style
+            var rect = bodyText.rectTransform;
+            rect.anchorMin = new Vector2(0f, 1f);
+            rect.anchorMax = new Vector2(1f, 1f);
+            rect.pivot = new Vector2(0.5f, 1f);
+            rect.anchoredPosition = Vector2.zero;
+            rect.sizeDelta = Vector2.zero;
+
             if (goldText != null && goldText.font != null)
+            {
                 bodyText.font = goldText.font;
+            }
             else if (TMP_Settings.defaultFontAsset != null)
+            {
                 bodyText.font = TMP_Settings.defaultFontAsset;
+            }
 
             bodyText.color = Color.white;
-            bodyText.fontSize = 18;
-            bodyText.raycastTarget = false;
+            bodyText.fontSize = 15f;
+            bodyText.raycastTarget = true;
             bodyText.alignment = TextAlignmentOptions.TopLeft;
-            bodyText.textWrappingMode = TextWrappingModes.NoWrap;
+            bodyText.textWrappingMode = TextWrappingModes.Normal;
+            bodyText.overflowMode = TextOverflowModes.Ellipsis;
         }
 
         private void OnGoldChanged(int value)
