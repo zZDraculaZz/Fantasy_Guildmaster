@@ -430,9 +430,6 @@ namespace FantasyGuildmaster.Map
                             allowSolo = true
                         });
                     }
-
-                    encounterManager.EnqueueEncounter(task.toRegionId, squad.id, () => OnEncounterResolved(squad.id, task.toRegionId, task.contractId, task.contractReward));
-                    TryAdvanceDayFlow("EncounterQueued");
                 }
                 else
                 {
@@ -442,6 +439,18 @@ namespace FantasyGuildmaster.Map
                         contracts[i].reward = random.Next(50, 250);
                     }
                 }
+
+                if (encounterManager != null)
+                {
+                    encounterManager.EnqueueEncounter(task.toRegionId, squad.id, () => OnEncounterResolved(squad.id, task.toRegionId, task.contractId, task.contractReward));
+                    TryAdvanceDayFlow("EncounterQueued");
+                }
+                else
+                {
+                    OnEncounterResolved(squad.id, task.toRegionId, task.contractId, task.contractReward);
+                }
+
+                return;
             }
 
             if (assignedSoloHunter != null)
@@ -480,7 +489,7 @@ namespace FantasyGuildmaster.Map
                     return;
                 }
 
-                StartSoloTravelTask(soloHunter, GuildHqId, contractId, contractReward, TravelPhase.Return);
+                StartSoloTravelTask(soloHunter, GuildHqId, contractId, contractReward, TravelPhase.Return, regionId);
                 TryAdvanceDayFlow("EncounterResolved");
                 return;
             }
@@ -493,21 +502,9 @@ namespace FantasyGuildmaster.Map
                 return;
             }
 
-            missionReportPanel = FindFirstObjectByType<MissionReportPanel>();
-            if (missionReportPanel != null)
-            {
-                _reportOpen = missionReportPanel.IsOpen;
-                EnsureMissionReportInteractionInfra();
-                return;
-            }
-
-            var prefab = Resources.Load<GameObject>("Prefabs/MissionReportPanel");
-            var canvas = EnsureCanvas();
-            if (canvas == null)
-            {
-                return;
-            }
-
+            StartTravelTask(squad, regionId, GuildHqId, contractId, contractReward, TravelPhase.Return);
+            squad.state = SquadState.ReturningToHQ;
+            NotifyRosterChanged();
             TryAdvanceDayFlow("EncounterResolved");
         }        private void EnsureMissionReportPanel()
         {
@@ -1332,7 +1329,8 @@ namespace FantasyGuildmaster.Map
             }
 
             var soloHunters = hunterRoster != null ? hunterRoster.GetSoloHunters() : new List<HunterData>();
-            squadSelectPanel.Show(idle, soloHunters, option =>
+            var requirementSummary = BuildContractRequirementSummary(contract);
+            squadSelectPanel.Show(idle, soloHunters, requirementSummary, option =>
             {
                 if (option.isSolo)
                 {
@@ -1413,6 +1411,19 @@ namespace FantasyGuildmaster.Map
             });
         }
 
+        private static string BuildContractRequirementSummary(ContractData contract)
+        {
+            if (contract == null)
+            {
+                return "BOTH • Rank E";
+            }
+
+            var typeTag = contract.allowSquad && contract.allowSolo
+                ? "BOTH"
+                : (contract.allowSolo ? "SOLO" : "SQUAD");
+            return $"{typeTag} • Rank {contract.minRank}";
+        }
+
         private void StartTravelTask(SquadData squad, string fromRegionId, string toRegionId, string contractId, int contractReward, TravelPhase phase)
         {
             if (squad == null)
@@ -1481,7 +1492,7 @@ namespace FantasyGuildmaster.Map
                 _travelTokenBySquadId[task.squadId] = token;
             }
 
-            token.Bind(squad.id, squad.name);
+            token.Bind($"squad:{squad.id}", squad.name);
 
             if (_markersByRegion.TryGetValue(task.fromRegionId, out var fromMarker) && fromMarker != null)
             {
@@ -1517,7 +1528,7 @@ namespace FantasyGuildmaster.Map
                 _travelTokenBySoloHunterId[hunter.id] = token;
             }
 
-            token.Bind($"solo_{hunter.id}", $"Solo {hunter.name}");
+            token.Bind($"solo:{hunter.id}", $"Solo {hunter.name}");
             if (_markersByRegion.TryGetValue(task.fromRegionId, out var fromMarker) && fromMarker != null)
             {
                 var remaining = Mathf.Max(0, (int)(task.endSimSeconds - SimulationTime.NowSeconds));

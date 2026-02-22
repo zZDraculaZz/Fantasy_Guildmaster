@@ -22,15 +22,21 @@ namespace FantasyGuildmaster.UI
         [SerializeField] private Button squadButtonPrefab;
         [SerializeField] private Button closeButton;
         [SerializeField] private TMP_Text errorText;
+        [SerializeField] private TMP_Text requirementText;
 
         private readonly List<Button> _buttons = new();
         private bool _pauseHeld;
 
-        public void Show(List<SquadData> idleSquads, List<HunterData> soloHunters, Action<AssignmentOption> onSelected)
+        public void Show(List<SquadData> idleSquads, List<HunterData> soloHunters, string requirementSummary, Action<AssignmentOption> onSelected)
         {
             if (errorText == null)
             {
                 errorText = transform.Find("ErrorText")?.GetComponent<TMP_Text>();
+            }
+
+            if (requirementText == null)
+            {
+                requirementText = transform.Find("RequirementText")?.GetComponent<TMP_Text>();
             }
 
             gameObject.SetActive(true);
@@ -43,6 +49,14 @@ namespace FantasyGuildmaster.UI
             if (titleText != null)
             {
                 titleText.text = "Assign Party";
+            }
+
+            if (requirementText != null)
+            {
+                requirementText.gameObject.SetActive(true);
+                requirementText.text = string.IsNullOrWhiteSpace(requirementSummary) ? "Requires: BOTH • Rank E" : $"Requires: {requirementSummary}";
+                requirementText.textWrappingMode = TextWrappingModes.NoWrap;
+                requirementText.overflowMode = TextOverflowModes.Ellipsis;
             }
 
             ClearError();
@@ -160,6 +174,11 @@ namespace FantasyGuildmaster.UI
         public void Hide()
         {
             ClearError();
+            if (requirementText != null)
+            {
+                requirementText.text = string.Empty;
+                requirementText.gameObject.SetActive(false);
+            }
             gameObject.SetActive(false);
             if (_pauseHeld)
             {
