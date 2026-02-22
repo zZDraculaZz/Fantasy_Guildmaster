@@ -5,6 +5,7 @@ using FantasyGuildmaster.Map;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using System.Collections.Generic;
 
 namespace FantasyGuildmaster.UI
 {
@@ -23,6 +24,7 @@ namespace FantasyGuildmaster.UI
         private MapController _map;
         private GameState _gameState;
         private Coroutine _tick;
+        private bool _nullSafeLogPrinted;
 
         private void Awake() => EnsureBodyText();
 
@@ -70,7 +72,7 @@ namespace FantasyGuildmaster.UI
             }
         }
 
-        public void Sync(System.Collections.Generic.IReadOnlyList<SquadData> squads, System.Collections.Generic.IReadOnlyList<TravelTask> tasks, System.Func<string, string> resolveRegionName, long nowUnix)
+        public void Sync(IReadOnlyList<SquadData> squads, IReadOnlyList<TravelTask> tasks, System.Func<string, string> resolveRegionName, long nowUnix)
         {
             Render(squads, tasks, resolveRegionName, nowUnix);
         }
@@ -108,8 +110,21 @@ namespace FantasyGuildmaster.UI
             Render(_map.GetSquads(), _map.GetTravelTasks(), _map.GetRegionNameById, SimulationTime.NowSeconds);
         }
 
-        private void Render(System.Collections.Generic.IReadOnlyList<SquadData> squads, System.Collections.Generic.IReadOnlyList<TravelTask> tasks, System.Func<string, string> resolveRegionName, long nowUnix)
+        private void Render(IReadOnlyList<SquadData> squads, IReadOnlyList<TravelTask> tasks, System.Func<string, string> resolveRegionName, long nowUnix)
         {
+            var squadsNull = squads == null;
+            var tasksNull = tasks == null;
+            var resolverNull = resolveRegionName == null;
+            if ((squadsNull || tasksNull || resolverNull) && !_nullSafeLogPrinted)
+            {
+                _nullSafeLogPrinted = true;
+                Debug.Log($"[HUD] Null-safe path used squadsNull={squadsNull} tasksNull={tasksNull} resolverNull={resolverNull} [TODO REMOVE]");
+            }
+
+            squads ??= System.Array.Empty<SquadData>();
+            tasks ??= System.Array.Empty<TravelTask>();
+            resolveRegionName ??= id => string.IsNullOrEmpty(id) ? "?" : id;
+
             var sb = new StringBuilder(1024);
             sb.AppendLine("<b>Squads</b>");
 
@@ -124,6 +139,7 @@ namespace FantasyGuildmaster.UI
                 {
                     var squad = squads[i];
                     if (squad == null) continue;
+                    if (string.IsNullOrEmpty(squad.id)) continue;
                     var stateText = BuildSquadStateText(squad, tasks, resolveRegionName);
                     var membersText = $"Members {((squad.hunterIds != null && squad.hunterIds.Count > 0) ? squad.hunterIds.Count : squad.membersCount)}";
                     var readinessText = $"Readiness {ComputeReadinessPercent(squad)}%";
@@ -136,7 +152,7 @@ namespace FantasyGuildmaster.UI
             }
 
             sb.AppendLine("<b>Solo Hunters</b>");
-            var solos = _map.GetSoloHunters();
+            var solos = _map != null ? _map.GetSoloHunters() : null;
             if (solos == null || solos.Count == 0)
             {
                 sb.Append("- none");
@@ -147,6 +163,7 @@ namespace FantasyGuildmaster.UI
                 {
                     var hunter = solos[i];
                     if (hunter == null) continue;
+                    if (string.IsNullOrEmpty(hunter.id)) continue;
                     var state = BuildSoloStateText(hunter, resolveRegionName);
                     var lone = hunter.loneWolf ? " LoneWolf" : string.Empty;
                     var exhausted = hunter.exhaustedToday ? " Exhausted" : string.Empty;
@@ -175,7 +192,7 @@ namespace FantasyGuildmaster.UI
             return "Returning (RET)";
         }
 
-        private static string BuildSquadStateText(SquadData squad, System.Collections.Generic.IReadOnlyList<TravelTask> tasks, System.Func<string, string> resolveRegionName)
+        private static string BuildSquadStateText(SquadData squad, IReadOnlyList<TravelTask> tasks, System.Func<string, string> resolveRegionName)
         {
             var squadId = squad != null ? squad.id : null;
             var task = FindTaskForSquad(tasks, squadId);
@@ -193,7 +210,7 @@ namespace FantasyGuildmaster.UI
             return "Returning (RET)";
         }
 
-        private static TravelTask FindTaskForSquad(System.Collections.Generic.IReadOnlyList<TravelTask> tasks, string squadId)
+        private static TravelTask FindTaskForSquad(IReadOnlyList<TravelTask> tasks, string squadId)
         {
             if (tasks == null || string.IsNullOrEmpty(squadId)) return null;
             for (var i = 0; i < tasks.Count; i++)

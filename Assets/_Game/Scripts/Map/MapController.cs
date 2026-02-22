@@ -51,6 +51,7 @@ namespace FantasyGuildmaster.Map
         [SerializeField] private TMP_Text endDayConfirmBodyText;
         [SerializeField] private Button endDayConfirmYesButton;
         [SerializeField] private Button endDayConfirmNoButton;
+        [SerializeField] private RectTransform endDayConfirmContent;
 
         private readonly Dictionary<string, List<ContractData>> _contractsByRegion = new();
         private readonly Dictionary<string, RegionData> _regionById = new();
