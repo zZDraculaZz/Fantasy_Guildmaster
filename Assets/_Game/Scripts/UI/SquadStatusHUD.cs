@@ -89,7 +89,7 @@ namespace FantasyGuildmaster.UI
             }
         }
 
-        public void Sync(System.Collections.Generic.IReadOnlyList<SquadData> squads, System.Collections.Generic.IReadOnlyList<TravelTask> tasks, Func<string, string> resolveRegionName, long nowUnix)
+        public void Sync(System.Collections.Generic.IReadOnlyList<SquadData> squads, System.Collections.Generic.IReadOnlyList<TravelTask> tasks, System.Func<string, string> resolveRegionName, long nowUnix)
         {
             Render(squads, tasks, resolveRegionName, nowUnix);
         }
@@ -145,7 +145,7 @@ namespace FantasyGuildmaster.UI
             Render(_map.GetSquads(), _map.GetTravelTasks(), _map.GetRegionNameById, SimulationTime.NowSeconds);
         }
 
-        private void Render(System.Collections.Generic.IReadOnlyList<SquadData> squads, System.Collections.Generic.IReadOnlyList<TravelTask> tasks, Func<string, string> resolveRegionName, long nowUnix)
+        private void Render(System.Collections.Generic.IReadOnlyList<SquadData> squads, System.Collections.Generic.IReadOnlyList<TravelTask> tasks, System.Func<string, string> resolveRegionName, long nowUnix)
         {
             if (squads == null || squads.Count == 0)
             {
@@ -182,7 +182,7 @@ namespace FantasyGuildmaster.UI
             bodyText.text = sb.ToString();
         }
 
-        private static string BuildStateText(SquadData squad, System.Collections.Generic.IReadOnlyList<TravelTask> tasks, Func<string, string> resolveRegionName)
+        private static string BuildStateText(SquadData squad, System.Collections.Generic.IReadOnlyList<TravelTask> tasks, System.Func<string, string> resolveRegionName)
         {
             var squadId = squad != null ? squad.id : null;
             var task = FindTaskForSquad(tasks, squadId);
