@@ -12,8 +12,15 @@ namespace FantasyGuildmaster.UI
         [SerializeField] private TMP_Text bodyText;
         [SerializeField] private RectTransform contentContainer;
         [SerializeField] private ScrollRect detailsScrollRect;
+        public bool forceLegacyText = true;
+        [SerializeField] private float paddingLeft = 8f;
+        [SerializeField] private float paddingRight = 8f;
+        [SerializeField] private float paddingTop = 42f;
+        [SerializeField] private float paddingBottom = 8f;
 
         private MapController _map;
+        private bool _legacyModeLogPrinted;
+        private bool _scrollFixLogPrinted;
 
         public void BindMap(MapController map)
         {
@@ -99,6 +106,21 @@ namespace FantasyGuildmaster.UI
             }
 
             bodyText.text = sb.ToString();
+            if (forceLegacyText)
+            {
+                if (!_legacyModeLogPrinted)
+                {
+                    _legacyModeLogPrinted = true;
+                    Debug.Log("[SquadDetails] forceLegacyText enabled -> showing TMP block");
+                }
+
+                ConfigureLegacyBodyTextLayout();
+            }
+            else
+            {
+                EnsureScrollAnchorsAndMask();
+            }
+
             RefreshLayout();
         }
 
@@ -133,10 +155,14 @@ namespace FantasyGuildmaster.UI
         {
             if (bodyText != null)
             {
+                bodyText.gameObject.SetActive(true);
+                bodyText.enableWordWrapping = true;
+                bodyText.textWrappingMode = TextWrappingModes.Normal;
+                bodyText.overflowMode = TextOverflowModes.Overflow;
                 bodyText.ForceMeshUpdate(true);
             }
 
-            if (contentContainer != null)
+            if (!forceLegacyText && contentContainer != null)
             {
                 LayoutRebuilder.ForceRebuildLayoutImmediate(contentContainer);
             }
@@ -223,7 +249,7 @@ namespace FantasyGuildmaster.UI
                 fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
             }
 
-            if (bodyText != null && contentContainer != null && bodyText.transform.parent != contentContainer)
+            if (!forceLegacyText && bodyText != null && contentContainer != null && bodyText.transform.parent != contentContainer)
             {
                 bodyText.transform.SetParent(contentContainer, false);
                 var rect = bodyText.rectTransform;
@@ -232,6 +258,69 @@ namespace FantasyGuildmaster.UI
                 rect.pivot = new Vector2(0.5f, 1f);
                 rect.anchoredPosition = Vector2.zero;
                 rect.sizeDelta = Vector2.zero;
+            }
+
+            EnsureScrollAnchorsAndMask();
+        }
+
+
+        private void ConfigureLegacyBodyTextLayout()
+        {
+            if (bodyText == null)
+            {
+                return;
+            }
+
+            if (bodyText.transform.parent != transform)
+            {
+                bodyText.transform.SetParent(transform, false);
+            }
+
+            var rect = bodyText.rectTransform;
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.one;
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.offsetMin = new Vector2(paddingLeft, paddingBottom);
+            rect.offsetMax = new Vector2(-paddingRight, -paddingTop);
+        }
+
+        private void EnsureScrollAnchorsAndMask()
+        {
+            if (detailsScrollRect == null)
+            {
+                return;
+            }
+
+            var viewport = detailsScrollRect.viewport;
+            if (viewport != null)
+            {
+                viewport.anchorMin = Vector2.zero;
+                viewport.anchorMax = Vector2.one;
+                viewport.offsetMin = Vector2.zero;
+                viewport.offsetMax = Vector2.zero;
+                if (viewport.GetComponent<Mask>() == null && viewport.GetComponent<RectMask2D>() == null)
+                {
+                    viewport.gameObject.AddComponent<RectMask2D>();
+                }
+            }
+
+            if (contentContainer == null)
+            {
+                contentContainer = detailsScrollRect.content;
+            }
+
+            if (contentContainer != null)
+            {
+                contentContainer.anchorMin = new Vector2(0f, 1f);
+                contentContainer.anchorMax = new Vector2(1f, 1f);
+                contentContainer.pivot = new Vector2(0.5f, 1f);
+                contentContainer.anchoredPosition = Vector2.zero;
+            }
+
+            if (!_scrollFixLogPrinted)
+            {
+                _scrollFixLogPrinted = true;
+                Debug.Log("[ScrollFix] content anchors/pivot fixed");
             }
         }
 
@@ -281,6 +370,14 @@ namespace FantasyGuildmaster.UI
 
             EnsureDetailsScroll();
             EnsureAutoResizeComponents();
+            if (forceLegacyText)
+            {
+                ConfigureLegacyBodyTextLayout();
+            }
+            else
+            {
+                EnsureScrollAnchorsAndMask();
+            }
         }
     }
 }
