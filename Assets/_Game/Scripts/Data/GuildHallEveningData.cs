@@ -4,6 +4,16 @@ using System.Collections.Generic;
 namespace FantasyGuildmaster.Data
 {
     [Serializable]
+    public sealed class GuildHallCharacterData
+    {
+        public string id;
+        public string displayName;
+        public string talkSceneId;
+        public float posX = 0.5f;
+        public float posY = 0.5f;
+    }
+
+    [Serializable]
     public sealed class GuildHallLineData
     {
         public string speaker;
@@ -20,6 +30,8 @@ namespace FantasyGuildmaster.Data
     [Serializable]
     public sealed class GuildHallEveningData
     {
+        public string forcedIntroSceneId;
+        public List<GuildHallCharacterData> characters = new();
         public List<GuildHallSceneData> scenes = new();
 
         public GuildHallSceneData FindScene(string sceneId)

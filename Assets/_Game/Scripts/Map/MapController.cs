@@ -388,7 +388,8 @@ namespace FantasyGuildmaster.Map
                 _guildHallEveningData = GuildHallEveningLoader.Load();
             }
 
-            guildHallPanel.ShowHub(_guildHallEveningData, OnGuildHallNextDay, ApplyRestEveningEffect);
+            EnsureEventSystem();
+            guildHallPanel.ShowEvening(_guildHallEveningData, OnGuildHallNextDay, ApplyRestEveningEffect);
         }
 
         private void ApplyRestEveningEffect()
@@ -597,7 +598,7 @@ namespace FantasyGuildmaster.Map
             contentRect.anchorMin = new Vector2(0.5f, 0.5f);
             contentRect.anchorMax = new Vector2(0.5f, 0.5f);
             contentRect.pivot = new Vector2(0.5f, 0.5f);
-            contentRect.sizeDelta = new Vector2(920f, 500f);
+            contentRect.sizeDelta = new Vector2(1000f, 560f);
             content.transform.SetAsLastSibling();
 
             var contentImage = content.GetComponent<Image>();
@@ -610,10 +611,22 @@ namespace FantasyGuildmaster.Map
             contentLayout.childForceExpandWidth = true;
             contentLayout.childForceExpandHeight = false;
 
+            var backgroundGo = new GameObject("Background", typeof(RectTransform), typeof(Image), typeof(LayoutElement));
+            backgroundGo.transform.SetParent(content.transform, false);
+            var backgroundRect = backgroundGo.GetComponent<RectTransform>();
+            backgroundRect.anchorMin = new Vector2(0f, 0f);
+            backgroundRect.anchorMax = new Vector2(1f, 1f);
+            var backgroundImage = backgroundGo.GetComponent<Image>();
+            backgroundImage.color = new Color(0.18f, 0.15f, 0.12f, 1f);
+            backgroundImage.raycastTarget = false;
+            var backgroundLayout = backgroundGo.GetComponent<LayoutElement>();
+            backgroundLayout.minHeight = 380f;
+            backgroundLayout.flexibleHeight = 1f;
+
             var hub = new GameObject("Hub", typeof(RectTransform), typeof(VerticalLayoutGroup));
             hub.transform.SetParent(content.transform, false);
             var hubLayout = hub.GetComponent<VerticalLayoutGroup>();
-            hubLayout.spacing = 8f;
+            hubLayout.spacing = 6f;
             hubLayout.childControlWidth = true;
             hubLayout.childControlHeight = false;
             hubLayout.childForceExpandWidth = true;
@@ -623,20 +636,22 @@ namespace FantasyGuildmaster.Map
             hubTitle.text = "GUILD HALL";
             var hubSubtitle = CreateText(hub.transform, "Subtitle", 22f, FontStyles.Normal, TextAlignmentOptions.Center);
             hubSubtitle.text = "Evening activities";
+            var hubHint = CreateText(hub.transform, "Hint", 18f, FontStyles.Italic, TextAlignmentOptions.Center);
+            hubHint.text = "Click a character to talk";
 
-            var hubButtonsRoot = new GameObject("Buttons", typeof(RectTransform), typeof(VerticalLayoutGroup));
-            hubButtonsRoot.transform.SetParent(hub.transform, false);
-            var hubButtonsLayout = hubButtonsRoot.GetComponent<VerticalLayoutGroup>();
-            hubButtonsLayout.spacing = 8f;
-            hubButtonsLayout.childControlWidth = true;
-            hubButtonsLayout.childControlHeight = true;
-            hubButtonsLayout.childForceExpandWidth = true;
+            var stageGo = new GameObject("Stage", typeof(RectTransform), typeof(Image), typeof(LayoutElement));
+            stageGo.transform.SetParent(hub.transform, false);
+            var stageRect = stageGo.GetComponent<RectTransform>();
+            stageRect.anchorMin = new Vector2(0f, 0f);
+            stageRect.anchorMax = new Vector2(1f, 1f);
+            var stageImage = stageGo.GetComponent<Image>();
+            stageImage.color = new Color(0.24f, 0.2f, 0.16f, 0.6f);
+            stageImage.raycastTarget = false;
+            var stageLayout = stageGo.GetComponent<LayoutElement>();
+            stageLayout.minHeight = 300f;
+            stageLayout.flexibleHeight = 1f;
 
-            var talkQuartermaster = CreateButton(hubButtonsRoot.transform, "TalkQuartermasterButton", "Talk: Quartermaster");
-            var talkCaptain = CreateButton(hubButtonsRoot.transform, "TalkCaptainButton", "Talk: Captain");
-            var reviewRoster = CreateButton(hubButtonsRoot.transform, "ReviewRosterButton", "Review Roster");
-            var restButton = CreateButton(hubButtonsRoot.transform, "RestButton", "Rest");
-            var nextDayButton = CreateButton(hubButtonsRoot.transform, "NextDayButton", "Next Day");
+            var nextDayButton = CreateButton(hub.transform, "NextDayButton", "Next Day");
 
             var dialogue = new GameObject("Dialogue", typeof(RectTransform), typeof(VerticalLayoutGroup));
             dialogue.transform.SetParent(content.transform, false);
@@ -671,13 +686,12 @@ namespace FantasyGuildmaster.Map
                 root,
                 dimmer,
                 contentRect,
+                backgroundImage,
                 hub,
                 hubTitle,
                 hubSubtitle,
-                talkQuartermaster,
-                talkCaptain,
-                reviewRoster,
-                restButton,
+                hubHint,
+                stageRect,
                 nextDayButton,
                 dialogue,
                 speaker,
