@@ -27,7 +27,7 @@ namespace FantasyGuildmaster.UI
         [SerializeField] private TMP_Text rosterRowPrefab;
 
         [Header("Behavior")]
-        public bool forceLegacyText = true;
+        public bool forceLegacyText = false;
         [SerializeField] private float refreshSeconds = 1f;
         [SerializeField] private float paddingLeft = 8f;
         [SerializeField] private float paddingRight = 8f;
@@ -41,6 +41,7 @@ namespace FantasyGuildmaster.UI
         private bool _nullSafeLogPrinted;
         private bool _legacyMissingRefsLogged;
         private bool _scrollFixLogPrinted;
+        private bool _rectDebugLogPrinted;
 
         private void Awake()
         {
@@ -132,6 +133,8 @@ namespace FantasyGuildmaster.UI
 
         private void Render(IReadOnlyList<SquadData> squads, IReadOnlyList<TravelTask> tasks, System.Func<string, string> resolveRegionName, long nowUnix)
         {
+            EnsureRosterScrollInfrastructure();
+
             var squadsNull = squads == null;
             var tasksNull = tasks == null;
             var resolverNull = resolveRegionName == null;
@@ -145,9 +148,7 @@ namespace FantasyGuildmaster.UI
             tasks ??= System.Array.Empty<TravelTask>();
             resolveRegionName ??= id => string.IsNullOrEmpty(id) ? "?" : id;
 
-            var canUseScroll = rosterScrollRect != null
-                && rosterViewport != null
-                && rosterContent != null;
+            var canUseScroll = rosterScrollRect != null && rosterViewport != null && rosterContent != null;
 
             if (!canUseScroll)
             {
@@ -328,10 +329,20 @@ namespace FantasyGuildmaster.UI
             }
 
             ConfigureLegacyBodyTextLayout();
+            if (rosterViewport != null)
+            {
+                var mask = rosterViewport.GetComponent<RectMask2D>();
+                if (mask != null)
+                {
+                    mask.enabled = false;
+                }
+            }
+
             bodyText.gameObject.SetActive(true);
             bodyText.text = text;
             bodyText.textWrappingMode = TextWrappingModes.Normal;
             bodyText.overflowMode = TextOverflowModes.Overflow;
+            bodyText.raycastTarget = false;
             bodyText.ForceMeshUpdate(true);
 
             for (var i = 0; i < _rowPool.Count; i++)
@@ -344,6 +355,7 @@ namespace FantasyGuildmaster.UI
 
             if (rosterContent != null)
             {
+                Canvas.ForceUpdateCanvases();
                 LayoutRebuilder.ForceRebuildLayoutImmediate(rosterContent);
             }
         }
@@ -377,6 +389,7 @@ namespace FantasyGuildmaster.UI
             bodyText.overflowMode = TextOverflowModes.Masking;
             bodyText.raycastTarget = false;
             bodyText.ForceMeshUpdate(true);
+            rect.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, Mathf.Max(1f, bodyText.preferredHeight));
 
             for (var i = 0; i < _rowPool.Count; i++)
             {
@@ -386,7 +399,9 @@ namespace FantasyGuildmaster.UI
                 }
             }
 
+            Canvas.ForceUpdateCanvases();
             LayoutRebuilder.ForceRebuildLayoutImmediate(rosterContent);
+            LogRosterRectsOnce();
         }
 
         private string BuildSoloStateText(HunterData hunter, System.Func<string, string> resolveRegionName)
@@ -477,7 +492,10 @@ namespace FantasyGuildmaster.UI
             }
 
             EnsureRosterScrollInfrastructure();
-            ConfigureLegacyBodyTextLayout();
+            if (forceLegacyText)
+            {
+                ConfigureLegacyBodyTextLayout();
+            }
 
             if (goldText != null && goldText.font != null) bodyText.font = goldText.font;
             else if (TMP_Settings.defaultFontAsset != null) bodyText.font = TMP_Settings.defaultFontAsset;
@@ -494,12 +512,13 @@ namespace FantasyGuildmaster.UI
         {
             if (rosterScrollRect == null)
             {
-                rosterScrollRect = transform.Find("RosterScrollView")?.GetComponent<ScrollRect>();
+                rosterScrollRect = transform.Find("RosterScroll")?.GetComponent<ScrollRect>()
+                    ?? transform.Find("RosterScrollView")?.GetComponent<ScrollRect>();
             }
 
             if (rosterScrollRect == null)
             {
-                var scrollGo = new GameObject("RosterScrollView", typeof(RectTransform), typeof(Image), typeof(ScrollRect));
+                var scrollGo = new GameObject("RosterScroll", typeof(RectTransform), typeof(Image), typeof(ScrollRect));
                 scrollGo.transform.SetParent(transform, false);
                 var scrollRect = scrollGo.GetComponent<RectTransform>();
                 scrollRect.anchorMin = Vector2.zero;
@@ -521,7 +540,7 @@ namespace FantasyGuildmaster.UI
                 rosterViewport.offsetMax = Vector2.zero;
                 viewportGo.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.01f);
 
-                var contentGo = new GameObject("Content", typeof(RectTransform), typeof(VerticalLayoutGroup), typeof(ContentSizeFitter));
+                var contentGo = new GameObject("Content", typeof(RectTransform), typeof(ContentSizeFitter));
                 contentGo.transform.SetParent(viewportGo.transform, false);
                 rosterContent = contentGo.GetComponent<RectTransform>();
                 rosterContent.anchorMin = new Vector2(0f, 1f);
@@ -529,14 +548,6 @@ namespace FantasyGuildmaster.UI
                 rosterContent.pivot = new Vector2(0.5f, 1f);
                 rosterContent.anchoredPosition = Vector2.zero;
                 rosterContent.sizeDelta = Vector2.zero;
-
-                var layout = contentGo.GetComponent<VerticalLayoutGroup>();
-                layout.padding = new RectOffset(4, 4, 4, 4);
-                layout.spacing = 4f;
-                layout.childControlHeight = true;
-                layout.childControlWidth = true;
-                layout.childForceExpandHeight = false;
-                layout.childForceExpandWidth = true;
 
                 var fitter = contentGo.GetComponent<ContentSizeFitter>();
                 fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
@@ -566,11 +577,11 @@ namespace FantasyGuildmaster.UI
 
             if (rosterContent != null)
             {
-                var layout = rosterContent.GetComponent<VerticalLayoutGroup>() ?? rosterContent.gameObject.AddComponent<VerticalLayoutGroup>();
-                layout.childControlHeight = true;
-                layout.childControlWidth = true;
-                layout.childForceExpandHeight = false;
-                layout.childForceExpandWidth = true;
+                var layout = rosterContent.GetComponent<VerticalLayoutGroup>();
+                if (layout != null)
+                {
+                    layout.enabled = false;
+                }
 
                 var fitter = rosterContent.GetComponent<ContentSizeFitter>() ?? rosterContent.gameObject.AddComponent<ContentSizeFitter>();
                 fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
@@ -622,11 +633,13 @@ namespace FantasyGuildmaster.UI
                 var viewportRect = rosterViewport;
                 viewportRect.anchorMin = Vector2.zero;
                 viewportRect.anchorMax = Vector2.one;
+                viewportRect.pivot = new Vector2(0.5f, 0.5f);
                 viewportRect.offsetMin = Vector2.zero;
                 viewportRect.offsetMax = Vector2.zero;
-                if (viewportRect.GetComponent<Mask>() == null && viewportRect.GetComponent<RectMask2D>() == null)
+                var viewportMask = viewportRect.GetComponent<RectMask2D>() ?? viewportRect.gameObject.AddComponent<RectMask2D>();
+                if (!forceLegacyText)
                 {
-                    viewportRect.gameObject.AddComponent<RectMask2D>();
+                    viewportMask.enabled = true;
                 }
             }
 
@@ -641,6 +654,22 @@ namespace FantasyGuildmaster.UI
                 rosterContent.anchorMax = new Vector2(1f, 1f);
                 rosterContent.pivot = new Vector2(0.5f, 1f);
                 rosterContent.anchoredPosition = Vector2.zero;
+                rosterContent.sizeDelta = Vector2.zero;
+            }
+
+            if (bodyText != null && rosterContent != null)
+            {
+                if (bodyText.transform.parent != rosterContent)
+                {
+                    bodyText.transform.SetParent(rosterContent, false);
+                }
+
+                var bodyRect = bodyText.rectTransform;
+                bodyRect.anchorMin = new Vector2(0f, 1f);
+                bodyRect.anchorMax = new Vector2(1f, 1f);
+                bodyRect.pivot = new Vector2(0.5f, 1f);
+                bodyRect.anchoredPosition = Vector2.zero;
+                bodyRect.sizeDelta = new Vector2(0f, Mathf.Max(1f, bodyText.preferredHeight));
             }
 
             if (!_scrollFixLogPrinted)
@@ -648,6 +677,19 @@ namespace FantasyGuildmaster.UI
                 _scrollFixLogPrinted = true;
                 Debug.Log("[ScrollFix] content anchors/pivot fixed");
             }
+        }
+
+        private void LogRosterRectsOnce()
+        {
+            if (_rectDebugLogPrinted || bodyText == null || rosterContent == null)
+            {
+                return;
+            }
+
+            _rectDebugLogPrinted = true;
+            var textRect = bodyText.rectTransform.rect;
+            var contentRect = rosterContent.rect;
+            Debug.Log($"[UI] RosterTMP rect={textRect.width}x{textRect.height} preferred={bodyText.preferredWidth}x{bodyText.preferredHeight} contentRect={contentRect.width}x{contentRect.height} [TODO REMOVE]");
         }
 
         private void OnGoldChanged(int value)
