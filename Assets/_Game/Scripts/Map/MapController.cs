@@ -124,6 +124,7 @@ namespace FantasyGuildmaster.Map
 
             RefreshSquadStatusHud();
             UpdateEndDayUiState();
+            Debug.Log("[Init] Awake completed (EndDay not requested) [TODO REMOVE]");
 
             var firstPlayableRegion = GetFirstPlayableRegion();
             if (firstPlayableRegion != null)
@@ -425,7 +426,7 @@ namespace FantasyGuildmaster.Map
                             reward = random.Next(50, 250),
                             iconKey = PickContractIconKey(i),
                             minRank = i % 3 == 0 ? HunterRank.C : HunterRank.D,
-                            allowSquad = i % 5 != 0,
+                            allowSquad = i % 10 != 0,
                             allowSolo = true
                         });
                     }
@@ -566,9 +567,6 @@ namespace FantasyGuildmaster.Map
                 canvas.gameObject.AddComponent<GraphicRaycaster>();
             }
 
-            _endDayRequested = true;
-            Debug.Log("[EndDay] confirmed -> request end day [TODO REMOVE]");
-            TryAdvanceDayFlow("EndDay");
             UpdateEndDayUiState();
         }
 
@@ -1341,28 +1339,33 @@ namespace FantasyGuildmaster.Map
                     var soloHunter = hunterRoster != null ? hunterRoster.GetById(option.hunterId) : null;
                     if (soloHunter == null)
                     {
+                        squadSelectPanel?.ShowError("Solo hunter not found.");
                         return;
                     }
 
                     if (soloHunter.exhaustedToday)
                     {
                         Debug.LogWarning("[Assign] blocked exhausted solo hunter [TODO REMOVE]");
+                        squadSelectPanel?.ShowError("This hunter is resting.");
                         return;
                     }
 
                     if (!contract.allowSolo)
                     {
                         Debug.LogWarning("[Assign] blocked: contract forbids solo [TODO REMOVE]");
+                        squadSelectPanel?.ShowError("This contract requires SQUAD.");
                         return;
                     }
 
                     if (soloHunter.rank < contract.minRank)
                     {
                         Debug.LogWarning("[Assign] blocked: solo rank too low [TODO REMOVE]");
+                        squadSelectPanel?.ShowError("Rank too low for this contract.");
                         return;
                     }
 
                     StartSoloTravelTask(soloHunter, region.id, contract.id, contract.reward, TravelPhase.Outbound);
+                    squadSelectPanel?.Hide();
                     detailsPanel?.BlockContract(contract.id);
                     return;
                 }
@@ -1370,28 +1373,33 @@ namespace FantasyGuildmaster.Map
                 var squad = FindSquad(option.squadId);
                 if (squad == null)
                 {
+                    squadSelectPanel?.ShowError("Squad not found.");
                     return;
                 }
 
                 if (squad.exhausted)
                 {
                     Debug.LogWarning($"[Assign] blocked exhausted squad={squad.id} day={_dayIndex} [TODO REMOVE]");
+                    squadSelectPanel?.ShowError("This squad is resting.");
                     return;
                 }
 
                 if (!contract.allowSquad)
                 {
                     Debug.LogWarning("[Assign] blocked: contract forbids squad [TODO REMOVE]");
+                    squadSelectPanel?.ShowError("This contract requires SOLO.");
                     return;
                 }
 
                 if (GetSquadEffectiveRank(squad) < contract.minRank)
                 {
                     Debug.LogWarning("[Assign] blocked: squad rank too low [TODO REMOVE]");
+                    squadSelectPanel?.ShowError("Rank too low for this contract.");
                     return;
                 }
 
                 StartTravelTask(squad, GuildHqId, region.id, contract.id, contract.reward, TravelPhase.Outbound);
+                squadSelectPanel?.Hide();
                 squad.state = SquadState.TravelingToRegion;
                 NotifyRosterChanged();
 
@@ -1652,7 +1660,7 @@ namespace FantasyGuildmaster.Map
                         reward = random.Next(50, 250),
                         iconKey = PickContractIconKey(i),
                         minRank = i % 3 == 0 ? HunterRank.C : HunterRank.D,
-                        allowSquad = i % 5 != 0,
+                        allowSquad = i % 10 != 0,
                         allowSolo = true
                     });
                 }
@@ -1999,6 +2007,7 @@ namespace FantasyGuildmaster.Map
             squadDetailsPanel?.Refresh();
             RefreshSquadStatusHud();
             UpdateEndDayUiState();
+            Debug.Log("[Init] Awake completed (EndDay not requested) [TODO REMOVE]");
         }
 
         public string GetSelectedSquadId()

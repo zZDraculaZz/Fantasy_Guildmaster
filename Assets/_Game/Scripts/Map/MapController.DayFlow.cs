@@ -164,7 +164,7 @@ namespace FantasyGuildmaster.Map
 
             if (endDayButton != null)
             {
-                endDayButton.onClick.RemoveListener(OnEndDayButtonClicked);
+                endDayButton.onClick.RemoveAllListeners();
                 endDayButton.onClick.AddListener(OnEndDayButtonClicked);
             }
 
@@ -792,7 +792,7 @@ namespace FantasyGuildmaster.Map
                             reward = random.Next(50, 250),
                             iconKey = PickContractIconKey(i),
                             minRank = i % 3 == 0 ? HunterRank.C : HunterRank.D,
-                            allowSquad = i % 5 != 0,
+                            allowSquad = i % 10 != 0,
                             allowSolo = true
                         });
                     }
