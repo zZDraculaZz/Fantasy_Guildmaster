@@ -781,6 +781,11 @@ namespace FantasyGuildmaster.Map
                 contentRect.sizeDelta = new Vector2(720f, 280f);
                 var contentImage = content.GetComponent<Image>();
                 contentImage.color = new Color(0.08f, 0.1f, 0.14f, 0.98f);
+                var contentLayoutElement = content.GetComponent<LayoutElement>() ?? content.AddComponent<LayoutElement>();
+                contentLayoutElement.minWidth = 420f;
+                contentLayoutElement.preferredWidth = 560f;
+                contentLayoutElement.minHeight = 260f;
+                contentLayoutElement.preferredHeight = 280f;
                 var v = content.GetComponent<VerticalLayoutGroup>();
                 v.padding = new RectOffset(18, 18, 18, 18);
                 v.spacing = 12f;
@@ -803,13 +808,21 @@ namespace FantasyGuildmaster.Map
                 var row = new GameObject("Buttons", typeof(RectTransform), typeof(HorizontalLayoutGroup));
                 row.transform.SetParent(content.transform, false);
                 var h = row.GetComponent<HorizontalLayoutGroup>();
-                h.spacing = 10f;
+                h.spacing = 12f;
+                h.childAlignment = TextAnchor.MiddleCenter;
+                h.childControlWidth = true;
+                h.childControlHeight = true;
                 h.childForceExpandHeight = false;
                 h.childForceExpandWidth = false;
-                h.childAlignment = TextAnchor.MiddleRight;
+
+                var rowLayout = row.GetComponent<LayoutElement>() ?? row.AddComponent<LayoutElement>();
+                rowLayout.minHeight = 56f;
+                rowLayout.preferredHeight = 60f;
 
                 var yes = CreateButton(row.transform, "ConfirmButton", "Confirm");
                 var no = CreateButton(row.transform, "CancelButton", "Cancel");
+                ConfigureEndDayConfirmButtonVisuals(yes);
+                ConfigureEndDayConfirmButtonVisuals(no);
 
                 endDayConfirmPanel = root;
                 endDayConfirmBodyText = body;
@@ -833,6 +846,33 @@ namespace FantasyGuildmaster.Map
             {
                 endDayConfirmPanel.SetActive(false);
             }
+        }
+
+        private void ConfigureEndDayConfirmButtonVisuals(Button button)
+        {
+            if (button == null)
+            {
+                return;
+            }
+
+            var layout = button.GetComponent<LayoutElement>() ?? button.gameObject.AddComponent<LayoutElement>();
+            layout.minWidth = 160f;
+            layout.preferredWidth = 180f;
+            layout.minHeight = 44f;
+
+            var label = button.GetComponentInChildren<TMP_Text>();
+            if (label == null)
+            {
+                return;
+            }
+
+            label.textWrappingMode = TextWrappingModes.NoWrap;
+            label.overflowMode = TextOverflowModes.Ellipsis;
+            label.enableAutoSizing = true;
+            label.fontSizeMin = 14f;
+            label.fontSizeMax = 20f;
+            label.alignment = TextAlignmentOptions.Center;
+            label.raycastTarget = false;
         }
 
         private void ShowEndDayConfirm(string warning)
