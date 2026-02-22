@@ -27,7 +27,12 @@ namespace FantasyGuildmaster.UI
         [SerializeField] private TMP_Text rosterRowPrefab;
 
         [Header("Behavior")]
+        public bool forceLegacyText = true;
         [SerializeField] private float refreshSeconds = 1f;
+        [SerializeField] private float paddingLeft = 8f;
+        [SerializeField] private float paddingRight = 8f;
+        [SerializeField] private float paddingTop = 8f;
+        [SerializeField] private float paddingBottom = 8f;
 
         private readonly List<TMP_Text> _rowPool = new();
         private MapController _map;
@@ -36,6 +41,8 @@ namespace FantasyGuildmaster.UI
         private bool _nullSafeLogPrinted;
         private bool _legacyMissingRefsLogged;
         private bool _legacyZeroRowsLogged;
+        private bool _legacyModeLogPrinted;
+        private bool _scrollFixLogPrinted;
 
         private void Awake()
         {
@@ -145,6 +152,18 @@ namespace FantasyGuildmaster.UI
                 && rosterContent != null
                 && rosterRowPrefab != null;
 
+            if (forceLegacyText)
+            {
+                if (!_legacyModeLogPrinted)
+                {
+                    _legacyModeLogPrinted = true;
+                    Debug.Log("[RosterHUD] forceLegacyText enabled -> showing TMP block");
+                }
+
+                RenderLegacyText(BuildLegacyText(squads, tasks, resolveRegionName));
+                return;
+            }
+
             if (!canUseScrollRows)
             {
                 if (!_legacyMissingRefsLogged)
@@ -175,6 +194,7 @@ namespace FantasyGuildmaster.UI
                 bodyText.gameObject.SetActive(false);
             }
 
+            EnsureScrollAnchorsAndMask();
             LayoutRebuilder.ForceRebuildLayoutImmediate(rosterContent);
         }
 
@@ -341,8 +361,12 @@ namespace FantasyGuildmaster.UI
                 return;
             }
 
+            ConfigureLegacyBodyTextLayout();
             bodyText.gameObject.SetActive(true);
             bodyText.text = text;
+            bodyText.enableWordWrapping = true;
+            bodyText.textWrappingMode = TextWrappingModes.Normal;
+            bodyText.overflowMode = TextOverflowModes.Overflow;
             bodyText.ForceMeshUpdate(true);
 
             for (var i = 0; i < _rowPool.Count; i++)
@@ -447,13 +471,7 @@ namespace FantasyGuildmaster.UI
             }
 
             EnsureRosterScrollInfrastructure();
-
-            var rect = bodyText.rectTransform;
-            rect.anchorMin = new Vector2(0f, 1f);
-            rect.anchorMax = new Vector2(1f, 1f);
-            rect.pivot = new Vector2(0.5f, 1f);
-            rect.anchoredPosition = Vector2.zero;
-            rect.sizeDelta = new Vector2(0f, 0f);
+            ConfigureLegacyBodyTextLayout();
 
             if (goldText != null && goldText.font != null) bodyText.font = goldText.font;
             else if (TMP_Settings.defaultFontAsset != null) bodyText.font = TMP_Settings.defaultFontAsset;
@@ -552,9 +570,76 @@ namespace FantasyGuildmaster.UI
                 fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
             }
 
-            if (bodyText != null && rosterContent != null && bodyText.transform.parent != rosterContent)
+            if (!forceLegacyText && bodyText != null && rosterContent != null && bodyText.transform.parent != rosterContent)
             {
                 bodyText.transform.SetParent(rosterContent, false);
+            }
+
+            EnsureScrollAnchorsAndMask();
+        }
+
+        private void ConfigureLegacyBodyTextLayout()
+        {
+            if (bodyText == null)
+            {
+                return;
+            }
+
+            if (bodyText.transform.parent != transform)
+            {
+                bodyText.transform.SetParent(transform, false);
+            }
+
+            var rect = bodyText.rectTransform;
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.one;
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.offsetMin = new Vector2(paddingLeft, paddingBottom);
+            rect.offsetMax = new Vector2(-paddingRight, -paddingTop);
+        }
+
+        private void EnsureScrollAnchorsAndMask()
+        {
+            if (rosterScrollRect == null)
+            {
+                return;
+            }
+
+            if (rosterViewport == null)
+            {
+                rosterViewport = rosterScrollRect.viewport;
+            }
+
+            if (rosterViewport != null)
+            {
+                var viewportRect = rosterViewport;
+                viewportRect.anchorMin = Vector2.zero;
+                viewportRect.anchorMax = Vector2.one;
+                viewportRect.offsetMin = Vector2.zero;
+                viewportRect.offsetMax = Vector2.zero;
+                if (viewportRect.GetComponent<Mask>() == null && viewportRect.GetComponent<RectMask2D>() == null)
+                {
+                    viewportRect.gameObject.AddComponent<RectMask2D>();
+                }
+            }
+
+            if (rosterContent == null)
+            {
+                rosterContent = rosterScrollRect.content;
+            }
+
+            if (rosterContent != null)
+            {
+                rosterContent.anchorMin = new Vector2(0f, 1f);
+                rosterContent.anchorMax = new Vector2(1f, 1f);
+                rosterContent.pivot = new Vector2(0.5f, 1f);
+                rosterContent.anchoredPosition = Vector2.zero;
+            }
+
+            if (!_scrollFixLogPrinted)
+            {
+                _scrollFixLogPrinted = true;
+                Debug.Log("[ScrollFix] content anchors/pivot fixed");
             }
         }
 
