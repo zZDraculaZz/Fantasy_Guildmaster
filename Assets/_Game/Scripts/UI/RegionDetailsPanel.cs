@@ -173,7 +173,7 @@ namespace FantasyGuildmaster.UI
                 var hasEligibleParty = _hasAnyEligibleParty == null || _hasAnyEligibleParty(contract);
                 row.SetAssigned(isBlocked);
                 row.SetSelected(_selectedContract != null && _selectedContract.id == contract.id);
-                row.SetRequirements(_formatContractReq != null ? _formatContractReq(contract) : string.Empty);
+                row.SetRequirements(_formatContractReq != null ? _formatContractReq(contract) : ContractUiText.FormatContractReq(contract));
                 row.SetUnavailableReason(!isBlocked && !hasEligibleParty ? (_formatNoEligibleReason != null ? _formatNoEligibleReason(contract) : "No eligible party") : null);
 
                 var button = row.GetComponent<Button>();
@@ -234,7 +234,7 @@ namespace FantasyGuildmaster.UI
                 var hasEligibleParty = _hasAnyEligibleParty == null || _hasAnyEligibleParty(row.Contract);
                 row.SetAssigned(isBlocked);
                 row.SetSelected(_selectedContract != null && row.Contract.id == _selectedContract.id);
-                row.SetRequirements(_formatContractReq != null ? _formatContractReq(row.Contract) : string.Empty);
+                row.SetRequirements(_formatContractReq != null ? _formatContractReq(row.Contract) : ContractUiText.FormatContractReq(row.Contract));
                 row.SetUnavailableReason(!isBlocked && !hasEligibleParty ? (_formatNoEligibleReason != null ? _formatNoEligibleReason(row.Contract) : "No eligible party") : null);
                 var button = row.GetComponent<Button>();
                 if (button != null)

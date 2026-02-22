@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using System.Text;
 using FantasyGuildmaster.Core;
 using FantasyGuildmaster.Map;
@@ -36,7 +37,11 @@ namespace FantasyGuildmaster.UI
         private bool _legacyMissingRefsLogged;
         private bool _legacyZeroRowsLogged;
 
-        private void Awake() => EnsureBodyText();
+        private void Awake()
+        {
+            ValidateHelperDefinitionsEditorOnly();
+            EnsureBodyText();
+        }
 
         private void OnEnable() => StartCoroutine(DelayedBindAndStart());
 
@@ -128,7 +133,7 @@ namespace FantasyGuildmaster.UI
             if ((squadsNull || tasksNull || resolverNull) && !_nullSafeLogPrinted)
             {
                 _nullSafeLogPrinted = true;
-                Debug.Log($"[HUD] Null-safe path used squadsNull={squadsNull} tasksNull={tasksNull} resolverNull={resolverNull} [TODO REMOVE]");
+                Debug.Log($"[RosterHUD] Null-safe path used squadsNull={squadsNull} tasksNull={tasksNull} resolverNull={resolverNull} [TODO REMOVE]");
             }
 
             squads ??= System.Array.Empty<SquadData>();
@@ -145,7 +150,7 @@ namespace FantasyGuildmaster.UI
                 if (!_legacyMissingRefsLogged)
                 {
                     _legacyMissingRefsLogged = true;
-                    Debug.Log("[HUD] Using legacy roster rendering (missing scroll refs) [TODO REMOVE]");
+                    Debug.Log("[RosterHUD] Using legacy fallback (missing scroll refs) [TODO REMOVE]");
                 }
 
                 RenderLegacyText(BuildLegacyText(squads, tasks, resolveRegionName));
@@ -158,7 +163,7 @@ namespace FantasyGuildmaster.UI
                 if (!_legacyZeroRowsLogged)
                 {
                     _legacyZeroRowsLogged = true;
-                    Debug.Log("[HUD] Scroll render produced 0 rows; fallback to legacy [TODO REMOVE]");
+                    Debug.Log("[RosterHUD] Using legacy fallback (0 rows) [TODO REMOVE]");
                 }
 
                 RenderLegacyText(BuildLegacyText(squads, tasks, resolveRegionName));
@@ -274,7 +279,7 @@ namespace FantasyGuildmaster.UI
             if ((squadsNull || tasksNull || resolverNull) && !_nullSafeLogPrinted)
             {
                 _nullSafeLogPrinted = true;
-                Debug.Log($"[HUD] Null-safe path used squadsNull={squadsNull} tasksNull={tasksNull} resolverNull={resolverNull} [TODO REMOVE]");
+                Debug.Log($"[RosterHUD] Null-safe path used squadsNull={squadsNull} tasksNull={tasksNull} resolverNull={resolverNull} [TODO REMOVE]");
             }
 
             squads ??= System.Array.Empty<SquadData>();
@@ -526,6 +531,27 @@ namespace FantasyGuildmaster.UI
                 rosterContent = rosterScrollRect.content;
             }
 
+            if (rosterViewport != null)
+            {
+                if (rosterViewport.GetComponent<Mask>() == null && rosterViewport.GetComponent<RectMask2D>() == null)
+                {
+                    rosterViewport.gameObject.AddComponent<RectMask2D>();
+                }
+            }
+
+            if (rosterContent != null)
+            {
+                var layout = rosterContent.GetComponent<VerticalLayoutGroup>() ?? rosterContent.gameObject.AddComponent<VerticalLayoutGroup>();
+                layout.childControlHeight = true;
+                layout.childControlWidth = true;
+                layout.childForceExpandHeight = false;
+                layout.childForceExpandWidth = true;
+
+                var fitter = rosterContent.GetComponent<ContentSizeFitter>() ?? rosterContent.gameObject.AddComponent<ContentSizeFitter>();
+                fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+                fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            }
+
             if (bodyText != null && rosterContent != null && bodyText.transform.parent != rosterContent)
             {
                 bodyText.transform.SetParent(rosterContent, false);
@@ -535,6 +561,49 @@ namespace FantasyGuildmaster.UI
         private void OnGoldChanged(int value)
         {
             if (goldText != null) goldText.text = $"Gold: {value}";
+        }
+
+        [System.Diagnostics.Conditional("UNITY_EDITOR")]
+        private static void ValidateHelperDefinitionsEditorOnly()
+        {
+#if UNITY_EDITOR
+            var scriptPath = Path.Combine(Application.dataPath, "_Game/Scripts/UI/SquadStatusHUD.cs");
+            if (!File.Exists(scriptPath))
+            {
+                return;
+            }
+
+            var code = File.ReadAllText(scriptPath);
+            ValidateSingleDefinition(code, "EnsureRow");
+            ValidateSingleDefinition(code, "BuildLegacyText");
+            ValidateSingleDefinition(code, "RenderScrollRows");
+#endif
+        }
+
+        [System.Diagnostics.Conditional("UNITY_EDITOR")]
+        private static void ValidateSingleDefinition(string code, string helperName)
+        {
+#if UNITY_EDITOR
+            var count = 0;
+            var lines = code.Split('\n');
+            for (var i = 0; i < lines.Length; i++)
+            {
+                var line = lines[i];
+                if (line.IndexOf("private", System.StringComparison.Ordinal) < 0
+                    || line.IndexOf(helperName + "(", System.StringComparison.Ordinal) < 0
+                    || line.IndexOf("ValidateSingleDefinition", System.StringComparison.Ordinal) >= 0)
+                {
+                    continue;
+                }
+
+                count++;
+            }
+
+            if (count > 1)
+            {
+                Debug.LogError($"[RosterHUD] Duplicate helper detected for '{helperName}' count={count}. [TODO REMOVE]");
+            }
+#endif
         }
     }
 }

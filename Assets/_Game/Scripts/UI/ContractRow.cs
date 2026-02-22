@@ -23,7 +23,7 @@ namespace FantasyGuildmaster.UI
 
         private Image _backgroundImage;
         private bool _isAssigned;
-        private bool _reqLogPrinted;
+        private bool _reqCreatedLogPrinted;
 
         private ContractData _contract;
 
@@ -67,14 +67,23 @@ namespace FantasyGuildmaster.UI
                 return;
             }
 
-            var reqGo = new GameObject("ReqText", typeof(RectTransform), typeof(TextMeshProUGUI));
+            var reqGo = new GameObject("ReqText", typeof(RectTransform), typeof(LayoutElement), typeof(TextMeshProUGUI));
             reqGo.transform.SetParent(transform, false);
             reqText = reqGo.GetComponent<TextMeshProUGUI>();
+            if (!_reqCreatedLogPrinted)
+            {
+                _reqCreatedLogPrinted = true;
+                Debug.Log("[ContractRow] reqText missing -> created at runtime [TODO REMOVE]");
+            }
             reqText.fontSize = 16f;
             reqText.alignment = TextAlignmentOptions.MidlineRight;
 
+            var layoutElement = reqGo.GetComponent<LayoutElement>();
+            layoutElement.minWidth = 110f;
+            layoutElement.preferredWidth = 180f;
+
             var rect = reqText.rectTransform;
-            rect.anchorMin = new Vector2(0.52f, 0.52f);
+            rect.anchorMin = new Vector2(0.50f, 0.52f);
             rect.anchorMax = new Vector2(0.98f, 0.92f);
             rect.offsetMin = Vector2.zero;
             rect.offsetMax = Vector2.zero;
@@ -89,16 +98,15 @@ namespace FantasyGuildmaster.UI
                 return;
             }
 
+            var layoutElement = reqText.GetComponent<LayoutElement>() ?? reqText.gameObject.AddComponent<LayoutElement>();
+            layoutElement.minWidth = Mathf.Max(layoutElement.minWidth, 110f);
+            layoutElement.preferredWidth = Mathf.Max(layoutElement.preferredWidth, 180f);
+
             reqText.text = string.IsNullOrWhiteSpace(requirements) ? string.Empty : requirements;
             reqText.textWrappingMode = TextWrappingModes.NoWrap;
             reqText.overflowMode = TextOverflowModes.Ellipsis;
             reqText.raycastTarget = false;
             reqText.ForceMeshUpdate(true);
-            if (!_reqLogPrinted)
-            {
-                _reqLogPrinted = true;
-                Debug.Log($"[ContractRow] reqText set: {reqText.text} [TODO REMOVE]");
-            }
         }
 
         public void SetUnavailableReason(string reason)

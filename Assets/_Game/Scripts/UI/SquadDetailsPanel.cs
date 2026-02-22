@@ -46,7 +46,7 @@ namespace FantasyGuildmaster.UI
             if (squad == null)
             {
                 titleText.text = "Squad Details";
-                bodyText.text = "No party selected.";
+                bodyText.text = "No party selected";
                 RefreshLayout();
                 return;
             }
@@ -202,6 +202,25 @@ namespace FantasyGuildmaster.UI
             if (contentContainer == null && detailsScrollRect != null)
             {
                 contentContainer = detailsScrollRect.content;
+            }
+
+            var viewport = detailsScrollRect != null ? detailsScrollRect.viewport : null;
+            if (viewport != null && viewport.GetComponent<Mask>() == null && viewport.GetComponent<RectMask2D>() == null)
+            {
+                viewport.gameObject.AddComponent<RectMask2D>();
+            }
+
+            if (contentContainer != null)
+            {
+                var layout = contentContainer.GetComponent<VerticalLayoutGroup>() ?? contentContainer.gameObject.AddComponent<VerticalLayoutGroup>();
+                layout.childControlWidth = true;
+                layout.childControlHeight = true;
+                layout.childForceExpandHeight = false;
+                layout.childForceExpandWidth = true;
+
+                var fitter = contentContainer.GetComponent<ContentSizeFitter>() ?? contentContainer.gameObject.AddComponent<ContentSizeFitter>();
+                fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+                fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
             }
 
             if (bodyText != null && contentContainer != null && bodyText.transform.parent != contentContainer)
