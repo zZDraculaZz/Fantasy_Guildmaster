@@ -50,6 +50,7 @@ namespace FantasyGuildmaster.Map
         private TravelTokenPool _travelTokenPool;
         private string _selectedSquadId;
         private readonly Queue<MissionReportData> _pendingReports = new();
+        private bool _reportOpen;
 
         private void Awake()
         {
@@ -267,7 +268,7 @@ namespace FantasyGuildmaster.Map
 
             var report = BuildMissionReport(task, squad);
             _pendingReports.Enqueue(report);
-            Debug.Log($"[Report] Enqueued: squad={report.squadId} contract={report.contractId} reward={report.rewardGold}");
+            Debug.Log($"[Report] Enqueued: squad={report.squadId} contract={report.contractId} reward={report.rewardGold} [TODO REMOVE]");
             TryShowNextMissionReport();
         }
 
@@ -325,18 +326,20 @@ namespace FantasyGuildmaster.Map
         private void TryShowNextMissionReport()
         {
             EnsureMissionReportPanel();
-            if (missionReportPanel == null || missionReportPanel.IsOpen || _pendingReports.Count == 0)
+            if (missionReportPanel == null || _reportOpen || missionReportPanel.IsOpen || _pendingReports.Count == 0)
             {
                 return;
             }
 
             var report = _pendingReports.Peek();
-            Debug.Log($"[Report] Showing: squad={report.squadId} contract={report.contractId} reward={report.rewardGold}");
+            Debug.Log($"[Report] Showing: squad={report.squadId} contract={report.contractId} reward={report.rewardGold} [TODO REMOVE]");
+            _reportOpen = true;
             missionReportPanel.Show(report, () => OnMissionReportContinue(report));
         }
-
         private void OnMissionReportContinue(MissionReportData report)
         {
+            Debug.Log($"[Report] onContinue invoked: squad={report?.squadId} contract={report?.contractId} reward={report?.rewardGold} [TODO REMOVE]");
+
             if (_pendingReports.Count > 0)
             {
                 _pendingReports.Dequeue();
@@ -344,7 +347,9 @@ namespace FantasyGuildmaster.Map
 
             AddGold(report.rewardGold);
             CompleteContract(report.regionId, report.contractId);
-            Debug.Log($"[Report] Applied+Closed: squad={report.squadId} contract={report.contractId} reward={report.rewardGold}");
+            missionReportPanel?.Hide();
+            _reportOpen = false;
+            Debug.Log($"[Report] Applied+Closed: squad={report.squadId} contract={report.contractId} reward={report.rewardGold} [TODO REMOVE]");
 
             RefreshSquadStatusHud();
             if (detailsPanel != null)
@@ -352,26 +357,23 @@ namespace FantasyGuildmaster.Map
                 detailsPanel.SetIdleSquadsCount(GetIdleSquads().Count);
             }
 
-            if (_pendingReports.Count > 0)
-            {
-                TryShowNextMissionReport();
-            }
-            else
-            {
-                missionReportPanel?.Hide();
-            }
+            TryShowNextMissionReport();
         }
 
         private void EnsureMissionReportPanel()
         {
             if (missionReportPanel != null)
             {
+                _reportOpen = missionReportPanel.IsOpen;
+                EnsureMissionReportInteractionInfra();
                 return;
             }
 
             missionReportPanel = FindFirstObjectByType<MissionReportPanel>();
             if (missionReportPanel != null)
             {
+                _reportOpen = missionReportPanel.IsOpen;
+                EnsureMissionReportInteractionInfra();
                 return;
             }
 
@@ -390,11 +392,31 @@ namespace FantasyGuildmaster.Map
                 {
                     instance.transform.SetAsLastSibling();
                     missionReportPanel.Hide();
+                    _reportOpen = false;
+                    EnsureMissionReportInteractionInfra();
                     return;
                 }
             }
 
             missionReportPanel = CreateRuntimeMissionReportPanel(canvas);
+            _reportOpen = false;
+            EnsureMissionReportInteractionInfra();
+        }
+
+
+        private void EnsureMissionReportInteractionInfra()
+        {
+            EnsureEventSystem();
+            if (missionReportPanel == null)
+            {
+                return;
+            }
+
+            var canvas = missionReportPanel.GetComponentInParent<Canvas>();
+            if (canvas != null && canvas.GetComponent<GraphicRaycaster>() == null)
+            {
+                canvas.gameObject.AddComponent<GraphicRaycaster>();
+            }
         }
 
         private MissionReportPanel CreateRuntimeMissionReportPanel(Canvas canvas)
@@ -665,6 +687,7 @@ namespace FantasyGuildmaster.Map
             labelRect.offsetMin = Vector2.zero;
             labelRect.offsetMax = Vector2.zero;
             label.text = labelText;
+            label.raycastTarget = false;
             return buttonGo.GetComponent<Button>();
         }
 
