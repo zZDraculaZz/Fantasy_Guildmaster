@@ -6,6 +6,7 @@ namespace FantasyGuildmaster.UI
     public sealed class MissionReportData
     {
         public string squadId;
+        public string soloHunterId;
         public string squadName;
         public string regionId;
         public string regionName;

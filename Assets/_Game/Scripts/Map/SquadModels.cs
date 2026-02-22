@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using FantasyGuildmaster.Core;
 
 namespace FantasyGuildmaster.Map
 {
@@ -26,6 +27,7 @@ namespace FantasyGuildmaster.Map
         public int hp = 100;
         public int maxHp = 100;
         public string status = "Ready";
+        public int joinedDay;
     }
 
     [Serializable]
@@ -39,6 +41,12 @@ namespace FantasyGuildmaster.Map
         public SquadState state;
         public string currentRegionId;
         public List<SquadMemberData> members = new();
+        public List<string> hunterIds = new();
+        public bool exhausted;
+        public string exhaustedReason;
+        public int cohesion = 35;
+        public int lastRosterChangeDay;
+        public int contractsDoneToday;
 
         public bool IsDestroyed => hp <= 0 || state == SquadState.Destroyed;
     }
@@ -47,23 +55,24 @@ namespace FantasyGuildmaster.Map
     public sealed class TravelTask
     {
         public string squadId;
+        public string soloHunterId;
         public string fromRegionId;
         public string toRegionId;
         public string contractId;
         public int contractReward;
         public TravelPhase phase;
-        public long startUnix;
-        public long endUnix;
+        public long startSimSeconds;
+        public long endSimSeconds;
 
-        public float GetProgress(long nowUnix)
+        public float GetProgress(long nowSimSeconds)
         {
-            var duration = endUnix - startUnix;
+            var duration = endSimSeconds - startSimSeconds;
             if (duration <= 0)
             {
                 return 1f;
             }
 
-            return UnityEngine.Mathf.Clamp01((nowUnix - startUnix) / (float)duration);
+            return UnityEngine.Mathf.Clamp01((nowSimSeconds - startSimSeconds) / (float)duration);
         }
     }
 }
