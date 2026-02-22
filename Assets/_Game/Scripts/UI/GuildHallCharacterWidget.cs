@@ -30,13 +30,39 @@ namespace FantasyGuildmaster.UI
 
             if (nameText != null)
             {
+                var nameRect = nameText.rectTransform;
+                nameRect.anchorMin = new Vector2(0f, 0f);
+                nameRect.anchorMax = new Vector2(1f, 0f);
+                nameRect.pivot = new Vector2(0.5f, 0f);
+                nameRect.offsetMin = new Vector2(8f, 8f);
+                nameRect.offsetMax = new Vector2(-8f, 38f);
+
                 nameText.text = string.IsNullOrWhiteSpace(data?.displayName) ? data?.id : data.displayName;
                 nameText.raycastTarget = false;
+                nameText.enableAutoSizing = true;
+                nameText.fontSizeMax = 20f;
+                nameText.fontSizeMin = 12f;
+                nameText.textWrappingMode = TextWrappingModes.NoWrap;
+                nameText.overflowMode = TextOverflowModes.Ellipsis;
+                nameText.alignment = TextAlignmentOptions.Center;
+                nameText.ForceMeshUpdate();
             }
 
             if (badgeText != null)
             {
+                var badgeRect = badgeText.rectTransform;
+                badgeRect.anchorMin = new Vector2(0f, 1f);
+                badgeRect.anchorMax = new Vector2(0f, 1f);
+                badgeRect.pivot = new Vector2(0f, 1f);
+                badgeRect.sizeDelta = new Vector2(32f, 32f);
+                badgeRect.anchoredPosition = new Vector2(6f, -6f);
+
                 badgeText.raycastTarget = false;
+                badgeText.enableAutoSizing = false;
+                badgeText.fontSize = 24f;
+                badgeText.textWrappingMode = TextWrappingModes.NoWrap;
+                badgeText.overflowMode = TextOverflowModes.Overflow;
+                badgeText.alignment = TextAlignmentOptions.Center;
                 badgeText.text = BadgeToSymbol(data?.badge);
                 badgeText.gameObject.SetActive(!string.IsNullOrEmpty(badgeText.text));
             }
@@ -64,19 +90,11 @@ namespace FantasyGuildmaster.UI
         public void OnPointerEnter(PointerEventData eventData)
         {
             transform.localScale = _baseScale * 1.03f;
-            if (_data != null)
-            {
-                Debug.Log($"[GuildHall] Hover enter id={_data.id} [TODO REMOVE]");
-            }
         }
 
         public void OnPointerExit(PointerEventData eventData)
         {
             transform.localScale = _baseScale;
-            if (_data != null)
-            {
-                Debug.Log($"[GuildHall] Hover exit id={_data.id} [TODO REMOVE]");
-            }
         }
 
         private void OnClicked()

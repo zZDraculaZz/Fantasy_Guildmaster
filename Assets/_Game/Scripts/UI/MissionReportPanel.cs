@@ -1,5 +1,6 @@
 using System;
 using System.Text;
+using FantasyGuildmaster.Core;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -16,6 +17,7 @@ namespace FantasyGuildmaster.UI
 
         private Action _onContinue;
         private CanvasGroup _cg;
+        private bool _pauseHeld;
 
         public bool IsOpen => root != null && root.activeSelf;
 
@@ -58,6 +60,12 @@ namespace FantasyGuildmaster.UI
                 _cg.alpha = 1f;
                 _cg.interactable = true;
                 _cg.blocksRaycasts = true;
+            }
+
+            if (!_pauseHeld)
+            {
+                GamePauseService.Push("MissionReport");
+                _pauseHeld = true;
             }
 
             if (continueButton != null)
@@ -107,6 +115,12 @@ namespace FantasyGuildmaster.UI
             if (root != null)
             {
                 root.SetActive(false);
+            }
+
+            if (_pauseHeld)
+            {
+                GamePauseService.Pop("MissionReport");
+                _pauseHeld = false;
             }
         }
 

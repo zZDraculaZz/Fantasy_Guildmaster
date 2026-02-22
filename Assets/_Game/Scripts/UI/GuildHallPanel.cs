@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using FantasyGuildmaster.Core;
 using FantasyGuildmaster.Data;
 using TMPro;
 using UnityEngine;
@@ -50,6 +51,7 @@ namespace FantasyGuildmaster.UI
         private bool _lineComplete;
         private bool _hubInputEnabled;
         private ViewMode _mode;
+        private bool _pauseHeld;
 
         private void Awake()
         {
@@ -116,6 +118,12 @@ namespace FantasyGuildmaster.UI
                 _cg.blocksRaycasts = true;
             }
 
+            if (!_pauseHeld)
+            {
+                GamePauseService.Push("GuildHall");
+                _pauseHeld = true;
+            }
+
             BindCoreButtons();
             BuildCharacterHotspots();
             ShowHub();
@@ -148,6 +156,12 @@ namespace FantasyGuildmaster.UI
             if (root != null)
             {
                 root.SetActive(false);
+            }
+
+            if (_pauseHeld)
+            {
+                GamePauseService.Pop("GuildHall");
+                _pauseHeld = false;
             }
         }
 
