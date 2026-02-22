@@ -314,68 +314,6 @@ namespace FantasyGuildmaster.Map
             var squad = FindSquad(task.squadId);
             if (squad == null && string.IsNullOrEmpty(task.soloHunterId))
             {
-                RemoveTravelToken(task.squadId);
-                return;
-            }
-
-            var soloHunter = !string.IsNullOrEmpty(task.soloHunterId) && hunterRoster != null ? hunterRoster.GetById(task.soloHunterId) : null;
-
-            if (task.phase == TravelPhase.Outbound)
-            {
-                if (soloHunter != null)
-                {
-                    if (encounterManager != null)
-                    {
-                        encounterManager.EnqueueEncounter(task.toRegionId, null, () => OnEncounterResolved(null, task.toRegionId, task.contractId, task.contractReward, soloHunter.id), soloHunter.id);
-                        TryAdvanceDayFlow("EncounterQueued");
-                    }
-                    else
-                    {
-                        OnEncounterResolved(null, task.toRegionId, task.contractId, task.contractReward, soloHunter.id);
-                    }
-
-                    return;
-                }
-                if (DEBUG_TRAVEL)
-                {
-                    Debug.Log($"[TravelDebug] Outbound complete: squad={squad.name}, now={nowUnix}, region={task.toRegionId}");
-                }
-
-                squad.currentRegionId = task.toRegionId;
-                squad.state = SquadState.ResolvingEncounter;
-                NotifyRosterChanged();
-
-                if (encounterManager != null)
-                {
-                    if (DEBUG_TRAVEL)
-                    {
-                        Debug.Log($"[TravelDebug] Encounter queued: squad={squad.name}, region={task.toRegionId}");
-                    }
-
-                    encounterManager.EnqueueEncounter(task.toRegionId, squad.id, () => OnEncounterResolved(squad.id, task.toRegionId, task.contractId, task.contractReward));
-                    TryAdvanceDayFlow("EncounterQueued");
-                }
-                else
-                {
-                    Debug.LogWarning($"[TravelDebug] EncounterManager missing, fallback to immediate return: squad={squad.name}");
-                    OnEncounterResolved(squad.id, task.toRegionId, task.contractId, task.contractReward);
-                }
-
-                return;
-            }
-
-            if (DEBUG_TRAVEL)
-            {
-                Debug.Log($"[TravelDebug] Return complete: squad={squad.name}, now={nowUnix}, reward={task.contractReward}");
-            }
-
-            if (soloHunter != null)
-            {
-                soloHunter.squadId = null;
-                RemoveSoloTravelToken(soloHunter.id);
-            }
-            else
-            {
                 squad.currentRegionId = GuildHqId;
                 squad.state = SquadState.IdleAtHQ;
                 NotifyRosterChanged();
@@ -466,6 +404,306 @@ namespace FantasyGuildmaster.Map
             if (missionReportPanel == null || _reportOpen || missionReportPanel.IsOpen || _pendingReports.Count == 0)
             {
                 return;
+            }
+
+            var report = _pendingReports.Peek();
+            Debug.Log($"[Report] Showing: squad={report.squadId} contract={report.contractId} reward={report.rewardGold} [TODO REMOVE]");
+            _reportOpen = true;
+            var shown = missionReportPanel.Show(report, () => OnMissionReportContinue(report));
+            if (!shown)
+            {
+                _reportOpen = false;
+                Debug.LogError("[Report] MissionReport failed to show; applying fallback continuation. [TODO REMOVE]");
+                OnMissionReportContinue(report);
+            }
+        }
+        private void OnMissionReportContinue(MissionReportData report)
+        {
+            Debug.Log($"[Report] onContinue invoked: squad={report?.squadId} contract={report?.contractId} reward={report?.rewardGold} [TODO REMOVE]");
+
+            if (_pendingReports.Count > 0)
+            {
+                _pendingReports.Dequeue();
+            }
+
+            AddGold(report.rewardGold);
+            CompleteContract(report.regionId, report.contractId);
+
+            var reportSquad = FindSquad(report.squadId);
+            if (reportSquad != null)
+            {
+                reportSquad.exhausted = true;
+                reportSquad.exhaustedReason = "Needs rest";
+                reportSquad.contractsDoneToday++;
+                Debug.Log($"[Squad] Exhausted after contract: squad={reportSquad.id} contract={report.contractId} [TODO REMOVE]");
+
+                var cohesionDelta = reportSquad.lastRosterChangeDay == _dayIndex ? 1 : 3;
+                reportSquad.cohesion = Mathf.Clamp(reportSquad.cohesion + cohesionDelta, 0, 100);
+                Debug.Log($"[Cohesion] After mission squad={reportSquad.id} cohesion={reportSquad.cohesion} delta={cohesionDelta} [TODO REMOVE]");
+            }
+
+            if (!string.IsNullOrEmpty(report.soloHunterId) && hunterRoster != null)
+            {
+                var hunter = hunterRoster.GetById(report.soloHunterId);
+                if (hunter != null)
+                {
+                    hunter.exhaustedToday = true;
+                }
+            }
+
+            missionReportPanel?.Hide();
+            _reportOpen = false;
+            Debug.Log($"[Report] Applied+Closed: squad={report.squadId} contract={report.contractId} reward={report.rewardGold} [TODO REMOVE]");
+
+            RefreshSquadStatusHud();
+            UpdateEndDayUiState();
+            if (detailsPanel != null)
+            {
+                detailsPanel.SetIdleSquadsCount(GetIdleSquads().Count);
+            }
+
+            TryAdvanceDayFlow("MissionReportClosed");
+            if (_pendingReports.Count > 0)
+            {
+                TryShowNextMissionReport();
+            }
+        }
+
+
+        private void OnEndDayButtonClicked()
+        {
+            if (IsEndDayBlocked(out var reason))
+            {
+                Debug.Log($"[EndDay] blocked reason={reason} [TODO REMOVE]");
+                UpdateEndDayUiState();
+                return;
+            }
+
+            if (IsEndDayWarning(out var warning))
+            {
+                Debug.Log($"[EndDay] warning shown {warning} [TODO REMOVE]");
+                ShowEndDayConfirm(warning);
+                return;
+            }
+
+            _endDayRequested = true;
+            Debug.Log("[EndDay] confirmed -> request end day [TODO REMOVE]");
+            TryAdvanceDayFlow("EndDay");
+            UpdateEndDayUiState();
+        }
+
+        private void EnsureEndDayButton()
+        {
+            EnsureEndDayHeaderLayout();
+            if (endDayButton == null)
+            {
+                endDayButton = transform.Find("MapCanvas/OverlayLayer/RegionDetailsPanel/HeaderContainer/EndDayButton")?.GetComponent<Button>();
+            }
+
+            if (endDayButton == null)
+            {
+                endDayButton = transform.Find("MapCanvas/OverlayLayer/EndDayButton")?.GetComponent<Button>();
+            }
+
+            if (endDayButton == null)
+            {
+                var canvas = EnsureCanvas();
+                if (canvas == null)
+                {
+                    return;
+                }
+
+                var button = CreateButton(canvas.transform, "EndDayButton", "End Day");
+                endDayButton = button;
+            }
+
+            EnsureEndDayHeaderLayout();
+
+            if (endDayButton != null)
+            {
+                endDayButton.onClick.RemoveListener(OnEndDayButtonClicked);
+                endDayButton.onClick.AddListener(OnEndDayButtonClicked);
+            }
+
+            UpdateEndDayUiState();
+        }
+
+        private void EnsureEndDayHeaderLayout()
+        {
+            if (detailsPanel == null)
+            {
+                return;
+            }
+
+            var soloHunter = !string.IsNullOrEmpty(task.soloHunterId) && hunterRoster != null ? hunterRoster.GetById(task.soloHunterId) : null;
+
+            if (task.phase == TravelPhase.Outbound)
+            {
+                if (soloHunter != null)
+                {
+                    if (encounterManager != null)
+                    {
+                        encounterManager.EnqueueEncounter(task.toRegionId, null, () => OnEncounterResolved(null, task.toRegionId, task.contractId, task.contractReward, soloHunter.id), soloHunter.id);
+                        TryAdvanceDayFlow("EncounterQueued");
+                    }
+                    else
+                    {
+                        OnEncounterResolved(null, task.toRegionId, task.contractId, task.contractReward, soloHunter.id);
+                    }
+
+                    return;
+                }
+                if (DEBUG_TRAVEL)
+                {
+                    continue;
+                }
+
+                var seed = (region.id != null ? region.id.GetHashCode() : 0) ^ (_dayIndex * 397);
+                var random = new System.Random(seed);
+                if (!_contractsByRegion.TryGetValue(region.id, out var contracts) || contracts == null)
+                {
+                    contracts = new List<ContractData>();
+                    _contractsByRegion[region.id] = contracts;
+                }
+
+                if (contracts.Count == 0)
+                {
+                    var count = random.Next(2, 5);
+                    for (var i = 0; i < count; i++)
+                    {
+                        contracts.Add(new ContractData
+                        {
+                            id = $"{region.id}_day{_dayIndex}_contract_{i}",
+                            title = $"Contract #{i + 1}: {region.name}",
+                            remainingSeconds = random.Next(45, 300),
+                            reward = random.Next(50, 250),
+                            iconKey = PickContractIconKey(i),
+                            minRank = i % 3 == 0 ? HunterRank.C : HunterRank.D,
+                            allowSquad = i % 5 != 0,
+                            allowSolo = true
+                        });
+                    }
+
+                    encounterManager.EnqueueEncounter(task.toRegionId, squad.id, () => OnEncounterResolved(squad.id, task.toRegionId, task.contractId, task.contractReward));
+                    TryAdvanceDayFlow("EncounterQueued");
+                }
+                else
+                {
+                    for (var i = 0; i < contracts.Count; i++)
+                    {
+                        contracts[i].remainingSeconds = random.Next(45, 300);
+                        contracts[i].reward = random.Next(50, 250);
+                    }
+                }
+            }
+
+            if (soloHunter != null)
+            {
+                soloHunter.squadId = null;
+                RemoveSoloTravelToken(soloHunter.id);
+            }
+            else
+            {
+                squad.currentRegionId = GuildHqId;
+                squad.state = SquadState.IdleAtHQ;
+                NotifyRosterChanged();
+                RemoveTravelToken(task.squadId);
+            }
+
+            var report = BuildMissionReport(task, squad, soloHunter);
+            _pendingReports.Enqueue(report);
+            Debug.Log($"[Report] Enqueued: squad={report.squadId} contract={report.contractId} reward={report.rewardGold} [TODO REMOVE]");
+            TryAdvanceDayFlow("ReportEnqueued");
+            TryShowNextMissionReport();
+        }
+
+        private void OnEncounterResolved(string squadId, string regionId, string contractId, int contractReward, string soloHunterId = null)
+        {
+            if (!string.IsNullOrEmpty(soloHunterId))
+            {
+                var soloHunter = hunterRoster != null ? hunterRoster.GetById(soloHunterId) : null;
+                if (soloHunter == null || soloHunter.hp <= 0)
+                {
+                    RestoreContractAvailability(regionId, contractId);
+                    return;
+                }
+
+                StartSoloTravelTask(soloHunter, GuildHqId, contractId, contractReward, TravelPhase.Return);
+                TryAdvanceDayFlow("EncounterResolved");
+                return;
+            }
+
+            var squad = FindSquad(squadId);
+            if (squad == null || squad.hp <= 0)
+            {
+                _reportOpen = missionReportPanel.IsOpen;
+                EnsureMissionReportInteractionInfra();
+                return;
+            }
+
+            missionReportPanel = FindFirstObjectByType<MissionReportPanel>();
+            if (missionReportPanel != null)
+            {
+                _reportOpen = missionReportPanel.IsOpen;
+                EnsureMissionReportInteractionInfra();
+                return;
+            }
+
+            var prefab = Resources.Load<GameObject>("Prefabs/MissionReportPanel");
+            var canvas = EnsureCanvas();
+            if (canvas == null)
+            {
+                return;
+            }
+
+            TryAdvanceDayFlow("EncounterResolved");
+        }
+
+        private MissionReportData BuildMissionReport(TravelTask task, SquadData squad, HunterData soloHunter = null)
+        {
+            var readiness = soloHunter != null ? Mathf.RoundToInt(Mathf.Clamp01(soloHunter.maxHp > 0 ? soloHunter.hp / (float)soloHunter.maxHp : 1f) * 100f) : ComputeReadinessPercent(squad);
+            var membersSummary = soloHunter != null ? $"Solo: {soloHunter.name}" : BuildMembersSummary(squad);
+            var regionName = ResolveRegionName(task.fromRegionId);
+            var contractTitle = ResolveContractTitle(task.fromRegionId, task.contractId);
+            var outcome = readiness < 70
+                ? "Contract completed. Loot secured. Injuries reported."
+                : "Contract completed. Loot secured. Minor injuries.";
+
+            return new MissionReportData
+            {
+                squadId = squad?.id,
+                soloHunterId = soloHunter?.id,
+                squadName = soloHunter != null ? soloHunter.name : squad?.name,
+                regionId = task.fromRegionId,
+                regionName = regionName,
+                contractId = task.contractId,
+                contractTitle = contractTitle,
+                rewardGold = task.contractReward,
+                readinessBeforePercent = readiness,
+                readinessAfterPercent = readiness,
+                membersSummary = membersSummary,
+                outcomeText = outcome
+            };
+        }
+
+        private void TryShowNextMissionReport()
+        {
+            EnsureMissionReportPanel();
+            EnsureGuildHallPanel();
+            EnsureEndDayButton();
+            EnsureEndDayConfirmPanel();
+            if (missionReportPanel == null || _reportOpen || missionReportPanel.IsOpen || _pendingReports.Count == 0)
+            {
+                var instance = Instantiate(prefab, canvas.transform, false);
+                missionReportPanel = instance.GetComponent<MissionReportPanel>();
+                if (missionReportPanel != null)
+                {
+                    instance.transform.SetAsLastSibling();
+                    missionReportPanel.Hide();
+                    _reportOpen = false;
+                    EnsureMissionReportInteractionInfra();
+                    return;
+                }
             }
 
             var report = _pendingReports.Peek();
@@ -1158,7 +1396,7 @@ namespace FantasyGuildmaster.Map
 
             if (detailsPanel != null)
             {
-                detailsPanel.SetIdleSquadsCount(GetIdleSquads().Count);
+                return;
             }
 
             Debug.Log($"[Day] Reset squad exhaustion, day={_dayIndex} [TODO REMOVE]");
@@ -1211,24 +1449,24 @@ namespace FantasyGuildmaster.Map
             }
         }
 
-        private void EnsureMissionReportPanel()
+        private void EnsureGuildHallPanel()
         {
-            if (missionReportPanel != null)
+            if (guildHallPanel != null)
             {
                 _reportOpen = missionReportPanel.IsOpen;
                 EnsureMissionReportInteractionInfra();
                 return;
             }
 
-            missionReportPanel = FindFirstObjectByType<MissionReportPanel>();
-            if (missionReportPanel != null)
+            guildHallPanel = FindFirstObjectByType<GuildHallPanel>();
+            if (guildHallPanel != null)
             {
                 _reportOpen = missionReportPanel.IsOpen;
                 EnsureMissionReportInteractionInfra();
                 return;
             }
 
-            var prefab = Resources.Load<GameObject>("Prefabs/MissionReportPanel");
+            var prefab = Resources.Load<GameObject>("Prefabs/GuildHallPanel");
             var canvas = EnsureCanvas();
             if (canvas == null)
             {
@@ -1238,8 +1476,8 @@ namespace FantasyGuildmaster.Map
             if (prefab != null)
             {
                 var instance = Instantiate(prefab, canvas.transform, false);
-                missionReportPanel = instance.GetComponent<MissionReportPanel>();
-                if (missionReportPanel != null)
+                guildHallPanel = instance.GetComponent<GuildHallPanel>();
+                if (guildHallPanel != null)
                 {
                     instance.transform.SetAsLastSibling();
                     missionReportPanel.Hide();
