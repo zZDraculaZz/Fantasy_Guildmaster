@@ -6,6 +6,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using System.Collections.Generic;
+using UnityEngine.UI;
 
 namespace FantasyGuildmaster.UI
 {
@@ -25,6 +26,8 @@ namespace FantasyGuildmaster.UI
         private GameState _gameState;
         private Coroutine _tick;
         private bool _nullSafeLogPrinted;
+        [SerializeField] private ScrollRect rosterScrollRect;
+        [SerializeField] private RectTransform rosterContent;
 
         private void Awake() => EnsureBodyText();
 
@@ -172,6 +175,11 @@ namespace FantasyGuildmaster.UI
             }
 
             bodyText.text = sb.ToString();
+            bodyText.ForceMeshUpdate(true);
+            if (rosterContent != null)
+            {
+                LayoutRebuilder.ForceRebuildLayoutImmediate(rosterContent);
+            }
         }
 
         private string BuildSoloStateText(HunterData hunter, System.Func<string, string> resolveRegionName)
@@ -258,12 +266,14 @@ namespace FantasyGuildmaster.UI
                 bodyText = go.GetComponent<TextMeshProUGUI>();
             }
 
+            EnsureRosterScroll();
+
             var rect = bodyText.rectTransform;
             rect.anchorMin = new Vector2(0f, 1f);
             rect.anchorMax = new Vector2(1f, 1f);
             rect.pivot = new Vector2(0.5f, 1f);
             rect.anchoredPosition = Vector2.zero;
-            rect.sizeDelta = Vector2.zero;
+            rect.sizeDelta = new Vector2(0f, 0f);
 
             if (goldText != null && goldText.font != null) bodyText.font = goldText.font;
             else if (TMP_Settings.defaultFontAsset != null) bodyText.font = TMP_Settings.defaultFontAsset;
@@ -274,6 +284,73 @@ namespace FantasyGuildmaster.UI
             bodyText.alignment = TextAlignmentOptions.TopLeft;
             bodyText.textWrappingMode = TextWrappingModes.Normal;
             bodyText.overflowMode = TextOverflowModes.Ellipsis;
+        }
+
+
+        private void EnsureRosterScroll()
+        {
+            if (rosterScrollRect == null)
+            {
+                rosterScrollRect = transform.Find("RosterScrollView")?.GetComponent<ScrollRect>();
+            }
+
+            if (rosterScrollRect == null)
+            {
+                var scrollGo = new GameObject("RosterScrollView", typeof(RectTransform), typeof(Image), typeof(ScrollRect));
+                scrollGo.transform.SetParent(transform, false);
+                var scrollRect = scrollGo.GetComponent<RectTransform>();
+                scrollRect.anchorMin = Vector2.zero;
+                scrollRect.anchorMax = Vector2.one;
+                scrollRect.offsetMin = new Vector2(8f, 8f);
+                scrollRect.offsetMax = new Vector2(-8f, -8f);
+                scrollGo.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.01f);
+                rosterScrollRect = scrollGo.GetComponent<ScrollRect>();
+                rosterScrollRect.horizontal = false;
+                rosterScrollRect.vertical = true;
+
+                var viewportGo = new GameObject("Viewport", typeof(RectTransform), typeof(Image), typeof(RectMask2D));
+                viewportGo.transform.SetParent(scrollGo.transform, false);
+                var viewportRect = viewportGo.GetComponent<RectTransform>();
+                viewportRect.anchorMin = Vector2.zero;
+                viewportRect.anchorMax = Vector2.one;
+                viewportRect.offsetMin = Vector2.zero;
+                viewportRect.offsetMax = Vector2.zero;
+                viewportGo.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.01f);
+
+                var contentGo = new GameObject("Content", typeof(RectTransform), typeof(VerticalLayoutGroup), typeof(ContentSizeFitter));
+                contentGo.transform.SetParent(viewportGo.transform, false);
+                rosterContent = contentGo.GetComponent<RectTransform>();
+                rosterContent.anchorMin = new Vector2(0f, 1f);
+                rosterContent.anchorMax = new Vector2(1f, 1f);
+                rosterContent.pivot = new Vector2(0.5f, 1f);
+                rosterContent.anchoredPosition = Vector2.zero;
+                rosterContent.sizeDelta = Vector2.zero;
+
+                var layout = contentGo.GetComponent<VerticalLayoutGroup>();
+                layout.padding = new RectOffset(4, 4, 4, 4);
+                layout.spacing = 4f;
+                layout.childControlHeight = true;
+                layout.childControlWidth = true;
+                layout.childForceExpandHeight = false;
+                layout.childForceExpandWidth = true;
+
+                var fitter = contentGo.GetComponent<ContentSizeFitter>();
+                fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+                fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+                rosterScrollRect.viewport = viewportRect;
+                rosterScrollRect.content = rosterContent;
+            }
+
+            if (rosterContent == null)
+            {
+                rosterContent = rosterScrollRect.content;
+            }
+
+            if (bodyText != null && rosterContent != null && bodyText.transform.parent != rosterContent)
+            {
+                bodyText.transform.SetParent(rosterContent, false);
+            }
         }
 
         private void OnGoldChanged(int value)

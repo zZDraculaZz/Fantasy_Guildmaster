@@ -1416,20 +1416,12 @@ namespace FantasyGuildmaster.Map
 
         private static string FormatContractReq(ContractData contract)
         {
-            if (contract == null)
-            {
-                return "BOTH • Rank E";
-            }
-
-            var typeTag = contract.allowSquad && contract.allowSolo
-                ? "BOTH"
-                : (contract.allowSolo ? "SOLO" : "SQUAD");
-            return $"{typeTag} • Rank {contract.minRank}";
+            return ContractUiText.FormatContractReq(contract);
         }
 
         private static string FormatBlockedReason_NoEligible(ContractData contract)
         {
-            return "No eligible party";
+            return ContractUiText.FormatBlockedReasonNoEligible(contract);
         }
 
         private bool HasAnyEligibleParty(ContractData contract)

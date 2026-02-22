@@ -11,6 +11,7 @@ namespace FantasyGuildmaster.UI
         [SerializeField] private TMP_Text titleText;
         [SerializeField] private TMP_Text bodyText;
         [SerializeField] private RectTransform contentContainer;
+        [SerializeField] private ScrollRect detailsScrollRect;
 
         private MapController _map;
 
@@ -98,6 +99,7 @@ namespace FantasyGuildmaster.UI
 
         private void EnsureAutoResizeComponents()
         {
+            EnsureDetailsScroll();
             if (contentContainer == null)
             {
                 return;
@@ -135,6 +137,80 @@ namespace FantasyGuildmaster.UI
             }
         }
 
+
+        private void EnsureDetailsScroll()
+        {
+            if (detailsScrollRect == null)
+            {
+                detailsScrollRect = transform.Find("DetailsScrollView")?.GetComponent<ScrollRect>();
+            }
+
+            if (detailsScrollRect == null)
+            {
+                var scrollGo = new GameObject("DetailsScrollView", typeof(RectTransform), typeof(Image), typeof(ScrollRect));
+                scrollGo.transform.SetParent(transform, false);
+                var scrollRect = scrollGo.GetComponent<RectTransform>();
+                scrollRect.anchorMin = new Vector2(0f, 0f);
+                scrollRect.anchorMax = new Vector2(1f, 1f);
+                scrollRect.offsetMin = new Vector2(8f, 8f);
+                scrollRect.offsetMax = new Vector2(-8f, -42f);
+                scrollGo.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.01f);
+
+                detailsScrollRect = scrollGo.GetComponent<ScrollRect>();
+                detailsScrollRect.horizontal = false;
+                detailsScrollRect.vertical = true;
+
+                var viewportGo = new GameObject("Viewport", typeof(RectTransform), typeof(Image), typeof(RectMask2D));
+                viewportGo.transform.SetParent(scrollGo.transform, false);
+                var viewportRect = viewportGo.GetComponent<RectTransform>();
+                viewportRect.anchorMin = Vector2.zero;
+                viewportRect.anchorMax = Vector2.one;
+                viewportRect.offsetMin = Vector2.zero;
+                viewportRect.offsetMax = Vector2.zero;
+                viewportGo.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.01f);
+
+                var contentGo = new GameObject("Content", typeof(RectTransform), typeof(VerticalLayoutGroup), typeof(ContentSizeFitter));
+                contentGo.transform.SetParent(viewportGo.transform, false);
+                contentContainer = contentGo.GetComponent<RectTransform>();
+                contentContainer.anchorMin = new Vector2(0f, 1f);
+                contentContainer.anchorMax = new Vector2(1f, 1f);
+                contentContainer.pivot = new Vector2(0.5f, 1f);
+                contentContainer.anchoredPosition = Vector2.zero;
+                contentContainer.sizeDelta = Vector2.zero;
+
+                var layout = contentGo.GetComponent<VerticalLayoutGroup>();
+                layout.padding = new RectOffset(4, 4, 4, 4);
+                layout.spacing = 6f;
+                layout.childControlWidth = true;
+                layout.childControlHeight = true;
+                layout.childForceExpandHeight = false;
+                layout.childForceExpandWidth = true;
+
+                var fitter = contentGo.GetComponent<ContentSizeFitter>();
+                fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+                fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+                detailsScrollRect.viewport = viewportRect;
+                detailsScrollRect.content = contentContainer;
+            }
+
+            if (contentContainer == null && detailsScrollRect != null)
+            {
+                contentContainer = detailsScrollRect.content;
+            }
+
+            if (bodyText != null && contentContainer != null && bodyText.transform.parent != contentContainer)
+            {
+                bodyText.transform.SetParent(contentContainer, false);
+                var rect = bodyText.rectTransform;
+                rect.anchorMin = new Vector2(0f, 1f);
+                rect.anchorMax = new Vector2(1f, 1f);
+                rect.pivot = new Vector2(0.5f, 1f);
+                rect.anchoredPosition = Vector2.zero;
+                rect.sizeDelta = Vector2.zero;
+            }
+        }
+
         private void EnsureTexts()
         {
             if (titleText == null)
@@ -161,6 +237,7 @@ namespace FantasyGuildmaster.UI
                 }
             }
 
+            EnsureDetailsScroll();
             EnsureAutoResizeComponents();
         }
     }

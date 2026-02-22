@@ -14,7 +14,7 @@ namespace FantasyGuildmaster.UI
         [SerializeField] private TMP_Text titleText;
         [SerializeField] private TMP_Text timerText;
         [SerializeField] private TMP_Text rewardText;
-        [SerializeField] private TMP_Text requirementsText;
+        [SerializeField] private TMP_Text reqText;
         [SerializeField] private TMP_Text unavailableText;
 
         private static readonly Color NormalBackground = new(0.18f, 0.18f, 0.18f, 0.82f);
@@ -51,20 +51,25 @@ namespace FantasyGuildmaster.UI
 
         public void SetRequirements(string requirements)
         {
-            if (requirementsText == null)
+            if (reqText == null)
             {
-                requirementsText = transform.Find("RequirementsText")?.GetComponent<TMP_Text>();
+                reqText = transform.Find("ReqText")?.GetComponent<TMP_Text>();
+                if (reqText == null)
+                {
+                    reqText = transform.Find("RequirementsText")?.GetComponent<TMP_Text>();
+                }
             }
 
-            if (requirementsText == null)
+            if (reqText == null)
             {
                 return;
             }
 
-            requirementsText.text = string.IsNullOrWhiteSpace(requirements) ? string.Empty : requirements;
-            requirementsText.textWrappingMode = TextWrappingModes.NoWrap;
-            requirementsText.overflowMode = TextOverflowModes.Ellipsis;
-            requirementsText.raycastTarget = false;
+            reqText.text = string.IsNullOrWhiteSpace(requirements) ? string.Empty : requirements;
+            reqText.textWrappingMode = TextWrappingModes.NoWrap;
+            reqText.overflowMode = TextOverflowModes.Ellipsis;
+            reqText.raycastTarget = false;
+            reqText.ForceMeshUpdate(true);
         }
 
         public void SetUnavailableReason(string reason)
@@ -114,6 +119,8 @@ namespace FantasyGuildmaster.UI
             {
                 rewardText.text = $"{_contract.reward}g";
             }
+
+            SetRequirements(ContractUiText.FormatContractReq(_contract));
 
         }
 
