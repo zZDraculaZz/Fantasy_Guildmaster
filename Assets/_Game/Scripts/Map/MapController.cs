@@ -44,6 +44,7 @@ namespace FantasyGuildmaster.Map
         [SerializeField] private SquadDetailsPanel squadDetailsPanel;
         [SerializeField] private MissionReportPanel missionReportPanel;
         [SerializeField] private GuildHallPanel guildHallPanel;
+        [SerializeField] private Button endDayButton;
 
         private readonly Dictionary<string, List<ContractData>> _contractsByRegion = new();
         private readonly Dictionary<string, RegionData> _regionById = new();
@@ -80,6 +81,7 @@ namespace FantasyGuildmaster.Map
             EnsureEncounterDependencies();
             EnsureMissionReportPanel();
             EnsureGuildHallPanel();
+            EnsureEndDayButton();
 
             if (gameState == null)
             {
@@ -192,7 +194,7 @@ namespace FantasyGuildmaster.Map
             return encounterActive || reportActive || squadSelectActive || guildHallActive;
         }
 
-        private void OnTick()
+        private void OnTick(long simNow)
         {
             TickContracts();
             SyncAllContractIcons();
@@ -230,7 +232,7 @@ namespace FantasyGuildmaster.Map
 
         private void TickTravelTasks()
         {
-            var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            var now = SimulationTime.NowSeconds;
             var completedTasks = new List<TravelTask>();
 
             for (var i = 0; i < _travelTasks.Count; i++)
@@ -248,11 +250,11 @@ namespace FantasyGuildmaster.Map
                 {
                     var progress = task.GetProgress(now);
                     var pos = Vector2.Lerp(fromMarker.AnchoredPosition, toMarker.AnchoredPosition, progress);
-                    var remaining = Mathf.Max(0, (int)(task.endUnix - now));
+                    var remaining = Mathf.Max(0, (int)(task.endSimSeconds - now));
                     token.UpdateView(pos, ToTimerText(remaining));
                 }
 
-                if (now >= task.endUnix)
+                if (now >= task.endSimSeconds)
                 {
                     completedTasks.Add(task);
                 }
@@ -388,6 +390,7 @@ namespace FantasyGuildmaster.Map
         {
             EnsureMissionReportPanel();
             EnsureGuildHallPanel();
+            EnsureEndDayButton();
             if (missionReportPanel == null || _reportOpen || missionReportPanel.IsOpen || _pendingReports.Count == 0)
             {
                 return;
@@ -446,13 +449,46 @@ namespace FantasyGuildmaster.Map
             }
         }
 
-        private void TryAdvanceDayFlow(string trigger)
+
+        private void OnEndDayButtonClicked()
         {
-            if (!_endDayRequested)
+            _endDayRequested = true;
+            TryAdvanceDayFlow("EndDayButton");
+        }
+
+        private void EnsureEndDayButton()
+        {
+            if (endDayButton == null)
             {
-                _endDayRequested = !HasAnyContractsAvailableForToday() && _travelTasks.Count == 0;
+                endDayButton = transform.Find("MapCanvas/OverlayLayer/EndDayButton")?.GetComponent<Button>();
             }
 
+            if (endDayButton == null)
+            {
+                var canvas = EnsureCanvas();
+                if (canvas == null)
+                {
+                    return;
+                }
+
+                var button = CreateButton(canvas.transform, "EndDayButton", "End Day");
+                var rect = button.GetComponent<RectTransform>();
+                rect.anchorMin = new UnityEngine.Vector2(0.86f, 0.94f);
+                rect.anchorMax = new UnityEngine.Vector2(0.98f, 0.99f);
+                rect.offsetMin = UnityEngine.Vector2.zero;
+                rect.offsetMax = UnityEngine.Vector2.zero;
+                endDayButton = button;
+            }
+
+            if (endDayButton != null)
+            {
+                endDayButton.onClick.RemoveListener(OnEndDayButtonClicked);
+                endDayButton.onClick.AddListener(OnEndDayButtonClicked);
+            }
+        }
+
+        private void TryAdvanceDayFlow(string trigger)
+        {
             if (_dayState == DayState.EveningGuildHall)
             {
                 LogDayFlow(trigger, IsAnyContextModalActive());
@@ -491,6 +527,11 @@ namespace FantasyGuildmaster.Map
 
         private bool CanEnterEveningNow(bool anyModal)
         {
+            if (!_endDayRequested)
+            {
+                return false;
+            }
+
             if (_travelTasks.Count > 0)
             {
                 return false;
@@ -517,35 +558,16 @@ namespace FantasyGuildmaster.Map
             return GamePauseService.Count == 0;
         }
 
-        private bool HasAnyContractsAvailableForToday()
-        {
-            foreach (var pair in _contractsByRegion)
-            {
-                if (pair.Key == GuildHqId)
-                {
-                    continue;
-                }
-
-                var contracts = pair.Value;
-                if (contracts != null && contracts.Count > 0)
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
         private void LogDayFlow(string trigger, bool anyModal)
         {
-            var encountersQueued = encounterManager != null ? encounterManager.PendingEncounterCount : 0;
-            Debug.Log($"[DayFlow] trigger={trigger} state={_dayState} endDayRequested={_endDayRequested} travelTasks={_travelTasks.Count} encountersQueued={encountersQueued} reportQueue={_pendingReports.Count} anyModal={anyModal} pausedCount={GamePauseService.Count} [TODO REMOVE]");
+            Debug.Log($"[DayFlow] reason={trigger} endDayRequested={_endDayRequested} travelActive={_travelTasks.Count} encounters={(encounterManager != null ? encounterManager.PendingEncounterCount : 0)}/{(encounterManager != null && encounterManager.IsEncounterActive)} reports={_pendingReports.Count}/{(missionReportPanel != null && missionReportPanel.IsOpen)} modals={anyModal} [TODO REMOVE]");
         }
 
         private void EnterGuildHallEvening()
         {
             Debug.Log("[GuildHall] Enter evening [TODO REMOVE]");
             EnsureGuildHallPanel();
+            EnsureEndDayButton();
             if (guildHallPanel == null)
             {
                 Debug.LogWarning("[GuildHall] Panel missing, skipping evening. [TODO REMOVE]");
@@ -1525,7 +1547,7 @@ namespace FantasyGuildmaster.Map
             }
 
             var duration = ResolveTravelDuration(toRegionId);
-            var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            var now = SimulationTime.NowSeconds;
 
             var task = new TravelTask
             {
@@ -1535,8 +1557,8 @@ namespace FantasyGuildmaster.Map
                 contractId = contractId,
                 contractReward = contractReward,
                 phase = phase,
-                startUnix = now,
-                endUnix = now + duration
+                startSimSeconds = now,
+                endSimSeconds = now + duration
             };
 
             RemoveExistingTaskForSquad(squad.id);
@@ -1546,7 +1568,7 @@ namespace FantasyGuildmaster.Map
             if (DEBUG_TRAVEL)
             {
                 var phaseLabel = phase == TravelPhase.Outbound ? "OUT" : "RET";
-                Debug.Log($"[TravelDebug] Travel task created: phase={phaseLabel}, squad={squad.name}, route={fromRegionId}->{toRegionId}, endUnix={task.endUnix}");
+                Debug.Log($"[TravelDebug] Travel task created: phase={phaseLabel}, squad={squad.name}, route={fromRegionId}->{toRegionId}, endSimSeconds={task.endSimSeconds}");
             }
         }
 
@@ -1589,7 +1611,7 @@ namespace FantasyGuildmaster.Map
 
             if (_markersByRegion.TryGetValue(task.fromRegionId, out var fromMarker) && fromMarker != null)
             {
-                var remaining = Mathf.Max(0, (int)(task.endUnix - DateTimeOffset.UtcNow.ToUnixTimeSeconds()));
+                var remaining = Mathf.Max(0, (int)(task.endSimSeconds - SimulationTime.NowSeconds));
                 token.UpdateView(fromMarker.AnchoredPosition, ToTimerText(remaining));
             }
         }
@@ -1939,7 +1961,7 @@ namespace FantasyGuildmaster.Map
 
         private void RefreshSquadStatusHud()
         {
-            var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            var now = SimulationTime.NowSeconds;
             if (squadStatusHud != null)
             {
                 squadStatusHud.Sync(GetRosterSquads(), _travelTasks, ResolveRegionName, now);

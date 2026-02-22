@@ -7,7 +7,7 @@ namespace FantasyGuildmaster.Map
 {
     public sealed class GameClock : MonoBehaviour
     {
-        public event Action TickSecond;
+        public event Action<long> TickSecond;
 
         public int ElapsedSeconds { get; private set; }
 
@@ -15,6 +15,8 @@ namespace FantasyGuildmaster.Map
 
         private void OnEnable()
         {
+            SimulationTime.Reset(0);
+            ElapsedSeconds = 0;
             _ticker = StartCoroutine(TickCoroutine());
         }
 
@@ -29,7 +31,7 @@ namespace FantasyGuildmaster.Map
 
         private IEnumerator TickCoroutine()
         {
-            var wait = new WaitForSecondsRealtime(1f);
+            var wait = new WaitForSeconds(1f);
             while (enabled)
             {
                 if (GamePauseService.IsPaused)
@@ -45,7 +47,8 @@ namespace FantasyGuildmaster.Map
                 }
 
                 ElapsedSeconds++;
-                TickSecond?.Invoke();
+                SimulationTime.AdvanceSeconds(1);
+                TickSecond?.Invoke(SimulationTime.NowSeconds);
             }
         }
     }

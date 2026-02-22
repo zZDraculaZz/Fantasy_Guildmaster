@@ -1,4 +1,3 @@
-using System;
 using System.Collections;
 using System.Text;
 using FantasyGuildmaster.Core;
@@ -143,7 +142,7 @@ namespace FantasyGuildmaster.UI
                 return;
             }
 
-            Render(_map.GetSquads(), _map.GetTravelTasks(), _map.GetRegionNameById, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+            Render(_map.GetSquads(), _map.GetTravelTasks(), _map.GetRegionNameById, SimulationTime.NowSeconds);
         }
 
         private void Render(System.Collections.Generic.IReadOnlyList<SquadData> squads, System.Collections.Generic.IReadOnlyList<TravelTask> tasks, Func<string, string> resolveRegionName, long nowUnix)
