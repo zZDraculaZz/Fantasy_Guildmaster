@@ -389,7 +389,12 @@ namespace FantasyGuildmaster.UI
             bodyText.overflowMode = TextOverflowModes.Masking;
             bodyText.raycastTarget = false;
             bodyText.ForceMeshUpdate(true);
-            rect.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, Mathf.Max(1f, bodyText.preferredHeight));
+            var preferredHeight = Mathf.Max(1f, bodyText.preferredHeight);
+            rect.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, preferredHeight);
+            if (rosterContent != null)
+            {
+                rosterContent.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, preferredHeight);
+            }
 
             for (var i = 0; i < _rowPool.Count; i++)
             {
@@ -547,7 +552,7 @@ namespace FantasyGuildmaster.UI
                 rosterContent.anchorMax = new Vector2(1f, 1f);
                 rosterContent.pivot = new Vector2(0.5f, 1f);
                 rosterContent.anchoredPosition = Vector2.zero;
-                rosterContent.sizeDelta = Vector2.zero;
+                rosterContent.sizeDelta = new Vector2(0f, Mathf.Max(rosterContent.sizeDelta.y, 1f));
 
                 var fitter = contentGo.GetComponent<ContentSizeFitter>();
                 fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
