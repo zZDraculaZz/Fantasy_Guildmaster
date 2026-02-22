@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using FantasyGuildmaster.Core;
 using FantasyGuildmaster.Map;
 using TMPro;
 using UnityEngine;
@@ -15,10 +16,16 @@ namespace FantasyGuildmaster.UI
         [SerializeField] private Button closeButton;
 
         private readonly List<Button> _buttons = new();
+        private bool _pauseHeld;
 
         public void Show(List<SquadData> idleSquads, Action<SquadData> onSelected)
         {
             gameObject.SetActive(true);
+            if (!_pauseHeld)
+            {
+                GamePauseService.Push("SquadSelect");
+                _pauseHeld = true;
+            }
 
             if (titleText != null)
             {
@@ -58,6 +65,11 @@ namespace FantasyGuildmaster.UI
         public void Hide()
         {
             gameObject.SetActive(false);
+            if (_pauseHeld)
+            {
+                GamePauseService.Pop("SquadSelect");
+                _pauseHeld = false;
+            }
         }
 
         private void ClearButtons()

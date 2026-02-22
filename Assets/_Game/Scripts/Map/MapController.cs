@@ -36,6 +36,7 @@ namespace FantasyGuildmaster.Map
         [SerializeField] private SquadStatusHUD squadStatusHud;
         [SerializeField] private SquadDetailsPanel squadDetailsPanel;
         [SerializeField] private MissionReportPanel missionReportPanel;
+        [SerializeField] private GuildHallPanel guildHallPanel;
 
         private readonly Dictionary<string, List<ContractData>> _contractsByRegion = new();
         private readonly Dictionary<string, RegionData> _regionById = new();
@@ -50,6 +51,9 @@ namespace FantasyGuildmaster.Map
         private TravelTokenPool _travelTokenPool;
         private string _selectedSquadId;
         private readonly Queue<MissionReportData> _pendingReports = new();
+        private bool _reportOpen;
+        private int _dayIndex = 1;
+        private GuildHallEveningData _guildHallEveningData;
 
         private void Awake()
         {
@@ -65,6 +69,7 @@ namespace FantasyGuildmaster.Map
             SyncAllContractIcons();
             EnsureEncounterDependencies();
             EnsureMissionReportPanel();
+            EnsureGuildHallPanel();
 
             if (gameState == null)
             {
@@ -267,7 +272,7 @@ namespace FantasyGuildmaster.Map
 
             var report = BuildMissionReport(task, squad);
             _pendingReports.Enqueue(report);
-            Debug.Log($"[Report] Enqueued: squad={report.squadId} contract={report.contractId} reward={report.rewardGold}");
+            Debug.Log($"[Report] Enqueued: squad={report.squadId} contract={report.contractId} reward={report.rewardGold} [TODO REMOVE]");
             TryShowNextMissionReport();
         }
 
@@ -325,18 +330,21 @@ namespace FantasyGuildmaster.Map
         private void TryShowNextMissionReport()
         {
             EnsureMissionReportPanel();
-            if (missionReportPanel == null || missionReportPanel.IsOpen || _pendingReports.Count == 0)
+            EnsureGuildHallPanel();
+            if (missionReportPanel == null || _reportOpen || missionReportPanel.IsOpen || _pendingReports.Count == 0)
             {
                 return;
             }
 
             var report = _pendingReports.Peek();
-            Debug.Log($"[Report] Showing: squad={report.squadId} contract={report.contractId} reward={report.rewardGold}");
+            Debug.Log($"[Report] Showing: squad={report.squadId} contract={report.contractId} reward={report.rewardGold} [TODO REMOVE]");
+            _reportOpen = true;
             missionReportPanel.Show(report, () => OnMissionReportContinue(report));
         }
-
         private void OnMissionReportContinue(MissionReportData report)
         {
+            Debug.Log($"[Report] onContinue invoked: squad={report?.squadId} contract={report?.contractId} reward={report?.rewardGold} [TODO REMOVE]");
+
             if (_pendingReports.Count > 0)
             {
                 _pendingReports.Dequeue();
@@ -344,7 +352,9 @@ namespace FantasyGuildmaster.Map
 
             AddGold(report.rewardGold);
             CompleteContract(report.regionId, report.contractId);
-            Debug.Log($"[Report] Applied+Closed: squad={report.squadId} contract={report.contractId} reward={report.rewardGold}");
+            missionReportPanel?.Hide();
+            _reportOpen = false;
+            Debug.Log($"[Report] Applied+Closed: squad={report.squadId} contract={report.contractId} reward={report.rewardGold} [TODO REMOVE]");
 
             RefreshSquadStatusHud();
             if (detailsPanel != null)
@@ -358,7 +368,117 @@ namespace FantasyGuildmaster.Map
             }
             else
             {
-                missionReportPanel?.Hide();
+                EnterGuildHallEvening();
+            }
+        }
+
+        private void EnterGuildHallEvening()
+        {
+            Debug.Log("[GuildHall] Enter evening [TODO REMOVE]");
+            EnsureGuildHallPanel();
+            if (guildHallPanel == null)
+            {
+                Debug.LogWarning("[GuildHall] Panel missing, skipping evening. [TODO REMOVE]");
+                OnGuildHallNextDay();
+                return;
+            }
+
+            if (_guildHallEveningData == null)
+            {
+                _guildHallEveningData = GuildHallEveningLoader.Load();
+            }
+
+            EnsureEventSystem();
+            guildHallPanel.ShowEvening(_guildHallEveningData, _dayIndex, OnGuildHallNextDay, ApplyRestEveningEffect);
+        }
+
+        private void ApplyRestEveningEffect()
+        {
+            var squads = GetRosterSquads();
+            for (var i = 0; i < squads.Count; i++)
+            {
+                var squad = squads[i];
+                if (squad == null || squad.IsDestroyed)
+                {
+                    continue;
+                }
+
+                if (squad.members == null)
+                {
+                    continue;
+                }
+
+                for (var m = 0; m < squad.members.Count; m++)
+                {
+                    var member = squad.members[m];
+                    if (member == null || member.maxHp <= 0)
+                    {
+                        continue;
+                    }
+
+                    member.hp = Mathf.Min(member.maxHp, member.hp + 5);
+                }
+            }
+
+            RefreshSquadStatusHud();
+            squadDetailsPanel?.Refresh();
+        }
+
+        private void OnGuildHallNextDay()
+        {
+            guildHallPanel?.Hide();
+            _dayIndex++;
+            RefreshContractsForNextDay();
+            SyncAllContractIcons();
+
+            if (detailsPanel != null)
+            {
+                detailsPanel.SetIdleSquadsCount(GetIdleSquads().Count);
+            }
+
+            Debug.Log($"[GuildHall] Next Day dayIndex={_dayIndex} [TODO REMOVE]");
+        }
+
+        private void RefreshContractsForNextDay()
+        {
+            foreach (var region in _gameData.regions)
+            {
+                if (region == null || region.id == GuildHqId)
+                {
+                    continue;
+                }
+
+                var seed = (region.id != null ? region.id.GetHashCode() : 0) ^ (_dayIndex * 397);
+                var random = new System.Random(seed);
+                if (!_contractsByRegion.TryGetValue(region.id, out var contracts) || contracts == null)
+                {
+                    contracts = new List<ContractData>();
+                    _contractsByRegion[region.id] = contracts;
+                }
+
+                if (contracts.Count == 0)
+                {
+                    var count = random.Next(2, 5);
+                    for (var i = 0; i < count; i++)
+                    {
+                        contracts.Add(new ContractData
+                        {
+                            id = $"{region.id}_day{_dayIndex}_contract_{i}",
+                            title = $"Contract #{i + 1}: {region.name}",
+                            remainingSeconds = random.Next(45, 300),
+                            reward = random.Next(50, 250),
+                            iconKey = PickContractIconKey(i)
+                        });
+                    }
+                }
+                else
+                {
+                    for (var i = 0; i < contracts.Count; i++)
+                    {
+                        contracts[i].remainingSeconds = random.Next(45, 300);
+                        contracts[i].reward = random.Next(50, 250);
+                    }
+                }
             }
         }
 
@@ -366,12 +486,16 @@ namespace FantasyGuildmaster.Map
         {
             if (missionReportPanel != null)
             {
+                _reportOpen = missionReportPanel.IsOpen;
+                EnsureMissionReportInteractionInfra();
                 return;
             }
 
             missionReportPanel = FindFirstObjectByType<MissionReportPanel>();
             if (missionReportPanel != null)
             {
+                _reportOpen = missionReportPanel.IsOpen;
+                EnsureMissionReportInteractionInfra();
                 return;
             }
 
@@ -390,11 +514,222 @@ namespace FantasyGuildmaster.Map
                 {
                     instance.transform.SetAsLastSibling();
                     missionReportPanel.Hide();
+                    _reportOpen = false;
+                    EnsureMissionReportInteractionInfra();
                     return;
                 }
             }
 
             missionReportPanel = CreateRuntimeMissionReportPanel(canvas);
+            _reportOpen = false;
+            EnsureMissionReportInteractionInfra();
+        }
+
+
+        private void EnsureMissionReportInteractionInfra()
+        {
+            EnsureEventSystem();
+            if (missionReportPanel == null)
+            {
+                return;
+            }
+
+            var canvas = missionReportPanel.GetComponentInParent<Canvas>();
+            if (canvas != null && canvas.GetComponent<GraphicRaycaster>() == null)
+            {
+                canvas.gameObject.AddComponent<GraphicRaycaster>();
+            }
+        }
+
+        private void EnsureGuildHallPanel()
+        {
+            if (guildHallPanel != null)
+            {
+                return;
+            }
+
+            guildHallPanel = FindFirstObjectByType<GuildHallPanel>();
+            if (guildHallPanel != null)
+            {
+                guildHallPanel.Hide();
+                return;
+            }
+
+            var prefab = Resources.Load<GameObject>("Prefabs/GuildHallPanel");
+            var canvas = EnsureCanvas();
+            if (canvas == null)
+            {
+                return;
+            }
+
+            if (prefab != null)
+            {
+                var instance = Instantiate(prefab, canvas.transform, false);
+                guildHallPanel = instance.GetComponent<GuildHallPanel>();
+                if (guildHallPanel != null)
+                {
+                    instance.transform.SetAsLastSibling();
+                    guildHallPanel.Hide();
+                    return;
+                }
+            }
+
+            guildHallPanel = CreateRuntimeGuildHallPanel(canvas);
+        }
+
+        private GuildHallPanel CreateRuntimeGuildHallPanel(Canvas canvas)
+        {
+            var root = new GameObject("GuildHallPanel", typeof(RectTransform), typeof(Image), typeof(CanvasGroup), typeof(GuildHallPanel));
+            root.transform.SetParent(canvas.transform, false);
+            var rootRect = root.GetComponent<RectTransform>();
+            rootRect.anchorMin = Vector2.zero;
+            rootRect.anchorMax = Vector2.one;
+            rootRect.offsetMin = Vector2.zero;
+            rootRect.offsetMax = Vector2.zero;
+            root.transform.SetAsLastSibling();
+
+            var dimmer = root.GetComponent<Image>();
+            dimmer.color = new Color(0f, 0f, 0f, 0.65f);
+            dimmer.raycastTarget = true;
+
+            var content = new GameObject("Content", typeof(RectTransform));
+            content.transform.SetParent(root.transform, false);
+            var contentRect = content.GetComponent<RectTransform>();
+            contentRect.anchorMin = Vector2.zero;
+            contentRect.anchorMax = Vector2.one;
+            contentRect.offsetMin = Vector2.zero;
+            contentRect.offsetMax = Vector2.zero;
+            content.transform.SetAsLastSibling();
+
+            var backgroundLayer = new GameObject("BackgroundLayer", typeof(RectTransform), typeof(Image));
+            backgroundLayer.transform.SetParent(content.transform, false);
+            var backgroundRect = backgroundLayer.GetComponent<RectTransform>();
+            backgroundRect.anchorMin = Vector2.zero;
+            backgroundRect.anchorMax = Vector2.one;
+            backgroundRect.offsetMin = Vector2.zero;
+            backgroundRect.offsetMax = Vector2.zero;
+            var backgroundImage = backgroundLayer.GetComponent<Image>();
+            backgroundImage.color = new Color(0.15f, 0.13f, 0.1f, 1f);
+            backgroundImage.raycastTarget = false;
+
+            var stageLayer = new GameObject("StageLayer", typeof(RectTransform), typeof(Image));
+            stageLayer.transform.SetParent(content.transform, false);
+            var stageRect = stageLayer.GetComponent<RectTransform>();
+            stageRect.anchorMin = new Vector2(0.05f, 0.20f);
+            stageRect.anchorMax = new Vector2(0.95f, 0.88f);
+            stageRect.offsetMin = Vector2.zero;
+            stageRect.offsetMax = Vector2.zero;
+            var stageImage = stageLayer.GetComponent<Image>();
+            stageImage.color = new Color(0.25f, 0.2f, 0.16f, 0.38f);
+            stageImage.raycastTarget = false;
+
+            var topBar = new GameObject("TopBar", typeof(RectTransform), typeof(Image));
+            topBar.transform.SetParent(content.transform, false);
+            var topRect = topBar.GetComponent<RectTransform>();
+            topRect.anchorMin = new Vector2(0.02f, 0.90f);
+            topRect.anchorMax = new Vector2(0.98f, 0.98f);
+            topRect.offsetMin = Vector2.zero;
+            topRect.offsetMax = Vector2.zero;
+            var topImage = topBar.GetComponent<Image>();
+            topImage.color = new Color(0.08f, 0.08f, 0.09f, 0.72f);
+            topImage.raycastTarget = false;
+
+            var title = CreateText(topBar.transform, "Title", 34f, FontStyles.Bold, TextAlignmentOptions.Left);
+            title.text = "GUILD HALL";
+            var titleRect = title.rectTransform;
+            titleRect.anchorMin = new Vector2(0f, 0f);
+            titleRect.anchorMax = new Vector2(0.7f, 1f);
+            titleRect.offsetMin = new Vector2(20f, 0f);
+            titleRect.offsetMax = Vector2.zero;
+
+            var day = CreateText(topBar.transform, "Day", 26f, FontStyles.Bold, TextAlignmentOptions.Right);
+            day.text = "Day 1";
+            var dayRect = day.rectTransform;
+            dayRect.anchorMin = new Vector2(0.58f, 0f);
+            dayRect.anchorMax = new Vector2(0.8f, 1f);
+            dayRect.offsetMin = Vector2.zero;
+            dayRect.offsetMax = Vector2.zero;
+
+            var hint = CreateText(topBar.transform, "Hint", 18f, FontStyles.Italic, TextAlignmentOptions.Center);
+            hint.text = "Click a character to talk";
+            var hintRect = hint.rectTransform;
+            hintRect.anchorMin = new Vector2(0.22f, 0f);
+            hintRect.anchorMax = new Vector2(0.58f, 1f);
+            hintRect.offsetMin = Vector2.zero;
+            hintRect.offsetMax = Vector2.zero;
+
+            var nextDayButton = CreateButton(topBar.transform, "NextDayButton", "Next Day");
+            var nextDayRect = (RectTransform)nextDayButton.transform;
+            nextDayRect.anchorMin = new Vector2(0.82f, 0.14f);
+            nextDayRect.anchorMax = new Vector2(0.99f, 0.86f);
+            nextDayRect.offsetMin = Vector2.zero;
+            nextDayRect.offsetMax = Vector2.zero;
+
+            var dialogueBar = new GameObject("DialogueBar", typeof(RectTransform), typeof(Image));
+            dialogueBar.transform.SetParent(content.transform, false);
+            var dialogueRect = dialogueBar.GetComponent<RectTransform>();
+            dialogueRect.anchorMin = new Vector2(0.02f, 0.02f);
+            dialogueRect.anchorMax = new Vector2(0.98f, 0.30f);
+            dialogueRect.offsetMin = Vector2.zero;
+            dialogueRect.offsetMax = Vector2.zero;
+            var dialogueImage = dialogueBar.GetComponent<Image>();
+            dialogueImage.color = new Color(0.06f, 0.07f, 0.09f, 0.88f);
+            dialogueImage.raycastTarget = true;
+
+            var speaker = CreateText(dialogueBar.transform, "Speaker", 28f, FontStyles.Bold, TextAlignmentOptions.Left);
+            var speakerRect = speaker.rectTransform;
+            speakerRect.anchorMin = new Vector2(0.02f, 0.72f);
+            speakerRect.anchorMax = new Vector2(0.52f, 0.98f);
+            speakerRect.offsetMin = Vector2.zero;
+            speakerRect.offsetMax = Vector2.zero;
+
+            var body = CreateText(dialogueBar.transform, "Body", 24f, FontStyles.Normal, TextAlignmentOptions.TopLeft);
+            body.textWrappingMode = TextWrappingModes.Normal;
+            var bodyRect = body.rectTransform;
+            bodyRect.anchorMin = new Vector2(0.02f, 0.12f);
+            bodyRect.anchorMax = new Vector2(0.74f, 0.70f);
+            bodyRect.offsetMin = Vector2.zero;
+            bodyRect.offsetMax = Vector2.zero;
+
+            var buttons = new GameObject("Buttons", typeof(RectTransform), typeof(HorizontalLayoutGroup));
+            buttons.transform.SetParent(dialogueBar.transform, false);
+            var buttonsRect = buttons.GetComponent<RectTransform>();
+            buttonsRect.anchorMin = new Vector2(0.76f, 0.12f);
+            buttonsRect.anchorMax = new Vector2(0.98f, 0.88f);
+            buttonsRect.offsetMin = Vector2.zero;
+            buttonsRect.offsetMax = Vector2.zero;
+            var buttonsLayout = buttons.GetComponent<HorizontalLayoutGroup>();
+            buttonsLayout.spacing = 10f;
+            buttonsLayout.childControlWidth = true;
+            buttonsLayout.childControlHeight = true;
+            buttonsLayout.childForceExpandWidth = true;
+
+            var nextButton = CreateButton(buttons.transform, "NextButton", "Next");
+            var skipButton = CreateButton(buttons.transform, "SkipButton", "Skip");
+
+            dialogueBar.SetActive(false);
+            stageLayer.transform.SetAsLastSibling();
+            dialogueBar.transform.SetAsLastSibling();
+            topBar.transform.SetAsLastSibling();
+
+            var panel = root.GetComponent<GuildHallPanel>();
+            panel.ConfigureRuntimeBindings(
+                root,
+                dimmer,
+                contentRect,
+                backgroundImage,
+                stageRect,
+                title,
+                day,
+                hint,
+                nextDayButton,
+                dialogueBar,
+                speaker,
+                body,
+                nextButton,
+                skipButton);
+            panel.Hide();
+            return panel;
         }
 
         private MissionReportPanel CreateRuntimeMissionReportPanel(Canvas canvas)
@@ -665,6 +1000,7 @@ namespace FantasyGuildmaster.Map
             labelRect.offsetMin = Vector2.zero;
             labelRect.offsetMax = Vector2.zero;
             label.text = labelText;
+            label.raycastTarget = false;
             return buttonGo.GetComponent<Button>();
         }
 
