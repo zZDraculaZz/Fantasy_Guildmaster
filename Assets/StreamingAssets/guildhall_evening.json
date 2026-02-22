@@ -1,11 +1,35 @@
 {
   "scenes": [
     {
-      "id": "evening_01",
+      "id": "hub_intro",
       "lines": [
-        {"speaker": "Guildmaster", "text": "Another night, another ledger to balance."},
-        {"speaker": "Quartermaster", "text": "Supplies are low. The northern roads are not safe."},
-        {"speaker": "Guildmaster", "text": "Then we choose our contracts carefully."}
+        {"speaker": "Guildmaster", "text": "The hall grows quiet as the lamps are lit."}
+      ]
+    },
+    {
+      "id": "talk_quartermaster",
+      "lines": [
+        {"speaker": "Quartermaster", "text": "Stocks are tight. We can keep one more week at this pace."},
+        {"speaker": "Guildmaster", "text": "Then we prioritize steady contracts over risky glory."}
+      ]
+    },
+    {
+      "id": "talk_captain",
+      "lines": [
+        {"speaker": "Captain", "text": "Morale is steady. Squads trust your calls."},
+        {"speaker": "Guildmaster", "text": "Good. Tomorrow we test that trust."}
+      ]
+    },
+    {
+      "id": "review_roster",
+      "lines": [
+        {"speaker": "Guildmaster", "text": "Roster reviewed. No one goes out without proper rest."}
+      ]
+    },
+    {
+      "id": "rest_evening",
+      "lines": [
+        {"speaker": "Guildmaster", "text": "Lights out early. The squads need a calmer night."}
       ]
     }
   ]

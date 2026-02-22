@@ -368,11 +368,11 @@ namespace FantasyGuildmaster.Map
             }
             else
             {
-                EnterEveningPhase();
+                EnterGuildHallEvening();
             }
         }
 
-        private void EnterEveningPhase()
+        private void EnterGuildHallEvening()
         {
             Debug.Log("[GuildHall] Enter evening [TODO REMOVE]");
             EnsureGuildHallPanel();
@@ -388,7 +388,39 @@ namespace FantasyGuildmaster.Map
                 _guildHallEveningData = GuildHallEveningLoader.Load();
             }
 
-            guildHallPanel.Show("evening_01", _guildHallEveningData, OnGuildHallNextDay);
+            guildHallPanel.ShowHub(_guildHallEveningData, OnGuildHallNextDay, ApplyRestEveningEffect);
+        }
+
+        private void ApplyRestEveningEffect()
+        {
+            var squads = GetRosterSquads();
+            for (var i = 0; i < squads.Count; i++)
+            {
+                var squad = squads[i];
+                if (squad == null || squad.IsDestroyed)
+                {
+                    continue;
+                }
+
+                if (squad.members == null)
+                {
+                    continue;
+                }
+
+                for (var m = 0; m < squad.members.Count; m++)
+                {
+                    var member = squad.members[m];
+                    if (member == null || member.maxHp <= 0)
+                    {
+                        continue;
+                    }
+
+                    member.hp = Mathf.Min(member.maxHp, member.hp + 5);
+                }
+            }
+
+            RefreshSquadStatusHud();
+            squadDetailsPanel?.Refresh();
         }
 
         private void OnGuildHallNextDay()
@@ -403,7 +435,7 @@ namespace FantasyGuildmaster.Map
                 detailsPanel.SetIdleSquadsCount(GetIdleSquads().Count);
             }
 
-            Debug.Log($"[GuildHall] Next Day -> day={_dayIndex} [TODO REMOVE]");
+            Debug.Log($"[GuildHall] Next Day dayIndex={_dayIndex} [TODO REMOVE]");
         }
 
         private void RefreshContractsForNextDay()
@@ -565,47 +597,94 @@ namespace FantasyGuildmaster.Map
             contentRect.anchorMin = new Vector2(0.5f, 0.5f);
             contentRect.anchorMax = new Vector2(0.5f, 0.5f);
             contentRect.pivot = new Vector2(0.5f, 0.5f);
-            contentRect.sizeDelta = new Vector2(900f, 420f);
-            content.SetActive(true);
+            contentRect.sizeDelta = new Vector2(920f, 500f);
             content.transform.SetAsLastSibling();
 
             var contentImage = content.GetComponent<Image>();
             contentImage.color = new Color(0.12f, 0.1f, 0.09f, 0.98f);
+            var contentLayout = content.GetComponent<VerticalLayoutGroup>();
+            contentLayout.padding = new RectOffset(18, 18, 16, 16);
+            contentLayout.spacing = 10f;
+            contentLayout.childControlWidth = true;
+            contentLayout.childControlHeight = false;
+            contentLayout.childForceExpandWidth = true;
+            contentLayout.childForceExpandHeight = false;
 
-            var layout = content.GetComponent<VerticalLayoutGroup>();
-            layout.padding = new RectOffset(18, 18, 16, 16);
-            layout.spacing = 12f;
-            layout.childControlWidth = true;
-            layout.childControlHeight = false;
-            layout.childForceExpandWidth = true;
-            layout.childForceExpandHeight = false;
+            var hub = new GameObject("Hub", typeof(RectTransform), typeof(VerticalLayoutGroup));
+            hub.transform.SetParent(content.transform, false);
+            var hubLayout = hub.GetComponent<VerticalLayoutGroup>();
+            hubLayout.spacing = 8f;
+            hubLayout.childControlWidth = true;
+            hubLayout.childControlHeight = false;
+            hubLayout.childForceExpandWidth = true;
+            hubLayout.childForceExpandHeight = false;
 
-            var speaker = CreateText(content.transform, "Speaker", 30f, FontStyles.Bold, TextAlignmentOptions.Left);
-            speaker.text = "Guildmaster";
-            var speakerLayout = speaker.gameObject.GetComponent<LayoutElement>() ?? speaker.gameObject.AddComponent<LayoutElement>();
-            speakerLayout.minHeight = 42f;
+            var hubTitle = CreateText(hub.transform, "Title", 36f, FontStyles.Bold, TextAlignmentOptions.Center);
+            hubTitle.text = "GUILD HALL";
+            var hubSubtitle = CreateText(hub.transform, "Subtitle", 22f, FontStyles.Normal, TextAlignmentOptions.Center);
+            hubSubtitle.text = "Evening activities";
 
-            var dialogue = CreateText(content.transform, "Dialogue", 24f, FontStyles.Normal, TextAlignmentOptions.TopLeft);
-            dialogue.textWrappingMode = TextWrappingModes.Normal;
-            var dialogueLayout = dialogue.gameObject.GetComponent<LayoutElement>() ?? dialogue.gameObject.AddComponent<LayoutElement>();
-            dialogueLayout.minHeight = 220f;
-            dialogueLayout.flexibleHeight = 1f;
+            var hubButtonsRoot = new GameObject("Buttons", typeof(RectTransform), typeof(VerticalLayoutGroup));
+            hubButtonsRoot.transform.SetParent(hub.transform, false);
+            var hubButtonsLayout = hubButtonsRoot.GetComponent<VerticalLayoutGroup>();
+            hubButtonsLayout.spacing = 8f;
+            hubButtonsLayout.childControlWidth = true;
+            hubButtonsLayout.childControlHeight = true;
+            hubButtonsLayout.childForceExpandWidth = true;
 
-            var buttonsRoot = new GameObject("Buttons", typeof(RectTransform), typeof(HorizontalLayoutGroup));
-            buttonsRoot.transform.SetParent(content.transform, false);
-            var buttonsLayout = buttonsRoot.GetComponent<HorizontalLayoutGroup>();
-            buttonsLayout.spacing = 10f;
-            buttonsLayout.childControlWidth = true;
-            buttonsLayout.childControlHeight = true;
-            buttonsLayout.childForceExpandWidth = true;
+            var talkQuartermaster = CreateButton(hubButtonsRoot.transform, "TalkQuartermasterButton", "Talk: Quartermaster");
+            var talkCaptain = CreateButton(hubButtonsRoot.transform, "TalkCaptainButton", "Talk: Captain");
+            var reviewRoster = CreateButton(hubButtonsRoot.transform, "ReviewRosterButton", "Review Roster");
+            var restButton = CreateButton(hubButtonsRoot.transform, "RestButton", "Rest");
+            var nextDayButton = CreateButton(hubButtonsRoot.transform, "NextDayButton", "Next Day");
 
-            var nextButton = CreateButton(buttonsRoot.transform, "NextButton", "Next");
-            var skipButton = CreateButton(buttonsRoot.transform, "SkipButton", "Skip");
-            var nextDayButton = CreateButton(buttonsRoot.transform, "NextDayButton", "Next Day");
-            nextDayButton.gameObject.SetActive(false);
+            var dialogue = new GameObject("Dialogue", typeof(RectTransform), typeof(VerticalLayoutGroup));
+            dialogue.transform.SetParent(content.transform, false);
+            var dialogueLayout = dialogue.GetComponent<VerticalLayoutGroup>();
+            dialogueLayout.spacing = 8f;
+            dialogueLayout.childControlWidth = true;
+            dialogueLayout.childControlHeight = false;
+            dialogueLayout.childForceExpandWidth = true;
+            dialogueLayout.childForceExpandHeight = false;
+
+            var speaker = CreateText(dialogue.transform, "Speaker", 30f, FontStyles.Bold, TextAlignmentOptions.Left);
+            var body = CreateText(dialogue.transform, "Body", 24f, FontStyles.Normal, TextAlignmentOptions.TopLeft);
+            body.textWrappingMode = TextWrappingModes.Normal;
+            var bodyLayout = body.gameObject.GetComponent<LayoutElement>() ?? body.gameObject.AddComponent<LayoutElement>();
+            bodyLayout.minHeight = 260f;
+            bodyLayout.flexibleHeight = 1f;
+
+            var dialogueButtons = new GameObject("Buttons", typeof(RectTransform), typeof(HorizontalLayoutGroup));
+            dialogueButtons.transform.SetParent(dialogue.transform, false);
+            var dialogueButtonsLayout = dialogueButtons.GetComponent<HorizontalLayoutGroup>();
+            dialogueButtonsLayout.spacing = 10f;
+            dialogueButtonsLayout.childControlWidth = true;
+            dialogueButtonsLayout.childControlHeight = true;
+            dialogueButtonsLayout.childForceExpandWidth = true;
+
+            var nextButton = CreateButton(dialogueButtons.transform, "NextButton", "Next");
+            var skipButton = CreateButton(dialogueButtons.transform, "SkipButton", "Skip");
+            var backButton = CreateButton(dialogueButtons.transform, "BackButton", "Back to Hall");
 
             var panel = root.GetComponent<GuildHallPanel>();
-            panel.ConfigureRuntimeBindings(root, dimmer, contentRect, speaker, dialogue, nextButton, skipButton, nextDayButton);
+            panel.ConfigureRuntimeBindings(
+                root,
+                dimmer,
+                contentRect,
+                hub,
+                hubTitle,
+                hubSubtitle,
+                talkQuartermaster,
+                talkCaptain,
+                reviewRoster,
+                restButton,
+                nextDayButton,
+                dialogue,
+                speaker,
+                body,
+                nextButton,
+                skipButton,
+                backButton);
             panel.Hide();
             return panel;
         }

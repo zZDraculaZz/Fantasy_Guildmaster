@@ -12,20 +12,34 @@ namespace FantasyGuildmaster.UI
         [SerializeField] private GameObject root;
         [SerializeField] private Image dimmerImage;
         [SerializeField] private RectTransform contentRoot;
+
+        [Header("Hub")]
+        [SerializeField] private GameObject hubRoot;
+        [SerializeField] private TMP_Text hubTitleText;
+        [SerializeField] private TMP_Text hubSubtitleText;
+        [SerializeField] private Button talkQuartermasterButton;
+        [SerializeField] private Button talkCaptainButton;
+        [SerializeField] private Button reviewRosterButton;
+        [SerializeField] private Button restButton;
+        [SerializeField] private Button nextDayButton;
+
+        [Header("Dialogue")]
+        [SerializeField] private GameObject dialogueRoot;
         [SerializeField] private TMP_Text speakerText;
         [SerializeField] private TMP_Text dialogueText;
         [SerializeField] private Button nextButton;
         [SerializeField] private Button skipButton;
-        [SerializeField] private Button nextDayButton;
+        [SerializeField] private Button backButton;
 
         private CanvasGroup _cg;
+        private GuildHallEveningData _data;
         private GuildHallSceneData _activeScene;
         private Action _onNextDay;
+        private Action _onRestApplied;
+        private Action _onSceneFinished;
+        private Coroutine _typeCoroutine;
         private int _lineIndex;
         private bool _lineComplete;
-        private Coroutine _typeCoroutine;
-
-        public bool IsOpen => root != null && root.activeSelf;
 
         private void Awake()
         {
@@ -37,35 +51,47 @@ namespace FantasyGuildmaster.UI
             GameObject rootObject,
             Image dimmer,
             RectTransform content,
-            TMP_Text speaker,
-            TMP_Text dialogue,
-            Button next,
-            Button skip,
-            Button nextDay)
+            GameObject runtimeHubRoot,
+            TMP_Text runtimeHubTitle,
+            TMP_Text runtimeHubSubtitle,
+            Button runtimeTalkQuartermaster,
+            Button runtimeTalkCaptain,
+            Button runtimeReviewRoster,
+            Button runtimeRest,
+            Button runtimeNextDay,
+            GameObject runtimeDialogueRoot,
+            TMP_Text runtimeSpeaker,
+            TMP_Text runtimeDialogue,
+            Button runtimeNext,
+            Button runtimeSkip,
+            Button runtimeBack)
         {
             root = rootObject;
             dimmerImage = dimmer;
             contentRoot = content;
-            speakerText = speaker;
-            dialogueText = dialogue;
-            nextButton = next;
-            skipButton = skip;
-            nextDayButton = nextDay;
+            hubRoot = runtimeHubRoot;
+            hubTitleText = runtimeHubTitle;
+            hubSubtitleText = runtimeHubSubtitle;
+            talkQuartermasterButton = runtimeTalkQuartermaster;
+            talkCaptainButton = runtimeTalkCaptain;
+            reviewRosterButton = runtimeReviewRoster;
+            restButton = runtimeRest;
+            nextDayButton = runtimeNextDay;
+            dialogueRoot = runtimeDialogueRoot;
+            speakerText = runtimeSpeaker;
+            dialogueText = runtimeDialogue;
+            nextButton = runtimeNext;
+            skipButton = runtimeSkip;
+            backButton = runtimeBack;
             EnsureRuntimeBindings();
         }
 
-        public void Show(string sceneId, GuildHallEveningData data, Action onNextDay)
+        public void ShowHub(GuildHallEveningData data, Action onNextDay, Action onRestApplied)
         {
             EnsureRuntimeBindings();
-            _activeScene = data?.FindScene(sceneId);
+            _data = data ?? new GuildHallEveningData();
             _onNextDay = onNextDay;
-
-            if (_activeScene == null || _activeScene.lines == null || _activeScene.lines.Count == 0)
-            {
-                Debug.LogWarning($"[GuildHall] Scene '{sceneId}' is missing/empty. [TODO REMOVE]");
-                _onNextDay?.Invoke();
-                return;
-            }
+            _onRestApplied = onRestApplied;
 
             if (root != null)
             {
@@ -85,16 +111,10 @@ namespace FantasyGuildmaster.UI
                 _cg.blocksRaycasts = true;
             }
 
-            BindButtons();
-
-            _lineIndex = 0;
-            _lineComplete = false;
-            if (nextDayButton != null)
-            {
-                nextDayButton.gameObject.SetActive(false);
-            }
-
-            ShowCurrentLine();
+            BindHubButtons();
+            BindDialogueButtons();
+            SetHubMode();
+            Debug.Log("[GuildHall] Enter HUB [TODO REMOVE]");
         }
 
         public void Hide()
@@ -104,7 +124,7 @@ namespace FantasyGuildmaster.UI
             _activeScene = null;
             _lineIndex = 0;
             _lineComplete = false;
-            _onNextDay = null;
+            _onSceneFinished = null;
 
             if (_cg != null)
             {
@@ -119,28 +139,107 @@ namespace FantasyGuildmaster.UI
             }
         }
 
-        private void BindButtons()
+        private void BindHubButtons()
         {
+            BindButton(talkQuartermasterButton, () => StartScene("talk_quartermaster"));
+            BindButton(talkCaptainButton, () => StartScene("talk_captain"));
+            BindButton(reviewRosterButton, () => StartScene("review_roster"));
+            BindButton(restButton, () => StartScene("rest_evening", () => _onRestApplied?.Invoke()));
+            BindButton(nextDayButton, () => _onNextDay?.Invoke());
+
+            if (hubTitleText != null)
+            {
+                hubTitleText.text = "GUILD HALL";
+            }
+
+            if (hubSubtitleText != null)
+            {
+                hubSubtitleText.text = "Evening activities";
+            }
+        }
+
+        private void BindDialogueButtons()
+        {
+            BindButton(nextButton, OnNextPressed);
+            BindButton(skipButton, OnSkipPressed);
+            BindButton(backButton, OnBackPressed);
+        }
+
+        private static void BindButton(Button button, Action action)
+        {
+            if (button == null)
+            {
+                return;
+            }
+
+            button.onClick.RemoveAllListeners();
+            button.interactable = true;
+            button.onClick.AddListener(() => action?.Invoke());
+        }
+
+        private void SetHubMode()
+        {
+            StopTypewriter();
+            if (hubRoot != null)
+            {
+                hubRoot.SetActive(true);
+            }
+
+            if (dialogueRoot != null)
+            {
+                dialogueRoot.SetActive(false);
+            }
+        }
+
+        private void StartScene(string sceneId, Action onFinished = null)
+        {
+            EnsureRuntimeBindings();
+            _activeScene = _data?.FindScene(sceneId);
+            _onSceneFinished = onFinished;
+            Debug.Log($"[GuildHall] Start scene id={sceneId} [TODO REMOVE]");
+
+            if (_activeScene == null || _activeScene.lines == null || _activeScene.lines.Count == 0)
+            {
+                Debug.LogWarning($"[GuildHall] Scene '{sceneId}' is missing/empty. [TODO REMOVE]");
+                _onSceneFinished?.Invoke();
+                _onSceneFinished = null;
+                SetHubMode();
+                return;
+            }
+
+            if (hubRoot != null)
+            {
+                hubRoot.SetActive(false);
+            }
+
+            if (dialogueRoot != null)
+            {
+                dialogueRoot.SetActive(true);
+            }
+
+            if (backButton != null)
+            {
+                var backLabel = backButton.GetComponentInChildren<TMP_Text>(true);
+                if (backLabel != null)
+                {
+                    backLabel.text = "Back to Hall";
+                }
+
+                backButton.gameObject.SetActive(false);
+            }
+
             if (nextButton != null)
             {
-                nextButton.onClick.RemoveAllListeners();
-                nextButton.interactable = true;
-                nextButton.onClick.AddListener(OnNextPressed);
+                nextButton.gameObject.SetActive(true);
             }
 
             if (skipButton != null)
             {
-                skipButton.onClick.RemoveAllListeners();
-                skipButton.interactable = true;
-                skipButton.onClick.AddListener(OnSkipPressed);
+                skipButton.gameObject.SetActive(true);
             }
 
-            if (nextDayButton != null)
-            {
-                nextDayButton.onClick.RemoveAllListeners();
-                nextDayButton.interactable = true;
-                nextDayButton.onClick.AddListener(() => _onNextDay?.Invoke());
-            }
+            _lineIndex = 0;
+            ShowCurrentLine();
         }
 
         private void OnNextPressed()
@@ -151,7 +250,7 @@ namespace FantasyGuildmaster.UI
                 return;
             }
 
-            AdvanceOrFinish();
+            AdvanceOrFinishDialogue();
         }
 
         private void OnSkipPressed()
@@ -162,13 +261,22 @@ namespace FantasyGuildmaster.UI
                 return;
             }
 
-            AdvanceOrFinish();
+            AdvanceOrFinishDialogue();
         }
 
-        private void AdvanceOrFinish()
+        private void OnBackPressed()
+        {
+            _onSceneFinished?.Invoke();
+            _onSceneFinished = null;
+            SetHubMode();
+            Debug.Log("[GuildHall] Back to HUB [TODO REMOVE]");
+        }
+
+        private void AdvanceOrFinishDialogue()
         {
             if (_activeScene == null || _activeScene.lines == null)
             {
+                OnBackPressed();
                 return;
             }
 
@@ -179,9 +287,19 @@ namespace FantasyGuildmaster.UI
                 return;
             }
 
-            if (nextDayButton != null)
+            if (nextButton != null)
             {
-                nextDayButton.gameObject.SetActive(true);
+                nextButton.gameObject.SetActive(false);
+            }
+
+            if (skipButton != null)
+            {
+                skipButton.gameObject.SetActive(false);
+            }
+
+            if (backButton != null)
+            {
+                backButton.gameObject.SetActive(true);
             }
         }
 
@@ -204,10 +322,10 @@ namespace FantasyGuildmaster.UI
                 dialogueText.maxVisibleCharacters = 0;
             }
 
-            Debug.Log($"[GuildHall] Line {_lineIndex + 1}/{_activeScene.lines.Count} speaker={speakerText?.text} [TODO REMOVE]");
             _lineComplete = false;
             StopTypewriter();
             _typeCoroutine = StartCoroutine(TypeCurrentLine());
+            Debug.Log($"[GuildHall] Line {_lineIndex + 1}/{_activeScene.lines.Count} speaker={speakerText?.text} [TODO REMOVE]");
         }
 
         private IEnumerator TypeCurrentLine()
@@ -288,50 +406,41 @@ namespace FantasyGuildmaster.UI
                 dimmerImage.raycastTarget = true;
                 if (dimmerImage.color.a <= 0f)
                 {
-                    dimmerImage.color = new Color(0f, 0f, 0f, 0.7f);
+                    dimmerImage.color = new Color(0f, 0f, 0f, 0.72f);
                 }
             }
 
-            if (contentRoot == null && root != null)
+            if (contentRoot == null)
             {
                 var content = root.transform.Find("Content");
                 contentRoot = content as RectTransform;
             }
 
-            if (speakerText == null && root != null)
+            if (hubRoot == null)
             {
-                var speaker = root.transform.Find("Content/Speaker");
-                speakerText = speaker != null ? speaker.GetComponent<TMP_Text>() : null;
+                var hub = root.transform.Find("Content/Hub");
+                hubRoot = hub != null ? hub.gameObject : null;
             }
 
-            if (dialogueText == null && root != null)
+            if (dialogueRoot == null)
             {
                 var dialogue = root.transform.Find("Content/Dialogue");
-                dialogueText = dialogue != null ? dialogue.GetComponent<TMP_Text>() : null;
+                dialogueRoot = dialogue != null ? dialogue.gameObject : null;
             }
 
-            if (nextButton == null && root != null)
-            {
-                var next = root.transform.Find("Content/Buttons/NextButton");
-                nextButton = next != null ? next.GetComponent<Button>() : null;
-            }
+            hubTitleText = hubTitleText != null ? hubTitleText : root.transform.Find("Content/Hub/Title")?.GetComponent<TMP_Text>();
+            hubSubtitleText = hubSubtitleText != null ? hubSubtitleText : root.transform.Find("Content/Hub/Subtitle")?.GetComponent<TMP_Text>();
+            talkQuartermasterButton = talkQuartermasterButton != null ? talkQuartermasterButton : root.transform.Find("Content/Hub/Buttons/TalkQuartermasterButton")?.GetComponent<Button>();
+            talkCaptainButton = talkCaptainButton != null ? talkCaptainButton : root.transform.Find("Content/Hub/Buttons/TalkCaptainButton")?.GetComponent<Button>();
+            reviewRosterButton = reviewRosterButton != null ? reviewRosterButton : root.transform.Find("Content/Hub/Buttons/ReviewRosterButton")?.GetComponent<Button>();
+            restButton = restButton != null ? restButton : root.transform.Find("Content/Hub/Buttons/RestButton")?.GetComponent<Button>();
+            nextDayButton = nextDayButton != null ? nextDayButton : root.transform.Find("Content/Hub/Buttons/NextDayButton")?.GetComponent<Button>();
 
-            if (skipButton == null && root != null)
-            {
-                var skip = root.transform.Find("Content/Buttons/SkipButton");
-                skipButton = skip != null ? skip.GetComponent<Button>() : null;
-            }
-
-            if (nextDayButton == null && root != null)
-            {
-                var nextDay = root.transform.Find("Content/Buttons/NextDayButton");
-                nextDayButton = nextDay != null ? nextDay.GetComponent<Button>() : null;
-            }
-
-            if (nextButton == null)
-            {
-                nextButton = root.GetComponentInChildren<Button>(true);
-            }
+            speakerText = speakerText != null ? speakerText : root.transform.Find("Content/Dialogue/Speaker")?.GetComponent<TMP_Text>();
+            dialogueText = dialogueText != null ? dialogueText : root.transform.Find("Content/Dialogue/Body")?.GetComponent<TMP_Text>();
+            nextButton = nextButton != null ? nextButton : root.transform.Find("Content/Dialogue/Buttons/NextButton")?.GetComponent<Button>();
+            skipButton = skipButton != null ? skipButton : root.transform.Find("Content/Dialogue/Buttons/SkipButton")?.GetComponent<Button>();
+            backButton = backButton != null ? backButton : root.transform.Find("Content/Dialogue/Buttons/BackButton")?.GetComponent<Button>();
 
             var allText = root.GetComponentsInChildren<TMP_Text>(true);
             for (var i = 0; i < allText.Length; i++)
