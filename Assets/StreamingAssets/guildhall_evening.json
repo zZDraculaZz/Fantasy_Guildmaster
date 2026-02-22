@@ -1,10 +1,10 @@
 {
   "forcedIntroSceneId": "forced_01",
   "characters": [
-    { "id": "quartermaster", "displayName": "Quartermaster", "talkSceneId": "talk_quartermaster", "posX": 0.25, "posY": 0.60 },
-    { "id": "captain", "displayName": "Captain", "talkSceneId": "talk_captain", "posX": 0.55, "posY": 0.60 },
-    { "id": "roster_desk", "displayName": "Roster Desk", "talkSceneId": "open_roster", "posX": 0.40, "posY": 0.35 },
-    { "id": "dormitory", "displayName": "Dormitory", "talkSceneId": "rest_evening", "posX": 0.75, "posY": 0.35 }
+    { "id": "quartermaster", "displayName": "Quartermaster", "talkSceneId": "talk_quartermaster", "posX": 0.25, "posY": 0.60, "badge": "shop", "enabled": true, "lockedReason": "", "portraitKey": "" },
+    { "id": "captain", "displayName": "Captain", "talkSceneId": "talk_captain", "posX": 0.55, "posY": 0.60, "badge": "important", "enabled": true, "lockedReason": "", "portraitKey": "" },
+    { "id": "roster_desk", "displayName": "Roster Desk", "talkSceneId": "open_roster", "posX": 0.40, "posY": 0.35, "badge": "normal", "enabled": true, "lockedReason": "", "portraitKey": "" },
+    { "id": "dormitory", "displayName": "Dormitory", "talkSceneId": "rest_evening", "posX": 0.75, "posY": 0.35, "badge": "none", "enabled": true, "lockedReason": "", "portraitKey": "" }
   ],
   "scenes": [
     {

@@ -645,10 +645,18 @@ namespace FantasyGuildmaster.Map
             var day = CreateText(topBar.transform, "Day", 26f, FontStyles.Bold, TextAlignmentOptions.Right);
             day.text = "Day 1";
             var dayRect = day.rectTransform;
-            dayRect.anchorMin = new Vector2(0.45f, 0f);
+            dayRect.anchorMin = new Vector2(0.58f, 0f);
             dayRect.anchorMax = new Vector2(0.8f, 1f);
             dayRect.offsetMin = Vector2.zero;
             dayRect.offsetMax = Vector2.zero;
+
+            var hint = CreateText(topBar.transform, "Hint", 18f, FontStyles.Italic, TextAlignmentOptions.Center);
+            hint.text = "Click a character to talk";
+            var hintRect = hint.rectTransform;
+            hintRect.anchorMin = new Vector2(0.22f, 0f);
+            hintRect.anchorMax = new Vector2(0.58f, 1f);
+            hintRect.offsetMin = Vector2.zero;
+            hintRect.offsetMax = Vector2.zero;
 
             var nextDayButton = CreateButton(topBar.transform, "NextDayButton", "Next Day");
             var nextDayRect = (RectTransform)nextDayButton.transform;
@@ -713,6 +721,7 @@ namespace FantasyGuildmaster.Map
                 stageRect,
                 title,
                 day,
+                hint,
                 nextDayButton,
                 dialogueBar,
                 speaker,

@@ -11,6 +11,10 @@ namespace FantasyGuildmaster.Data
         public string talkSceneId;
         public float posX = 0.5f;
         public float posY = 0.5f;
+        public string badge = "none";
+        public bool enabled = true;
+        public string lockedReason;
+        public string portraitKey;
     }
 
     [Serializable]

@@ -27,6 +27,9 @@ namespace FantasyGuildmaster.UI
         [SerializeField] private TMP_Text dayText;
         [SerializeField] private Button nextDayButton;
 
+        [Header("Hub")]
+        [SerializeField] private TMP_Text hintText;
+
         [Header("Dialogue Bar")]
         [SerializeField] private GameObject dialogueBar;
         [SerializeField] private TMP_Text speakerText;
@@ -62,6 +65,7 @@ namespace FantasyGuildmaster.UI
             RectTransform stage,
             TMP_Text runtimeTitle,
             TMP_Text runtimeDay,
+            TMP_Text runtimeHint,
             Button runtimeNextDay,
             GameObject runtimeDialogueBar,
             TMP_Text runtimeSpeaker,
@@ -76,6 +80,7 @@ namespace FantasyGuildmaster.UI
             stageLayer = stage;
             titleText = runtimeTitle;
             dayText = runtimeDay;
+            hintText = runtimeHint;
             nextDayButton = runtimeNextDay;
             dialogueBar = runtimeDialogueBar;
             speakerText = runtimeSpeaker;
@@ -191,6 +196,11 @@ namespace FantasyGuildmaster.UI
                 dayText.text = $"Day {_dayIndex}";
             }
 
+            if (hintText != null)
+            {
+                hintText.text = "Click a character to talk";
+            }
+
             if (dialogueBar != null)
             {
                 dialogueBar.SetActive(false);
@@ -251,13 +261,15 @@ namespace FantasyGuildmaster.UI
                 onFinish = _onRestApplied;
             }
 
-            if (string.Equals(character.talkSceneId, "open_roster", StringComparison.Ordinal))
-            {
-                StartScene("open_roster", onFinish);
-                return;
-            }
-
             StartScene(character.talkSceneId, onFinish);
+        }
+
+        private void ShowLockedHint(string reason)
+        {
+            if (hintText != null)
+            {
+                hintText.text = string.IsNullOrWhiteSpace(reason) ? "Unavailable" : reason;
+            }
         }
 
         private void OnNextPressed()
@@ -417,43 +429,52 @@ namespace FantasyGuildmaster.UI
                     continue;
                 }
 
-                var hotspot = new GameObject($"Character_{character.id}", typeof(RectTransform), typeof(Image), typeof(Button));
+                var hotspot = new GameObject($"Character_{character.id}", typeof(RectTransform), typeof(Image), typeof(Button), typeof(GuildHallCharacterWidget));
                 hotspot.transform.SetParent(stageLayer, false);
 
                 var rect = hotspot.GetComponent<RectTransform>();
                 rect.anchorMin = new Vector2(character.posX, character.posY);
                 rect.anchorMax = new Vector2(character.posX, character.posY);
                 rect.pivot = new Vector2(0.5f, 0.5f);
-                rect.sizeDelta = new Vector2(180f, 300f);
+                rect.sizeDelta = new Vector2(160f, 240f);
 
-                var image = hotspot.GetComponent<Image>();
-                image.color = new Color(0.65f, 0.65f, 0.72f, 0.92f);
-                image.raycastTarget = true;
+                var badgeGo = new GameObject("Badge", typeof(RectTransform), typeof(TextMeshProUGUI));
+                badgeGo.transform.SetParent(hotspot.transform, false);
+                var badgeRect = badgeGo.GetComponent<RectTransform>();
+                badgeRect.anchorMin = new Vector2(0f, 1f);
+                badgeRect.anchorMax = new Vector2(0f, 1f);
+                badgeRect.pivot = new Vector2(0f, 1f);
+                badgeRect.sizeDelta = new Vector2(32f, 32f);
+                badgeRect.anchoredPosition = new Vector2(6f, -6f);
 
-                var labelGo = new GameObject("Label", typeof(RectTransform), typeof(TextMeshProUGUI));
-                labelGo.transform.SetParent(hotspot.transform, false);
-                var label = labelGo.GetComponent<TextMeshProUGUI>();
-                label.text = string.IsNullOrWhiteSpace(character.displayName) ? character.id : character.displayName;
-                label.alignment = TextAlignmentOptions.Center;
-                label.fontSize = 22f;
-                label.raycastTarget = false;
-                var labelRect = labelGo.GetComponent<RectTransform>();
-                labelRect.anchorMin = new Vector2(0f, 0f);
-                labelRect.anchorMax = new Vector2(1f, 0f);
-                labelRect.pivot = new Vector2(0.5f, 0f);
-                labelRect.sizeDelta = new Vector2(0f, 46f);
-                labelRect.anchoredPosition = new Vector2(0f, 10f);
+                var nameGo = new GameObject("Name", typeof(RectTransform), typeof(TextMeshProUGUI));
+                nameGo.transform.SetParent(hotspot.transform, false);
+                var nameRect = nameGo.GetComponent<RectTransform>();
+                nameRect.anchorMin = new Vector2(0f, 0f);
+                nameRect.anchorMax = new Vector2(1f, 0f);
+                nameRect.pivot = new Vector2(0.5f, 0f);
+                nameRect.sizeDelta = new Vector2(0f, 40f);
+                nameRect.anchoredPosition = new Vector2(0f, 8f);
 
-                var button = hotspot.GetComponent<Button>();
-                button.onClick.RemoveAllListeners();
-                button.interactable = true;
-                var captured = character;
-                button.onClick.AddListener(() => OnCharacterClicked(captured));
+                var disabledGo = new GameObject("DisabledOverlay", typeof(RectTransform), typeof(Image));
+                disabledGo.transform.SetParent(hotspot.transform, false);
+                var disabledRect = disabledGo.GetComponent<RectTransform>();
+                disabledRect.anchorMin = Vector2.zero;
+                disabledRect.anchorMax = Vector2.one;
+                disabledRect.offsetMin = Vector2.zero;
+                disabledRect.offsetMax = Vector2.zero;
+                var disabledImage = disabledGo.GetComponent<Image>();
+                disabledImage.color = new Color(0f, 0f, 0f, 0.45f);
+                disabledImage.raycastTarget = false;
+
+                var widget = hotspot.GetComponent<GuildHallCharacterWidget>();
+                widget.Setup(character, OnCharacterClicked, ShowLockedHint);
 
                 _characterHotspots.Add(hotspot);
             }
 
             stageLayer.SetAsLastSibling();
+            Debug.Log($"[GuildHall] Spawn widgets N={_characterHotspots.Count} [TODO REMOVE]");
         }
 
         private void EnsureRuntimeBindings()
@@ -496,6 +517,7 @@ namespace FantasyGuildmaster.UI
             stageLayer = stageLayer != null ? stageLayer : root.transform.Find("Content/StageLayer") as RectTransform;
             titleText = titleText != null ? titleText : root.transform.Find("Content/TopBar/Title")?.GetComponent<TMP_Text>();
             dayText = dayText != null ? dayText : root.transform.Find("Content/TopBar/Day")?.GetComponent<TMP_Text>();
+            hintText = hintText != null ? hintText : root.transform.Find("Content/TopBar/Hint")?.GetComponent<TMP_Text>();
             nextDayButton = nextDayButton != null ? nextDayButton : root.transform.Find("Content/TopBar/NextDayButton")?.GetComponent<Button>();
             dialogueBar = dialogueBar != null ? dialogueBar : root.transform.Find("Content/DialogueBar")?.gameObject;
             speakerText = speakerText != null ? speakerText : root.transform.Find("Content/DialogueBar/Speaker")?.GetComponent<TMP_Text>();
