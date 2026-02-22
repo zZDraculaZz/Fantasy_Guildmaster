@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using FantasyGuildmaster.Core;
+using FantasyGuildmaster.Data;
 using FantasyGuildmaster.UI;
 using TMPro;
 using UnityEngine;
