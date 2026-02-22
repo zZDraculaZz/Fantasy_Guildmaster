@@ -38,11 +38,45 @@ namespace FantasyGuildmaster.UI
         {
             EnsureRuntimeBindings();
             _onContinue = onContinue;
+            Debug.Log($"[ReportUI] Show called, binding Continue listener. button={(continueButton != null)} [TODO REMOVE]");
 
             if (root != null)
             {
                 root.SetActive(true);
                 root.transform.SetAsLastSibling();
+                var content = root.transform.Find("Content");
+                if (content != null)
+                {
+                    content.SetAsLastSibling();
+                }
+
+                var canvasGroup = root.GetComponent<CanvasGroup>() ?? root.AddComponent<CanvasGroup>();
+                canvasGroup.interactable = true;
+                canvasGroup.blocksRaycasts = true;
+                canvasGroup.alpha = 1f;
+            }
+
+            if (continueButton != null)
+            {
+                continueButton.onClick.RemoveAllListeners();
+                continueButton.interactable = true;
+                continueButton.onClick.AddListener(() =>
+                {
+                    Debug.Log("[ReportUI] Continue clicked [TODO REMOVE]");
+                    var callback = _onContinue;
+                    _onContinue = null;
+                    callback?.Invoke();
+                });
+
+                var buttonText = continueButton.GetComponentsInChildren<TMP_Text>(true);
+                for (var i = 0; i < buttonText.Length; i++)
+                {
+                    buttonText[i].raycastTarget = false;
+                }
+            }
+            else
+            {
+                Debug.LogWarning("[ReportUI] Continue button is missing; click handler not bound. [TODO REMOVE]");
             }
 
             if (titleText != null)
@@ -66,13 +100,6 @@ namespace FantasyGuildmaster.UI
             }
         }
 
-        private void HandleContinuePressed()
-        {
-            var callback = _onContinue;
-            _onContinue = null;
-            callback?.Invoke();
-        }
-
         private void EnsureRuntimeBindings()
         {
             if (root == null)
@@ -82,13 +109,33 @@ namespace FantasyGuildmaster.UI
 
             if (blockerImage == null)
             {
-                blockerImage = GetComponent<Image>();
+                blockerImage = root.GetComponent<Image>();
             }
 
-            if (continueButton != null)
+            if (continueButton == null && root != null)
             {
-                continueButton.onClick.RemoveListener(HandleContinuePressed);
-                continueButton.onClick.AddListener(HandleContinuePressed);
+                var continueByName = root.transform.Find("Content/ContinueButton");
+                if (continueByName != null)
+                {
+                    continueButton = continueByName.GetComponent<Button>();
+                }
+
+                if (continueButton == null)
+                {
+                    continueButton = root.GetComponentInChildren<Button>(true);
+                }
+            }
+
+            if (titleText == null && root != null)
+            {
+                var titleByName = root.transform.Find("Content/Title");
+                titleText = titleByName != null ? titleByName.GetComponent<TMP_Text>() : root.GetComponentInChildren<TMP_Text>(true);
+            }
+
+            if (bodyText == null && root != null)
+            {
+                var bodyByName = root.transform.Find("Content/Body");
+                bodyText = bodyByName != null ? bodyByName.GetComponent<TMP_Text>() : null;
             }
 
             if (blockerImage != null)
