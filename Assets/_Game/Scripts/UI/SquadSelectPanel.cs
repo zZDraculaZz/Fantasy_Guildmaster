@@ -21,12 +21,24 @@ namespace FantasyGuildmaster.UI
         [SerializeField] private RectTransform listRoot;
         [SerializeField] private Button squadButtonPrefab;
         [SerializeField] private Button closeButton;
+        [SerializeField] private TMP_Text errorText;
+        [SerializeField] private TMP_Text requirementText;
 
         private readonly List<Button> _buttons = new();
         private bool _pauseHeld;
 
-        public void Show(List<SquadData> idleSquads, List<HunterData> soloHunters, Action<AssignmentOption> onSelected)
+        public void Show(List<SquadData> idleSquads, List<HunterData> soloHunters, string requirementSummary, Action<AssignmentOption> onSelected)
         {
+            if (errorText == null)
+            {
+                errorText = transform.Find("ErrorText")?.GetComponent<TMP_Text>();
+            }
+
+            if (requirementText == null)
+            {
+                requirementText = transform.Find("RequirementText")?.GetComponent<TMP_Text>();
+            }
+
             gameObject.SetActive(true);
             if (!_pauseHeld)
             {
@@ -39,6 +51,15 @@ namespace FantasyGuildmaster.UI
                 titleText.text = "Assign Party";
             }
 
+            if (requirementText != null)
+            {
+                requirementText.gameObject.SetActive(true);
+                requirementText.text = string.IsNullOrWhiteSpace(requirementSummary) ? "Requires: BOTH • Rank E" : $"Requires: {requirementSummary}";
+                requirementText.textWrappingMode = TextWrappingModes.NoWrap;
+                requirementText.overflowMode = TextOverflowModes.Ellipsis;
+            }
+
+            ClearError();
             ClearButtons();
             Debug.Log($"[SquadSelect] Show squads={idleSquads.Count} solos={soloHunters.Count} [TODO REMOVE]");
 
@@ -61,8 +82,8 @@ namespace FantasyGuildmaster.UI
                 button.onClick.RemoveAllListeners();
                 button.onClick.AddListener(() =>
                 {
+                    ClearError();
                     onSelected?.Invoke(new AssignmentOption { isSolo = false, squadId = squad.id });
-                    Hide();
                 });
                 _buttons.Add(button);
             }
@@ -88,8 +109,8 @@ namespace FantasyGuildmaster.UI
                 button.onClick.RemoveAllListeners();
                 button.onClick.AddListener(() =>
                 {
+                    ClearError();
                     onSelected?.Invoke(new AssignmentOption { isSolo = true, hunterId = hunter.id });
-                    Hide();
                 });
                 _buttons.Add(button);
             }
@@ -99,6 +120,29 @@ namespace FantasyGuildmaster.UI
                 closeButton.onClick.RemoveAllListeners();
                 closeButton.onClick.AddListener(Hide);
             }
+        }
+
+
+        public void ShowError(string message)
+        {
+            if (errorText == null)
+            {
+                return;
+            }
+
+            errorText.gameObject.SetActive(true);
+            errorText.text = string.IsNullOrWhiteSpace(message) ? "Invalid selection." : message;
+        }
+
+        private void ClearError()
+        {
+            if (errorText == null)
+            {
+                return;
+            }
+
+            errorText.text = string.Empty;
+            errorText.gameObject.SetActive(false);
         }
 
         private void AddSectionLabel(string text)
@@ -129,6 +173,12 @@ namespace FantasyGuildmaster.UI
 
         public void Hide()
         {
+            ClearError();
+            if (requirementText != null)
+            {
+                requirementText.text = string.Empty;
+                requirementText.gameObject.SetActive(false);
+            }
             gameObject.SetActive(false);
             if (_pauseHeld)
             {
