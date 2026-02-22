@@ -1255,6 +1255,8 @@ namespace FantasyGuildmaster.Map
         {
             if (guildHallPanel != null)
             {
+                _reportOpen = missionReportPanel.IsOpen;
+                EnsureMissionReportInteractionInfra();
                 return;
             }
 
