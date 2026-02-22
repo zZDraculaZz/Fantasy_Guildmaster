@@ -54,6 +54,7 @@ namespace FantasyGuildmaster.Map
         private bool _reportOpen;
         private int _dayIndex = 1;
         private GuildHallEveningData _guildHallEveningData;
+        private float _stuckPauseSince = -1f;
 
         private void Awake()
         {
@@ -142,6 +143,44 @@ namespace FantasyGuildmaster.Map
             {
                 gameClock.TickSecond -= OnTick;
             }
+        }
+
+        private void Update()
+        {
+            if (GamePauseService.Count <= 0)
+            {
+                _stuckPauseSince = -1f;
+                return;
+            }
+
+            if (IsAnyContextModalActive())
+            {
+                _stuckPauseSince = -1f;
+                return;
+            }
+
+            if (_stuckPauseSince < 0f)
+            {
+                _stuckPauseSince = Time.unscaledTime;
+                return;
+            }
+
+            if (Time.unscaledTime - _stuckPauseSince > 0.25f)
+            {
+                Debug.LogError("[Pause] Stuck pause detected -> ResetAll [TODO REMOVE]");
+                GamePauseService.ResetAll("StuckPause");
+                _stuckPauseSince = -1f;
+            }
+        }
+
+        private bool IsAnyContextModalActive()
+        {
+            var encounterPanel = FindFirstObjectByType<EncounterPanel>();
+            var encounterActive = encounterPanel != null && encounterPanel.gameObject.activeInHierarchy;
+            var reportActive = missionReportPanel != null && missionReportPanel.gameObject.activeInHierarchy;
+            var squadSelectActive = squadSelectPanel != null && squadSelectPanel.gameObject.activeInHierarchy;
+            var guildHallActive = guildHallPanel != null && guildHallPanel.gameObject.activeInHierarchy;
+            return encounterActive || reportActive || squadSelectActive || guildHallActive;
         }
 
         private void OnTick()
@@ -339,7 +378,13 @@ namespace FantasyGuildmaster.Map
             var report = _pendingReports.Peek();
             Debug.Log($"[Report] Showing: squad={report.squadId} contract={report.contractId} reward={report.rewardGold} [TODO REMOVE]");
             _reportOpen = true;
-            missionReportPanel.Show(report, () => OnMissionReportContinue(report));
+            var shown = missionReportPanel.Show(report, () => OnMissionReportContinue(report));
+            if (!shown)
+            {
+                _reportOpen = false;
+                Debug.LogError("[Report] MissionReport failed to show; applying fallback continuation. [TODO REMOVE]");
+                OnMissionReportContinue(report);
+            }
         }
         private void OnMissionReportContinue(MissionReportData report)
         {

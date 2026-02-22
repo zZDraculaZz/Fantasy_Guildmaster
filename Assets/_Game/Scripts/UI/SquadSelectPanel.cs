@@ -62,6 +62,15 @@ namespace FantasyGuildmaster.UI
             }
         }
 
+        private void OnDisable()
+        {
+            if (_pauseHeld)
+            {
+                GamePauseService.Pop("SquadSelect");
+                _pauseHeld = false;
+            }
+        }
+
         public void Hide()
         {
             gameObject.SetActive(false);

@@ -137,6 +137,15 @@ namespace FantasyGuildmaster.UI
             }
         }
 
+        private void OnDisable()
+        {
+            if (_pauseHeld)
+            {
+                GamePauseService.Pop("GuildHall");
+                _pauseHeld = false;
+            }
+        }
+
         public void Hide()
         {
             EnsureRuntimeBindings();

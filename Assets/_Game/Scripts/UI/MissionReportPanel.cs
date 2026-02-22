@@ -37,13 +37,14 @@ namespace FantasyGuildmaster.UI
             EnsureRuntimeBindings();
         }
 
-        public void Show(MissionReportData data, Action onContinue)
+        public bool Show(MissionReportData data, Action onContinue)
         {
             EnsureRuntimeBindings();
             _onContinue = onContinue;
             EnsureCanvasGroup();
             Debug.Log($"[ReportUI] Show called, cgPresent={(_cg != null)} button={(continueButton != null)} [TODO REMOVE]");
 
+            gameObject.SetActive(true);
             if (root != null)
             {
                 root.SetActive(true);
@@ -98,6 +99,16 @@ namespace FantasyGuildmaster.UI
             {
                 bodyText.text = BuildBodyText(data);
             }
+
+            var showSucceeded = gameObject.activeInHierarchy && _cg != null && _cg.alpha > 0.001f && continueButton != null;
+            if (!showSucceeded)
+            {
+                Debug.LogError("[ReportUI] Show failed, releasing pause + fallback [TODO REMOVE]");
+                ReleasePause();
+                return false;
+            }
+
+            return true;
         }
 
         public void Hide()
@@ -117,6 +128,17 @@ namespace FantasyGuildmaster.UI
                 root.SetActive(false);
             }
 
+            ReleasePause();
+        }
+
+
+        private void OnDisable()
+        {
+            ReleasePause();
+        }
+
+        private void ReleasePause()
+        {
             if (_pauseHeld)
             {
                 GamePauseService.Pop("MissionReport");
