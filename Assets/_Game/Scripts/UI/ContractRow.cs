@@ -34,6 +34,7 @@ namespace FantasyGuildmaster.UI
             _contract = contract;
             _backgroundImage = GetComponent<Image>();
             _isAssigned = false;
+            Debug.Log($"[ContractRow] Bind called id={_contract?.id ?? "null"} req={ContractUiText.FormatContractReq(_contract)} reqTextNull={(reqText == null)}");
             Refresh();
             ApplyVisualState(false);
         }
@@ -83,8 +84,8 @@ namespace FantasyGuildmaster.UI
             layoutElement.preferredWidth = 180f;
 
             var rect = reqText.rectTransform;
-            rect.anchorMin = new Vector2(0.50f, 0.52f);
-            rect.anchorMax = new Vector2(0.98f, 0.92f);
+            rect.anchorMin = new Vector2(0.60f, 0.58f);
+            rect.anchorMax = new Vector2(0.98f, 0.94f);
             rect.offsetMin = Vector2.zero;
             rect.offsetMax = Vector2.zero;
         }
@@ -102,6 +103,7 @@ namespace FantasyGuildmaster.UI
             layoutElement.minWidth = Mathf.Max(layoutElement.minWidth, 110f);
             layoutElement.preferredWidth = Mathf.Max(layoutElement.preferredWidth, 180f);
 
+            reqText.gameObject.SetActive(true);
             reqText.text = string.IsNullOrWhiteSpace(requirements) ? string.Empty : requirements;
             reqText.textWrappingMode = TextWrappingModes.NoWrap;
             reqText.overflowMode = TextOverflowModes.Ellipsis;

@@ -12,8 +12,13 @@ namespace FantasyGuildmaster.UI
         [SerializeField] private TMP_Text bodyText;
         [SerializeField] private RectTransform contentContainer;
         [SerializeField] private ScrollRect detailsScrollRect;
+        [SerializeField] private float paddingLeft = 8f;
+        [SerializeField] private float paddingRight = 8f;
+        [SerializeField] private float paddingTop = 42f;
+        [SerializeField] private float paddingBottom = 8f;
 
         private MapController _map;
+        private bool _scrollFixLogPrinted;
 
         public void BindMap(MapController map)
         {
@@ -133,13 +138,37 @@ namespace FantasyGuildmaster.UI
         {
             if (bodyText != null)
             {
+                bodyText.gameObject.SetActive(true);
+                bodyText.enableWordWrapping = true;
+                bodyText.textWrappingMode = TextWrappingModes.Normal;
+                bodyText.overflowMode = TextOverflowModes.Overflow;
                 bodyText.ForceMeshUpdate(true);
             }
 
-            if (contentContainer != null)
+            var canUseScroll = detailsScrollRect != null && detailsScrollRect.viewport != null && contentContainer != null;
+            if (!canUseScroll)
             {
-                LayoutRebuilder.ForceRebuildLayoutImmediate(contentContainer);
+                ConfigureLegacyBodyTextLayout();
+                bodyText.overflowMode = TextOverflowModes.Overflow;
+                return;
             }
+
+            EnsureScrollAnchorsAndMask();
+            if (bodyText != null && contentContainer != null && bodyText.transform.parent != contentContainer)
+            {
+                bodyText.transform.SetParent(contentContainer, false);
+            }
+
+            var rect = bodyText.rectTransform;
+            rect.anchorMin = new Vector2(0f, 1f);
+            rect.anchorMax = new Vector2(1f, 1f);
+            rect.pivot = new Vector2(0.5f, 1f);
+            rect.anchoredPosition = Vector2.zero;
+            rect.sizeDelta = Vector2.zero;
+
+            bodyText.overflowMode = TextOverflowModes.Masking;
+            bodyText.raycastTarget = false;
+            LayoutRebuilder.ForceRebuildLayoutImmediate(contentContainer);
         }
 
 
@@ -164,6 +193,7 @@ namespace FantasyGuildmaster.UI
                 detailsScrollRect = scrollGo.GetComponent<ScrollRect>();
                 detailsScrollRect.horizontal = false;
                 detailsScrollRect.vertical = true;
+                detailsScrollRect.movementType = ScrollRect.MovementType.Clamped;
 
                 var viewportGo = new GameObject("Viewport", typeof(RectTransform), typeof(Image), typeof(RectMask2D));
                 viewportGo.transform.SetParent(scrollGo.transform, false);
@@ -232,6 +262,69 @@ namespace FantasyGuildmaster.UI
                 rect.pivot = new Vector2(0.5f, 1f);
                 rect.anchoredPosition = Vector2.zero;
                 rect.sizeDelta = Vector2.zero;
+            }
+
+            EnsureScrollAnchorsAndMask();
+        }
+
+
+        private void ConfigureLegacyBodyTextLayout()
+        {
+            if (bodyText == null)
+            {
+                return;
+            }
+
+            if (bodyText.transform.parent != transform)
+            {
+                bodyText.transform.SetParent(transform, false);
+            }
+
+            var rect = bodyText.rectTransform;
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.one;
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.offsetMin = new Vector2(paddingLeft, paddingBottom);
+            rect.offsetMax = new Vector2(-paddingRight, -paddingTop);
+        }
+
+        private void EnsureScrollAnchorsAndMask()
+        {
+            if (detailsScrollRect == null)
+            {
+                return;
+            }
+
+            var viewport = detailsScrollRect.viewport;
+            if (viewport != null)
+            {
+                viewport.anchorMin = Vector2.zero;
+                viewport.anchorMax = Vector2.one;
+                viewport.offsetMin = Vector2.zero;
+                viewport.offsetMax = Vector2.zero;
+                if (viewport.GetComponent<Mask>() == null && viewport.GetComponent<RectMask2D>() == null)
+                {
+                    viewport.gameObject.AddComponent<RectMask2D>();
+                }
+            }
+
+            if (contentContainer == null)
+            {
+                contentContainer = detailsScrollRect.content;
+            }
+
+            if (contentContainer != null)
+            {
+                contentContainer.anchorMin = new Vector2(0f, 1f);
+                contentContainer.anchorMax = new Vector2(1f, 1f);
+                contentContainer.pivot = new Vector2(0.5f, 1f);
+                contentContainer.anchoredPosition = Vector2.zero;
+            }
+
+            if (!_scrollFixLogPrinted)
+            {
+                _scrollFixLogPrinted = true;
+                Debug.Log("[ScrollFix] content anchors/pivot fixed");
             }
         }
 
