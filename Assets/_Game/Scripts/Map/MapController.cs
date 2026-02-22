@@ -13,6 +13,13 @@ namespace FantasyGuildmaster.Map
 {
     public sealed class MapController : MonoBehaviour
     {
+        private enum DayState
+        {
+            MapActive,
+            ResolvingEvents,
+            ShowingReports,
+            EveningGuildHall
+        }
         private const string GuildHqId = "guild_hq";
         private const string GuildHqName = "Guild HQ";
         private const bool DEBUG_TRAVEL = true;
@@ -55,6 +62,8 @@ namespace FantasyGuildmaster.Map
         private int _dayIndex = 1;
         private GuildHallEveningData _guildHallEveningData;
         private float _stuckPauseSince = -1f;
+        private DayState _dayState = DayState.MapActive;
+        private bool _endDayRequested;
 
         private void Awake()
         {
@@ -259,6 +268,11 @@ namespace FantasyGuildmaster.Map
             {
                 _travelTasks.Remove(completedTasks[i]);
             }
+
+            if (completedTasks.Count > 0)
+            {
+                TryAdvanceDayFlow("TravelTaskCompleted");
+            }
         }
 
         private void HandleTravelTaskCompleted(TravelTask task, long nowUnix)
@@ -289,6 +303,7 @@ namespace FantasyGuildmaster.Map
                     }
 
                     encounterManager.EnqueueEncounter(task.toRegionId, squad.id, () => OnEncounterResolved(squad.id, task.toRegionId, task.contractId, task.contractReward));
+                    TryAdvanceDayFlow("EncounterQueued");
                 }
                 else
                 {
@@ -312,6 +327,7 @@ namespace FantasyGuildmaster.Map
             var report = BuildMissionReport(task, squad);
             _pendingReports.Enqueue(report);
             Debug.Log($"[Report] Enqueued: squad={report.squadId} contract={report.contractId} reward={report.rewardGold} [TODO REMOVE]");
+            TryAdvanceDayFlow("ReportEnqueued");
             TryShowNextMissionReport();
         }
 
@@ -338,6 +354,8 @@ namespace FantasyGuildmaster.Map
             {
                 detailsPanel.SetIdleSquadsCount(GetIdleSquads().Count);
             }
+
+            TryAdvanceDayFlow("EncounterResolved");
         }
 
         private MissionReportData BuildMissionReport(TravelTask task, SquadData squad)
@@ -370,6 +388,8 @@ namespace FantasyGuildmaster.Map
         {
             EnsureMissionReportPanel();
             EnsureGuildHallPanel();
+            _dayState = DayState.MapActive;
+            _endDayRequested = false;
             if (missionReportPanel == null || _reportOpen || missionReportPanel.IsOpen || _pendingReports.Count == 0)
             {
                 return;
@@ -407,20 +427,115 @@ namespace FantasyGuildmaster.Map
                 detailsPanel.SetIdleSquadsCount(GetIdleSquads().Count);
             }
 
+            TryAdvanceDayFlow("MissionReportClosed");
             if (_pendingReports.Count > 0)
             {
                 TryShowNextMissionReport();
             }
-            else
+        }
+
+        private void TryAdvanceDayFlow(string trigger)
+        {
+            if (!_endDayRequested)
             {
-                EnterGuildHallEvening();
+                _endDayRequested = !HasAnyContractsAvailableForToday() && _travelTasks.Count == 0;
             }
+
+            if (_dayState == DayState.EveningGuildHall)
+            {
+                LogDayFlow(trigger, IsAnyContextModalActive());
+                return;
+            }
+
+            var reportActive = missionReportPanel != null && missionReportPanel.IsOpen;
+            var encounterQueued = encounterManager != null && encounterManager.PendingEncounterCount > 0;
+            var encounterActive = encounterManager != null && encounterManager.IsEncounterActive;
+            if (_pendingReports.Count > 0 || reportActive)
+            {
+                _dayState = DayState.ShowingReports;
+                LogDayFlow(trigger, IsAnyContextModalActive());
+                return;
+            }
+
+            if (encounterQueued || encounterActive)
+            {
+                _dayState = DayState.ResolvingEvents;
+                LogDayFlow(trigger, IsAnyContextModalActive());
+                return;
+            }
+
+            var anyModal = IsAnyContextModalActive();
+            if (_endDayRequested && CanEnterEveningNow(anyModal))
+            {
+                _dayState = DayState.EveningGuildHall;
+                LogDayFlow(trigger, anyModal);
+                EnterGuildHallEvening();
+                return;
+            }
+
+            _dayState = DayState.MapActive;
+            LogDayFlow(trigger, anyModal);
+        }
+
+        private bool CanEnterEveningNow(bool anyModal)
+        {
+            if (_travelTasks.Count > 0)
+            {
+                return false;
+            }
+
+            var encounterQueued = encounterManager != null && encounterManager.PendingEncounterCount > 0;
+            var encounterActive = encounterManager != null && encounterManager.IsEncounterActive;
+            if (encounterQueued || encounterActive)
+            {
+                return false;
+            }
+
+            var reportActive = missionReportPanel != null && missionReportPanel.IsOpen;
+            if (_pendingReports.Count > 0 || reportActive)
+            {
+                return false;
+            }
+
+            if (anyModal)
+            {
+                return false;
+            }
+
+            return GamePauseService.Count == 0;
+        }
+
+        private bool HasAnyContractsAvailableForToday()
+        {
+            foreach (var pair in _contractsByRegion)
+            {
+                if (pair.Key == GuildHqId)
+                {
+                    continue;
+                }
+
+                var contracts = pair.Value;
+                if (contracts != null && contracts.Count > 0)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private void LogDayFlow(string trigger, bool anyModal)
+        {
+            var encountersQueued = encounterManager != null ? encounterManager.PendingEncounterCount : 0;
+            Debug.Log($"[DayFlow] trigger={trigger} state={_dayState} endDayRequested={_endDayRequested} travelTasks={_travelTasks.Count} encountersQueued={encountersQueued} reportQueue={_pendingReports.Count} anyModal={anyModal} pausedCount={GamePauseService.Count} [TODO REMOVE]");
         }
 
         private void EnterGuildHallEvening()
         {
             Debug.Log("[GuildHall] Enter evening [TODO REMOVE]");
             EnsureGuildHallPanel();
+            _dayState = DayState.MapActive;
+            _endDayRequested = false;
             if (guildHallPanel == null)
             {
                 Debug.LogWarning("[GuildHall] Panel missing, skipping evening. [TODO REMOVE]");
@@ -472,6 +587,8 @@ namespace FantasyGuildmaster.Map
         private void OnGuildHallNextDay()
         {
             guildHallPanel?.Hide();
+            _dayState = DayState.MapActive;
+            _endDayRequested = false;
             _dayIndex++;
             RefreshContractsForNextDay();
             SyncAllContractIcons();
