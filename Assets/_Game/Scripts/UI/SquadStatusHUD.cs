@@ -1,4 +1,3 @@
-using System;
 using System.Collections;
 using System.Text;
 using FantasyGuildmaster.Core;
@@ -143,7 +142,7 @@ namespace FantasyGuildmaster.UI
                 return;
             }
 
-            Render(_map.GetSquads(), _map.GetTravelTasks(), _map.GetRegionNameById, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+            Render(_map.GetSquads(), _map.GetTravelTasks(), _map.GetRegionNameById, SimulationTime.NowSeconds);
         }
 
         private void Render(System.Collections.Generic.IReadOnlyList<SquadData> squads, System.Collections.Generic.IReadOnlyList<TravelTask> tasks, Func<string, string> resolveRegionName, long nowUnix)
@@ -165,7 +164,7 @@ namespace FantasyGuildmaster.UI
                     continue;
                 }
 
-                var stateText = BuildStateText(squad.id, tasks, resolveRegionName);
+                var stateText = BuildStateText(squad, tasks, resolveRegionName);
                 var membersText = BuildMembersText(squad);
                 var readinessText = $"Readiness {ComputeReadinessPercent(squad)}%";
                 var squadName = string.IsNullOrWhiteSpace(squad.name) ? squad.id : squad.name;
@@ -183,11 +182,17 @@ namespace FantasyGuildmaster.UI
             bodyText.text = sb.ToString();
         }
 
-        private static string BuildStateText(string squadId, System.Collections.Generic.IReadOnlyList<TravelTask> tasks, Func<string, string> resolveRegionName)
+        private static string BuildStateText(SquadData squad, System.Collections.Generic.IReadOnlyList<TravelTask> tasks, Func<string, string> resolveRegionName)
         {
+            var squadId = squad != null ? squad.id : null;
             var task = FindTaskForSquad(tasks, squadId);
             if (task == null)
             {
+                if (squad != null && squad.exhausted)
+                {
+                    return "Exhausted";
+                }
+
                 return "Idle";
             }
 
