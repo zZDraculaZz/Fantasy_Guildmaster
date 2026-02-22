@@ -1,4 +1,5 @@
 using System;
+using FantasyGuildmaster.Core;
 
 namespace FantasyGuildmaster.Map
 {
@@ -10,6 +11,9 @@ namespace FantasyGuildmaster.Map
         public int remainingSeconds;
         public int reward;
         public string iconKey;
+        public HunterRank minRank = HunterRank.E;
+        public bool allowSquad = true;
+        public bool allowSolo = true;
 
         public bool IsExpired => remainingSeconds <= 0;
 
