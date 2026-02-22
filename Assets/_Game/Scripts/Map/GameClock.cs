@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using FantasyGuildmaster.Core;
 using UnityEngine;
 
 namespace FantasyGuildmaster.Map
@@ -31,7 +32,18 @@ namespace FantasyGuildmaster.Map
             var wait = new WaitForSecondsRealtime(1f);
             while (enabled)
             {
+                if (GamePauseService.IsPaused)
+                {
+                    yield return null;
+                    continue;
+                }
+
                 yield return wait;
+                if (GamePauseService.IsPaused)
+                {
+                    continue;
+                }
+
                 ElapsedSeconds++;
                 TickSecond?.Invoke();
             }

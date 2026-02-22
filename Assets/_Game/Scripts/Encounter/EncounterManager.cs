@@ -30,6 +30,7 @@ namespace FantasyGuildmaster.Encounter
         private Canvas _fallbackCanvas;
 
         public bool IsEncounterActive => _isPresentingEncounter;
+        public int PendingEncounterCount => _queue.Count;
 
         private void Awake()
         {
