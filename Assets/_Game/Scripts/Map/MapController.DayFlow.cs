@@ -1,5 +1,8 @@
+using System;
+using FantasyGuildmaster.Core;
+using FantasyGuildmaster.UI;
+using TMPro;
 using UnityEngine;
-using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 namespace FantasyGuildmaster.Map
