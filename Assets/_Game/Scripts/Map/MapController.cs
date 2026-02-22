@@ -1467,6 +1467,33 @@ namespace FantasyGuildmaster.Map
             Debug.Log($"[TravelDebug] Solo task created hunter={hunter.id} route={GuildHqId}->{toRegionId} [TODO REMOVE]");
         }
 
+        private void StartSoloTravelTask(HunterData hunter, string toRegionId, string contractId, int contractReward, TravelPhase phase)
+        {
+            if (hunter == null)
+            {
+                return;
+            }
+
+            var duration = ResolveTravelDuration(toRegionId);
+            var now = SimulationTime.NowSeconds;
+            var task = new TravelTask
+            {
+                squadId = null,
+                soloHunterId = hunter.id,
+                fromRegionId = GuildHqId,
+                toRegionId = toRegionId,
+                contractId = contractId,
+                contractReward = contractReward,
+                phase = phase,
+                startSimSeconds = now,
+                endSimSeconds = now + duration
+            };
+
+            _travelTasks.Add(task);
+            AcquireOrUpdateSoloTravelToken(hunter, task);
+            Debug.Log($"[TravelDebug] Solo task created hunter={hunter.id} route={GuildHqId}->{toRegionId} [TODO REMOVE]");
+        }
+
         private int ResolveTravelDuration(string regionId)
         {
             if (_regionById.TryGetValue(regionId, out var region))
@@ -2107,7 +2134,6 @@ namespace FantasyGuildmaster.Map
         }
 
 
-        #region GuildHall DayFlow (Single Source of Truth)        #endregion
 
         private static string ToTimerText(int remainingSeconds)
         {
