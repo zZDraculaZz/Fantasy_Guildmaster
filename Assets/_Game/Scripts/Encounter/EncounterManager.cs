@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using FantasyGuildmaster.Core;
 using FantasyGuildmaster.Map;
 using FantasyGuildmaster.UI;
 using UnityEngine;
@@ -13,6 +14,7 @@ namespace FantasyGuildmaster.Encounter
         {
             public string regionId;
             public string squadId;
+            public string soloHunterId;
             public Action onEncounterClosed;
         }
 
@@ -23,13 +25,17 @@ namespace FantasyGuildmaster.Encounter
         private readonly HashSet<string> _cancelledSquadIds = new();
 
         private Func<string, SquadData> _resolveSquad;
+        private Func<string, HunterData> _resolveHunter;
         private Action<int> _addGold;
         private Action<string> _onSquadDestroyed;
         private Action _onSquadChanged;
+        private Func<SquadData, int, int> _getCohesionModifier;
+        private Func<int> _getDayIndex;
         private bool _isPresentingEncounter;
         private Canvas _fallbackCanvas;
 
         public bool IsEncounterActive => _isPresentingEncounter;
+        public int PendingEncounterCount => _queue.Count;
 
         private void Awake()
         {
@@ -41,22 +47,25 @@ namespace FantasyGuildmaster.Encounter
             encounterPanel = panel;
         }
 
-        public void Configure(Func<string, SquadData> resolveSquad, Action<int> addGold, Action<string> onSquadDestroyed, Action onSquadChanged = null)
+        public void Configure(Func<string, SquadData> resolveSquad, Func<string, HunterData> resolveHunter, Action<int> addGold, Action<string> onSquadDestroyed, Action onSquadChanged = null, Func<SquadData, int, int> getCohesionModifier = null, Func<int> getDayIndex = null)
         {
             _resolveSquad = resolveSquad;
+            _resolveHunter = resolveHunter;
             _addGold = addGold;
             _onSquadDestroyed = onSquadDestroyed;
             _onSquadChanged = onSquadChanged;
+            _getCohesionModifier = getCohesionModifier;
+            _getDayIndex = getDayIndex;
         }
 
-        public void EnqueueEncounter(string regionId, string squadId, Action onEncounterClosed)
+        public void EnqueueEncounter(string regionId, string squadId, Action onEncounterClosed, string soloHunterId = null)
         {
-            StartEncounter(regionId, squadId, onEncounterClosed);
+            StartEncounter(regionId, squadId, onEncounterClosed, soloHunterId);
         }
 
-        public void StartEncounter(string regionId, string squadId, Action onEncounterClosed)
+        public void StartEncounter(string regionId, string squadId, Action onEncounterClosed, string soloHunterId = null)
         {
-            if (string.IsNullOrEmpty(squadId))
+            if (string.IsNullOrEmpty(squadId) && string.IsNullOrEmpty(soloHunterId))
             {
                 onEncounterClosed?.Invoke();
                 return;
@@ -66,6 +75,7 @@ namespace FantasyGuildmaster.Encounter
             {
                 regionId = regionId,
                 squadId = squadId,
+                soloHunterId = soloHunterId,
                 onEncounterClosed = onEncounterClosed
             };
 
@@ -133,8 +143,9 @@ namespace FantasyGuildmaster.Encounter
                     continue;
                 }
 
-                var squad = _resolveSquad?.Invoke(request.squadId);
-                if (squad == null || squad.hp <= 0)
+                var squad = !string.IsNullOrEmpty(request.squadId) ? _resolveSquad?.Invoke(request.squadId) : null;
+                var solo = !string.IsNullOrEmpty(request.soloHunterId) ? _resolveHunter?.Invoke(request.soloHunterId) : null;
+                if ((squad == null || squad.hp <= 0) && (solo == null || solo.hp <= 0))
                 {
                     request.onEncounterClosed?.Invoke();
                     continue;
@@ -164,8 +175,33 @@ namespace FantasyGuildmaster.Encounter
                 return;
             }
 
-            var success = UnityEngine.Random.value <= option.successChance;
-            var squad = _resolveSquad?.Invoke(request.squadId);
+            var squad = !string.IsNullOrEmpty(request.squadId) ? _resolveSquad?.Invoke(request.squadId) : null;
+            var solo = !string.IsNullOrEmpty(request.soloHunterId) ? _resolveHunter?.Invoke(request.soloHunterId) : null;
+            var dayIndex = _getDayIndex != null ? _getDayIndex() : 0;
+            var modifier = _getCohesionModifier != null ? _getCohesionModifier(squad, dayIndex) : 0;
+            if (squad == null && solo != null)
+            {
+                modifier = solo.loneWolf ? 2 : 0;
+            }
+            var newbieCount = 0;
+            if (squad != null && squad.members != null)
+            {
+                for (var i = 0; i < squad.members.Count; i++)
+                {
+                    var member = squad.members[i];
+                    if (member != null && member.joinedDay == dayIndex)
+                    {
+                        newbieCount++;
+                    }
+                }
+            }
+
+            var baseChance = Mathf.RoundToInt(option.successChance * 100f);
+            var finalChance = Mathf.Clamp(baseChance + modifier, 5, 95);
+            var roll = UnityEngine.Random.Range(1, 101);
+            var success = roll <= finalChance;
+            var partyId = !string.IsNullOrEmpty(request.squadId) ? request.squadId : request.soloHunterId;
+            Debug.Log($"[Cohesion] party={partyId} cohesion={(squad != null ? squad.cohesion : 50)} newbies={newbieCount} rosterChangedToday={(squad != null && squad.lastRosterChangeDay == dayIndex)} base={baseChance} final={finalChance} roll={roll} [TODO REMOVE]");
             var result = success ? option.successText : option.failText;
 
             if (success && option.goldReward > 0)
@@ -173,17 +209,28 @@ namespace FantasyGuildmaster.Encounter
                 _addGold?.Invoke(option.goldReward);
             }
 
-            if (!success && option.hpLoss > 0 && squad != null)
+            if (!success && squad != null)
             {
-                squad.hp = Mathf.Max(0, squad.hp - option.hpLoss);
-                if (squad.hp <= 0)
+                squad.cohesion = Mathf.Clamp(squad.cohesion - 4, 0, 100);
+                Debug.Log($"[Cohesion] After mission squad={squad.id} cohesion={squad.cohesion} delta=-4 [TODO REMOVE]");
+
+                if (option.hpLoss > 0)
                 {
-                    squad.state = SquadState.Destroyed;
-                    _onSquadDestroyed?.Invoke(squad.id);
-                    result += "\nSquad destroyed";
+                    squad.hp = Mathf.Max(0, squad.hp - option.hpLoss);
+                    if (squad.hp <= 0)
+                    {
+                        squad.state = SquadState.Destroyed;
+                        _onSquadDestroyed?.Invoke(squad.id);
+                        result += "\nSquad destroyed";
+                    }
                 }
 
                 _onSquadChanged?.Invoke();
+            }
+
+            if (!success && solo != null && option.hpLoss > 0)
+            {
+                solo.hp = Mathf.Max(0, solo.hp - option.hpLoss);
             }
 
             encounterPanel.ShowResult(result, () =>
