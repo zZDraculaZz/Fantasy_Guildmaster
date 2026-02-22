@@ -90,7 +90,7 @@ namespace FantasyGuildmaster.UI
             }
         }
 
-        public void Sync(System.Collections.Generic.IReadOnlyList<SquadData> squads, System.Collections.Generic.IReadOnlyList<TravelTask> tasks, Func<string, string> resolveRegionName, long nowUnix)
+        public void Sync(System.Collections.Generic.IReadOnlyList<SquadData> squads, System.Collections.Generic.IReadOnlyList<TravelTask> tasks, System.Func<string, string> resolveRegionName, long nowUnix)
         {
             Render(squads, tasks, resolveRegionName, nowUnix);
         }
@@ -143,10 +143,10 @@ namespace FantasyGuildmaster.UI
                 return;
             }
 
-            Render(_map.GetSquads(), _map.GetTravelTasks(), _map.GetRegionNameById, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+            Render(_map.GetSquads(), _map.GetTravelTasks(), _map.GetRegionNameById, SimulationTime.NowSeconds);
         }
 
-        private void Render(System.Collections.Generic.IReadOnlyList<SquadData> squads, System.Collections.Generic.IReadOnlyList<TravelTask> tasks, Func<string, string> resolveRegionName, long nowUnix)
+        private void Render(System.Collections.Generic.IReadOnlyList<SquadData> squads, System.Collections.Generic.IReadOnlyList<TravelTask> tasks, System.Func<string, string> resolveRegionName, long nowUnix)
         {
             if (squads == null || squads.Count == 0)
             {
@@ -165,7 +165,7 @@ namespace FantasyGuildmaster.UI
                     continue;
                 }
 
-                var stateText = BuildStateText(squad.id, tasks, resolveRegionName);
+                var stateText = BuildStateText(squad, tasks, resolveRegionName);
                 var membersText = BuildMembersText(squad);
                 var readinessText = $"Readiness {ComputeReadinessPercent(squad)}%";
                 var squadName = string.IsNullOrWhiteSpace(squad.name) ? squad.id : squad.name;
@@ -183,11 +183,17 @@ namespace FantasyGuildmaster.UI
             bodyText.text = sb.ToString();
         }
 
-        private static string BuildStateText(string squadId, System.Collections.Generic.IReadOnlyList<TravelTask> tasks, Func<string, string> resolveRegionName)
+        private static string BuildStateText(SquadData squad, System.Collections.Generic.IReadOnlyList<TravelTask> tasks, System.Func<string, string> resolveRegionName)
         {
+            var squadId = squad != null ? squad.id : null;
             var task = FindTaskForSquad(tasks, squadId);
             if (task == null)
             {
+                if (squad != null && squad.exhausted)
+                {
+                    return "Exhausted";
+                }
+
                 return "Idle";
             }
 
@@ -267,7 +273,7 @@ namespace FantasyGuildmaster.UI
                 return string.IsNullOrWhiteSpace(value) ? "Unknown" : value;
             }
 
-            return value.Substring(0, Math.Max(1, maxChars - 1)) + "…";
+            return value.Substring(0, Mathf.Max(1, maxChars - 1)) + "…";
         }
 
         private void EnsureBodyText()
