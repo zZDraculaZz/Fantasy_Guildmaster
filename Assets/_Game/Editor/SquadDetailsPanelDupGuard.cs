@@ -19,19 +19,20 @@ namespace FantasyGuildmaster.Editor
             }
 
             var code = File.ReadAllText(absolutePath);
-            ValidateSingleSerializedPaddingField(code, "paddingLeft");
-            ValidateSingleSerializedPaddingField(code, "paddingRight");
-            ValidateSingleSerializedPaddingField(code, "paddingTop");
-            ValidateSingleSerializedPaddingField(code, "paddingBottom");
+            ValidateSingleField(code, "paddingLeft", "float", "[DupGuard] Duplicate padding fields detected in SquadDetailsPanel. Keep only one set.");
+            ValidateSingleField(code, "paddingRight", "float", "[DupGuard] Duplicate padding fields detected in SquadDetailsPanel. Keep only one set.");
+            ValidateSingleField(code, "paddingTop", "float", "[DupGuard] Duplicate padding fields detected in SquadDetailsPanel. Keep only one set.");
+            ValidateSingleField(code, "paddingBottom", "float", "[DupGuard] Duplicate padding fields detected in SquadDetailsPanel. Keep only one set.");
+            ValidateSingleField(code, "forceLegacyText", "bool", "[DupGuard] Duplicate forceLegacyText fields detected in SquadDetailsPanel. Keep only one set.");
         }
 
-        private static void ValidateSingleSerializedPaddingField(string code, string fieldName)
+        private static void ValidateSingleField(string code, string fieldName, string typeName, string errorMessage)
         {
-            var pattern = $@"(?:\[SerializeField\]\s*)?private\s+float\s+{fieldName}\b";
+            var pattern = $@"(?:\[SerializeField\]\s*)?private\s+{typeName}\s+{fieldName}\b";
             var count = Regex.Matches(code, pattern).Count;
             if (count > 1)
             {
-                Debug.LogError("[DupGuard] SquadDetailsPanel has duplicated padding fields. Keep only one set.");
+                Debug.LogError(errorMessage);
             }
         }
     }
