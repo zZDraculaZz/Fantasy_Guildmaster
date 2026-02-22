@@ -1,0 +1,12 @@
+{
+  "scenes": [
+    {
+      "id": "evening_01",
+      "lines": [
+        {"speaker": "Guildmaster", "text": "Another night, another ledger to balance."},
+        {"speaker": "Quartermaster", "text": "Supplies are low. The northern roads are not safe."},
+        {"speaker": "Guildmaster", "text": "Then we choose our contracts carefully."}
+      ]
+    }
+  ]
+}
