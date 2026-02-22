@@ -389,6 +389,7 @@ namespace FantasyGuildmaster.UI
             bodyText.overflowMode = TextOverflowModes.Masking;
             bodyText.raycastTarget = false;
             bodyText.ForceMeshUpdate(true);
+            rect.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, Mathf.Max(1f, bodyText.preferredHeight));
 
             for (var i = 0; i < _rowPool.Count; i++)
             {
@@ -668,7 +669,7 @@ namespace FantasyGuildmaster.UI
                 bodyRect.anchorMax = new Vector2(1f, 1f);
                 bodyRect.pivot = new Vector2(0.5f, 1f);
                 bodyRect.anchoredPosition = Vector2.zero;
-                bodyRect.sizeDelta = Vector2.zero;
+                bodyRect.sizeDelta = new Vector2(0f, Mathf.Max(1f, bodyText.preferredHeight));
             }
 
             if (!_scrollFixLogPrinted)
