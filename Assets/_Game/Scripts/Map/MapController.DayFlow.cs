@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using FantasyGuildmaster.Core;
+using FantasyGuildmaster.Data;
 using FantasyGuildmaster.UI;
 using TMPro;
 using UnityEngine;
@@ -424,8 +426,11 @@ namespace FantasyGuildmaster.Map
                 var contentRect = content.GetComponent<RectTransform>();
                 contentRect.anchorMin = new Vector2(0.5f, 0.5f);
                 contentRect.anchorMax = new Vector2(0.5f, 0.5f);
-                contentRect.pivot = new Vector2(0.5f, 0.5f);
+                contentRect.pivot = new Vector2(0.5f, 1f);
                 contentRect.sizeDelta = new Vector2(720f, 280f);
+                var fitter = content.GetComponent<ContentSizeFitter>() ?? content.AddComponent<ContentSizeFitter>();
+                fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+                fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
                 var contentImage = content.GetComponent<Image>();
                 contentImage.color = new Color(0.08f, 0.1f, 0.14f, 0.98f);
                 var contentLayoutElement = content.GetComponent<LayoutElement>() ?? content.AddComponent<LayoutElement>();
@@ -450,7 +455,8 @@ namespace FantasyGuildmaster.Map
                 body.overflowMode = TextOverflowModes.Overflow;
                 body.text = "";
                 var bodyLayout = body.gameObject.AddComponent<LayoutElement>();
-                bodyLayout.preferredHeight = 120f;
+                bodyLayout.minHeight = 80f;
+                bodyLayout.flexibleHeight = 1f;
 
                 var row = new GameObject("Buttons", typeof(RectTransform), typeof(HorizontalLayoutGroup));
                 row.transform.SetParent(content.transform, false);
@@ -475,6 +481,12 @@ namespace FantasyGuildmaster.Map
                 endDayConfirmBodyText = body;
                 endDayConfirmYesButton = yes;
                 endDayConfirmNoButton = no;
+                endDayConfirmContent = contentRect;
+            }
+
+            if (endDayConfirmContent == null && endDayConfirmPanel != null)
+            {
+                endDayConfirmContent = endDayConfirmPanel.transform.Find("Content") as RectTransform;
             }
 
             if (endDayConfirmYesButton != null)
@@ -533,6 +545,12 @@ namespace FantasyGuildmaster.Map
             if (endDayConfirmBodyText != null)
             {
                 endDayConfirmBodyText.text = warning;
+                endDayConfirmBodyText.ForceMeshUpdate(true);
+            }
+
+            if (endDayConfirmContent != null)
+            {
+                LayoutRebuilder.ForceRebuildLayoutImmediate(endDayConfirmContent);
             }
 
             endDayConfirmPanel.SetActive(true);

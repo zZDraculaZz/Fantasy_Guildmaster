@@ -51,6 +51,7 @@ namespace FantasyGuildmaster.Map
         [SerializeField] private TMP_Text endDayConfirmBodyText;
         [SerializeField] private Button endDayConfirmYesButton;
         [SerializeField] private Button endDayConfirmNoButton;
+        [SerializeField] private RectTransform endDayConfirmContent;
 
         private readonly Dictionary<string, List<ContractData>> _contractsByRegion = new();
         private readonly Dictionary<string, RegionData> _regionById = new();
@@ -372,30 +373,27 @@ namespace FantasyGuildmaster.Map
             }
 
             var squad = FindSquad(task.squadId);
-            if (squad == null && string.IsNullOrEmpty(task.soloHunterId))
+            if (squad == null)
             {
-                squad.currentRegionId = GuildHqId;
-                squad.state = SquadState.IdleAtHQ;
-                NotifyRosterChanged();
                 RemoveTravelToken(task.squadId);
                 RestoreContractAvailability(task.toRegionId, task.contractId);
                 return;
             }
 
-            var soloHunter = !string.IsNullOrEmpty(task.soloHunterId) && hunterRoster != null ? hunterRoster.GetById(task.soloHunterId) : null;
+            var assignedSoloHunter = !string.IsNullOrEmpty(task.soloHunterId) && hunterRoster != null ? hunterRoster.GetById(task.soloHunterId) : null;
 
             if (task.phase == TravelPhase.Outbound)
             {
-                if (soloHunter != null)
+                if (assignedSoloHunter != null)
                 {
                     if (encounterManager != null)
                     {
-                        encounterManager.EnqueueEncounter(task.toRegionId, null, () => OnEncounterResolved(null, task.toRegionId, task.contractId, task.contractReward, soloHunter.id), soloHunter.id);
+                        encounterManager.EnqueueEncounter(task.toRegionId, null, () => OnEncounterResolved(null, task.toRegionId, task.contractId, task.contractReward, assignedSoloHunter.id), assignedSoloHunter.id);
                         TryAdvanceDayFlow("EncounterQueued");
                     }
                     else
                     {
-                        OnEncounterResolved(null, task.toRegionId, task.contractId, task.contractReward, soloHunter.id);
+                        OnEncounterResolved(null, task.toRegionId, task.contractId, task.contractReward, assignedSoloHunter.id);
                     }
 
                     return;
@@ -405,12 +403,13 @@ namespace FantasyGuildmaster.Map
                     Debug.Log($"[TravelDebug] Outbound complete: squad={squad.name}, now={simNow}, region={task.toRegionId}");
                 }
 
-                var seed = (region.id != null ? region.id.GetHashCode() : 0) ^ (_dayIndex * 397);
+                _regionById.TryGetValue(task.toRegionId, out var targetRegion);
+                var seed = (task.toRegionId != null ? task.toRegionId.GetHashCode() : 0) ^ (_dayIndex * 397);
                 var random = new System.Random(seed);
-                if (!_contractsByRegion.TryGetValue(region.id, out var contracts) || contracts == null)
+                if (!_contractsByRegion.TryGetValue(task.toRegionId, out var contracts) || contracts == null)
                 {
                     contracts = new List<ContractData>();
-                    _contractsByRegion[region.id] = contracts;
+                    _contractsByRegion[task.toRegionId] = contracts;
                 }
 
                 if (contracts.Count == 0)
@@ -420,8 +419,8 @@ namespace FantasyGuildmaster.Map
                     {
                         contracts.Add(new ContractData
                         {
-                            id = $"{region.id}_day{_dayIndex}_contract_{i}",
-                            title = $"Contract #{i + 1}: {region.name}",
+                            id = $"{task.toRegionId}_day{_dayIndex}_contract_{i}",
+                            title = $"Contract #{i + 1}: {(targetRegion != null ? targetRegion.name : task.toRegionId)}",
                             remainingSeconds = random.Next(45, 300),
                             reward = random.Next(50, 250),
                             iconKey = PickContractIconKey(i),
@@ -444,15 +443,15 @@ namespace FantasyGuildmaster.Map
                 }
             }
 
-            if (soloHunter != null)
+            if (assignedSoloHunter != null)
             {
                 Debug.Log($"[TravelDebug] Return complete: squad={squad.name}, now={simNow}, reward={task.contractReward}");
             }
 
-            if (soloHunter != null)
+            if (assignedSoloHunter != null)
             {
-                soloHunter.squadId = null;
-                RemoveSoloTravelToken(soloHunter.id);
+                assignedSoloHunter.squadId = null;
+                RemoveSoloTravelToken(assignedSoloHunter.id);
             }
             else
             {
@@ -594,8 +593,7 @@ namespace FantasyGuildmaster.Map
                 return;
             }
 
-            var header = panel.Find("HeaderContainer") as RectTransform;
-            if (header == null)
+            if (prefab != null)
             {
                 var instance = Instantiate(prefab, canvas.transform, false);
                 guildHallPanel = instance.GetComponent<GuildHallPanel>();
@@ -1438,60 +1436,6 @@ namespace FantasyGuildmaster.Map
                 var phaseLabel = phase == TravelPhase.Outbound ? "OUT" : "RET";
                 Debug.Log($"[TravelDebug] Travel task created: phase={phaseLabel}, squad={squad.name}, route={fromRegionId}->{toRegionId}, endSimSeconds={task.endSimSeconds}");
             }
-        }
-
-        private void StartSoloTravelTask(HunterData hunter, string toRegionId, string contractId, int contractReward, TravelPhase phase)
-        {
-            if (hunter == null)
-            {
-                return;
-            }
-
-            var duration = ResolveTravelDuration(toRegionId);
-            var now = SimulationTime.NowSeconds;
-            var task = new TravelTask
-            {
-                squadId = null,
-                soloHunterId = hunter.id,
-                fromRegionId = GuildHqId,
-                toRegionId = toRegionId,
-                contractId = contractId,
-                contractReward = contractReward,
-                phase = phase,
-                startSimSeconds = now,
-                endSimSeconds = now + duration
-            };
-
-            _travelTasks.Add(task);
-            AcquireOrUpdateSoloTravelToken(hunter, task);
-            Debug.Log($"[TravelDebug] Solo task created hunter={hunter.id} route={GuildHqId}->{toRegionId} [TODO REMOVE]");
-        }
-
-        private void StartSoloTravelTask(HunterData hunter, string toRegionId, string contractId, int contractReward, TravelPhase phase)
-        {
-            if (hunter == null)
-            {
-                return;
-            }
-
-            var duration = ResolveTravelDuration(toRegionId);
-            var now = SimulationTime.NowSeconds;
-            var task = new TravelTask
-            {
-                squadId = null,
-                soloHunterId = hunter.id,
-                fromRegionId = GuildHqId,
-                toRegionId = toRegionId,
-                contractId = contractId,
-                contractReward = contractReward,
-                phase = phase,
-                startSimSeconds = now,
-                endSimSeconds = now + duration
-            };
-
-            _travelTasks.Add(task);
-            AcquireOrUpdateSoloTravelToken(hunter, task);
-            Debug.Log($"[TravelDebug] Solo task created hunter={hunter.id} route={GuildHqId}->{toRegionId} [TODO REMOVE]");
         }
 
         private int ResolveTravelDuration(string regionId)
