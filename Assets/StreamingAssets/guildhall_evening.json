@@ -1,0 +1,43 @@
+{
+  "forcedIntroSceneId": "forced_01",
+  "characters": [
+    { "id": "quartermaster", "displayName": "Quartermaster", "talkSceneId": "talk_quartermaster", "posX": 0.25, "posY": 0.60, "badge": "shop", "enabled": true, "lockedReason": "", "portraitKey": "" },
+    { "id": "captain", "displayName": "Captain", "talkSceneId": "talk_captain", "posX": 0.55, "posY": 0.60, "badge": "important", "enabled": true, "lockedReason": "", "portraitKey": "" },
+    { "id": "roster_desk", "displayName": "Roster Desk", "talkSceneId": "open_roster", "posX": 0.40, "posY": 0.35, "badge": "normal", "enabled": true, "lockedReason": "", "portraitKey": "" },
+    { "id": "dormitory", "displayName": "Dormitory", "talkSceneId": "rest_evening", "posX": 0.75, "posY": 0.35, "badge": "none", "enabled": true, "lockedReason": "", "portraitKey": "" }
+  ],
+  "scenes": [
+    {
+      "id": "forced_01",
+      "lines": [
+        { "speaker": "Guildmaster", "text": "Before anyone rests, we settle tonight's priorities." }
+      ]
+    },
+    {
+      "id": "talk_quartermaster",
+      "lines": [
+        { "speaker": "Quartermaster", "text": "Stocks are tight. We can keep one more week at this pace." },
+        { "speaker": "Guildmaster", "text": "Then we prioritize steady contracts over risky glory." }
+      ]
+    },
+    {
+      "id": "talk_captain",
+      "lines": [
+        { "speaker": "Captain", "text": "Morale is steady. Squads trust your calls." },
+        { "speaker": "Guildmaster", "text": "Good. Tomorrow we test that trust." }
+      ]
+    },
+    {
+      "id": "open_roster",
+      "lines": [
+        { "speaker": "Guildmaster", "text": "Roster reviewed. Squad details look stable for tomorrow." }
+      ]
+    },
+    {
+      "id": "rest_evening",
+      "lines": [
+        { "speaker": "Guildmaster", "text": "Lights out early. The squads need a calmer night." }
+      ]
+    }
+  ]
+}

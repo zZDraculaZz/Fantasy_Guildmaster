@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using FantasyGuildmaster.Core;
 using FantasyGuildmaster.Map;
 using TMPro;
 using UnityEngine;
@@ -15,10 +16,16 @@ namespace FantasyGuildmaster.UI
         [SerializeField] private Button closeButton;
 
         private readonly List<Button> _buttons = new();
+        private bool _pauseHeld;
 
         public void Show(List<SquadData> idleSquads, Action<SquadData> onSelected)
         {
             gameObject.SetActive(true);
+            if (!_pauseHeld)
+            {
+                GamePauseService.Push("SquadSelect");
+                _pauseHeld = true;
+            }
 
             if (titleText != null)
             {
@@ -26,6 +33,7 @@ namespace FantasyGuildmaster.UI
             }
 
             ClearButtons();
+            Debug.Log($"[SquadSelect] Show idleCount={idleSquads.Count} [TODO REMOVE]");
 
             for (var i = 0; i < idleSquads.Count; i++)
             {
@@ -35,12 +43,22 @@ namespace FantasyGuildmaster.UI
                 var label = button.GetComponentInChildren<TMP_Text>();
                 if (label != null)
                 {
-                    label.text = $"{squad.name} ({squad.membersCount})";
+                    var exhaustedTag = squad.exhausted ? " (Resting)" : string.Empty;
+                    label.text = $"{squad.name} ({squad.membersCount}){exhaustedTag}";
+                    label.textWrappingMode = TextWrappingModes.NoWrap;
+                    label.overflowMode = TextOverflowModes.Ellipsis;
                 }
 
+                button.interactable = !squad.exhausted;
                 button.onClick.RemoveAllListeners();
                 button.onClick.AddListener(() =>
                 {
+                    if (squad.exhausted)
+                    {
+                        Debug.LogWarning($"[Assign] blocked exhausted squad={squad.id} [TODO REMOVE]");
+                        return;
+                    }
+
                     onSelected?.Invoke(squad);
                     Hide();
                 });
@@ -55,9 +73,23 @@ namespace FantasyGuildmaster.UI
             }
         }
 
+        private void OnDisable()
+        {
+            if (_pauseHeld)
+            {
+                GamePauseService.Pop("SquadSelect");
+                _pauseHeld = false;
+            }
+        }
+
         public void Hide()
         {
             gameObject.SetActive(false);
+            if (_pauseHeld)
+            {
+                GamePauseService.Pop("SquadSelect");
+                _pauseHeld = false;
+            }
         }
 
         private void ClearButtons()
