@@ -655,56 +655,31 @@ namespace FantasyGuildmaster.Editor
 
             var continueButton = content.transform.Find("ContinueButton") != null
                 ? content.transform.Find("ContinueButton").GetComponent<Button>()
-                : CreateButton(content.transform, "ContinueButton", "Continue");
+                : null;
+            if (continueButton == null)
+            {
+                var continueGo = FindOrCreateUI("ContinueButton", content.transform);
+                continueButton = continueGo.GetComponent<Button>() ?? continueGo.AddComponent<Button>();
+            }
+
+            if (continueButton != null)
+            {
+                var continueGo = continueButton.gameObject;
+                var continueImage = continueGo.GetComponent<Image>() ?? continueGo.AddComponent<Image>();
+                continueImage.color = new Color(0.15f, 0.35f, 0.18f, 0.9f);
+
+                var continueLabel = continueGo.transform.Find("Label") != null
+                    ? continueGo.transform.Find("Label").GetComponent<TextMeshProUGUI>()
+                    : CreateText("Label", continueGo.transform, "Continue", 16f, TextAlignmentOptions.Center);
+                Stretch((RectTransform)continueLabel.transform, 4f);
+
+                var continueLayout = continueGo.GetComponent<LayoutElement>() ?? continueGo.AddComponent<LayoutElement>();
+                continueLayout.minHeight = 36f;
+            }
 
             var panel = panelGo.GetComponent<MissionReportPanel>() ?? panelGo.AddComponent<MissionReportPanel>();
             panel.ConfigureRuntimeBindings(panelGo, blocker, title, body, continueButton);
             panel.Hide();
-            return panel;
-        }
-
-        private static SquadDetailsPanel EnsureSquadDetailsPanel(Transform parent)
-        {
-            var panelGo = FindOrCreateUI("SquadDetailsPanel", parent);
-            var panelRect = (RectTransform)panelGo.transform;
-            panelRect.anchorMin = new Vector2(0f, 1f);
-            panelRect.anchorMax = new Vector2(0f, 1f);
-            panelRect.pivot = new Vector2(0f, 1f);
-            panelRect.anchoredPosition = new Vector2(16f, -286f);
-            panelRect.sizeDelta = new Vector2(300f, 220f);
-
-            var image = panelGo.GetComponent<Image>() ?? panelGo.AddComponent<Image>();
-            image.color = new Color(0.04f, 0.08f, 0.14f, 0.88f);
-
-            var layout = panelGo.GetComponent<VerticalLayoutGroup>() ?? panelGo.AddComponent<VerticalLayoutGroup>();
-            layout.padding = new RectOffset(8, 8, 8, 8);
-            layout.spacing = 6f;
-            layout.childControlWidth = true;
-            layout.childControlHeight = true;
-            layout.childForceExpandWidth = true;
-            layout.childForceExpandHeight = false;
-
-            var title = panelGo.transform.Find("Title") != null
-                ? panelGo.transform.Find("Title").GetComponent<TextMeshProUGUI>()
-                : CreateText("Title", panelGo.transform, "Squad Details", 19f, TextAlignmentOptions.Left);
-            var titleLayout = title.GetComponent<LayoutElement>() ?? title.gameObject.AddComponent<LayoutElement>();
-            titleLayout.minHeight = 26f;
-            titleLayout.preferredHeight = 26f;
-
-            var body = panelGo.transform.Find("BodyText") != null
-                ? panelGo.transform.Find("BodyText").GetComponent<TextMeshProUGUI>()
-                : CreateText("BodyText", panelGo.transform, "Select a squad in Squad HUD.", 15f, TextAlignmentOptions.TopLeft);
-            body.textWrappingMode = TextWrappingModes.Normal;
-            var bodyLayout = body.GetComponent<LayoutElement>() ?? body.gameObject.AddComponent<LayoutElement>();
-            bodyLayout.minHeight = 160f;
-            bodyLayout.preferredHeight = 160f;
-            bodyLayout.flexibleHeight = 1f;
-
-            var panel = panelGo.GetComponent<SquadDetailsPanel>() ?? panelGo.AddComponent<SquadDetailsPanel>();
-            var panelSo = new SerializedObject(panel);
-            AssignOptionalObjectReference(panelSo, "titleText", title);
-            AssignOptionalObjectReference(panelSo, "bodyText", body);
-            panelSo.ApplyModifiedPropertiesWithoutUndo();
             return panel;
         }
 
