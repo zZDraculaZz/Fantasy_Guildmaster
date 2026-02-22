@@ -2,6 +2,7 @@ using System.Text;
 using FantasyGuildmaster.Map;
 using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace FantasyGuildmaster.UI
 {
@@ -9,6 +10,7 @@ namespace FantasyGuildmaster.UI
     {
         [SerializeField] private TMP_Text titleText;
         [SerializeField] private TMP_Text bodyText;
+        [SerializeField] private RectTransform contentContainer;
 
         private MapController _map;
 
@@ -30,6 +32,7 @@ namespace FantasyGuildmaster.UI
             {
                 titleText.text = "Squad Details";
                 bodyText.text = "MapController not found.";
+                RefreshLayout();
                 return;
             }
 
@@ -38,6 +41,7 @@ namespace FantasyGuildmaster.UI
             {
                 titleText.text = "Squad Details";
                 bodyText.text = "Select a squad in Squad HUD.";
+                RefreshLayout();
                 return;
             }
 
@@ -89,6 +93,46 @@ namespace FantasyGuildmaster.UI
             }
 
             bodyText.text = sb.ToString();
+            RefreshLayout();
+        }
+
+        private void EnsureAutoResizeComponents()
+        {
+            if (contentContainer == null)
+            {
+                return;
+            }
+
+            contentContainer.pivot = new Vector2(0.5f, 1f);
+
+            var layout = contentContainer.GetComponent<VerticalLayoutGroup>() ?? contentContainer.gameObject.AddComponent<VerticalLayoutGroup>();
+            layout.childControlWidth = true;
+            layout.childControlHeight = true;
+            layout.childForceExpandHeight = false;
+            layout.childForceExpandWidth = true;
+
+            var fitter = contentContainer.GetComponent<ContentSizeFitter>() ?? contentContainer.gameObject.AddComponent<ContentSizeFitter>();
+            fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+            fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+            if (bodyText != null)
+            {
+                bodyText.textWrappingMode = TextWrappingModes.Normal;
+                bodyText.overflowMode = TextOverflowModes.Overflow;
+            }
+        }
+
+        private void RefreshLayout()
+        {
+            if (bodyText != null)
+            {
+                bodyText.ForceMeshUpdate(true);
+            }
+
+            if (contentContainer != null)
+            {
+                LayoutRebuilder.ForceRebuildLayoutImmediate(contentContainer);
+            }
         }
 
         private void EnsureTexts()
@@ -102,6 +146,22 @@ namespace FantasyGuildmaster.UI
             {
                 bodyText = transform.Find("BodyText")?.GetComponent<TMP_Text>();
             }
+
+            if (contentContainer == null)
+            {
+                var content = transform.Find("Content");
+                if (content != null)
+                {
+                    contentContainer = content as RectTransform;
+                }
+
+                if (contentContainer == null && bodyText != null)
+                {
+                    contentContainer = bodyText.transform.parent as RectTransform;
+                }
+            }
+
+            EnsureAutoResizeComponents();
         }
     }
 }
