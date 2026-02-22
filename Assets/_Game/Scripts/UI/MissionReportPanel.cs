@@ -1,5 +1,6 @@
 using System;
 using System.Text;
+using FantasyGuildmaster.Core;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -15,6 +16,8 @@ namespace FantasyGuildmaster.UI
         [SerializeField] private Image blockerImage;
 
         private Action _onContinue;
+        private CanvasGroup _cg;
+        private bool _pauseHeld;
 
         public bool IsOpen => root != null && root.activeSelf;
 
@@ -34,15 +37,57 @@ namespace FantasyGuildmaster.UI
             EnsureRuntimeBindings();
         }
 
-        public void Show(MissionReportData data, Action onContinue)
+        public bool Show(MissionReportData data, Action onContinue)
         {
             EnsureRuntimeBindings();
             _onContinue = onContinue;
+            EnsureCanvasGroup();
+            Debug.Log($"[ReportUI] Show called, cgPresent={(_cg != null)} button={(continueButton != null)} [TODO REMOVE]");
 
+            gameObject.SetActive(true);
             if (root != null)
             {
                 root.SetActive(true);
                 root.transform.SetAsLastSibling();
+                var content = root.transform.Find("Content");
+                if (content != null)
+                {
+                    content.SetAsLastSibling();
+                }
+            }
+
+            if (_cg != null)
+            {
+                _cg.alpha = 1f;
+                _cg.interactable = true;
+                _cg.blocksRaycasts = true;
+            }
+
+            if (!_pauseHeld)
+            {
+                GamePauseService.Push("MissionReport");
+                _pauseHeld = true;
+            }
+
+            if (continueButton != null)
+            {
+                continueButton.onClick.RemoveAllListeners();
+                continueButton.interactable = true;
+                continueButton.onClick.AddListener(() =>
+                {
+                    Debug.Log("[ReportUI] Continue clicked [TODO REMOVE]");
+                    onContinue?.Invoke();
+                });
+
+                var buttonText = continueButton.GetComponentsInChildren<TMP_Text>(true);
+                for (var i = 0; i < buttonText.Length; i++)
+                {
+                    buttonText[i].raycastTarget = false;
+                }
+            }
+            else
+            {
+                Debug.LogWarning("[ReportUI] Continue button is missing; click handler not bound. [TODO REMOVE]");
             }
 
             if (titleText != null)
@@ -54,23 +99,61 @@ namespace FantasyGuildmaster.UI
             {
                 bodyText.text = BuildBodyText(data);
             }
+
+            var showSucceeded = gameObject.activeInHierarchy && _cg != null && _cg.alpha > 0.001f && continueButton != null;
+            if (!showSucceeded)
+            {
+                Debug.LogError("[ReportUI] Show failed, releasing pause + fallback [TODO REMOVE]");
+                ReleasePause();
+                return false;
+            }
+
+            return true;
         }
 
         public void Hide()
         {
             EnsureRuntimeBindings();
             _onContinue = null;
+            EnsureCanvasGroup();
+            if (_cg != null)
+            {
+                _cg.alpha = 0f;
+                _cg.interactable = false;
+                _cg.blocksRaycasts = false;
+            }
+
             if (root != null)
             {
                 root.SetActive(false);
             }
+
+            ReleasePause();
         }
 
-        private void HandleContinuePressed()
+
+        private void OnDisable()
         {
-            var callback = _onContinue;
-            _onContinue = null;
-            callback?.Invoke();
+            ReleasePause();
+        }
+
+        private void ReleasePause()
+        {
+            if (_pauseHeld)
+            {
+                GamePauseService.Pop("MissionReport");
+                _pauseHeld = false;
+            }
+        }
+
+        private void EnsureCanvasGroup()
+        {
+            var target = root != null ? root : gameObject;
+            _cg = target.GetComponent<CanvasGroup>();
+            if (_cg == null)
+            {
+                _cg = target.AddComponent<CanvasGroup>();
+            }
         }
 
         private void EnsureRuntimeBindings()
@@ -80,15 +163,37 @@ namespace FantasyGuildmaster.UI
                 root = gameObject;
             }
 
+            EnsureCanvasGroup();
+
             if (blockerImage == null)
             {
-                blockerImage = GetComponent<Image>();
+                blockerImage = root.GetComponent<Image>();
             }
 
-            if (continueButton != null)
+            if (continueButton == null && root != null)
             {
-                continueButton.onClick.RemoveListener(HandleContinuePressed);
-                continueButton.onClick.AddListener(HandleContinuePressed);
+                var continueByName = root.transform.Find("Content/ContinueButton");
+                if (continueByName != null)
+                {
+                    continueButton = continueByName.GetComponent<Button>();
+                }
+
+                if (continueButton == null)
+                {
+                    continueButton = root.GetComponentInChildren<Button>(true);
+                }
+            }
+
+            if (titleText == null && root != null)
+            {
+                var titleByName = root.transform.Find("Content/Title");
+                titleText = titleByName != null ? titleByName.GetComponent<TMP_Text>() : root.GetComponentInChildren<TMP_Text>(true);
+            }
+
+            if (bodyText == null && root != null)
+            {
+                var bodyByName = root.transform.Find("Content/Body");
+                bodyText = bodyByName != null ? bodyByName.GetComponent<TMP_Text>() : null;
             }
 
             if (blockerImage != null)
