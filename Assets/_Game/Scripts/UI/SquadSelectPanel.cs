@@ -33,6 +33,7 @@ namespace FantasyGuildmaster.UI
             }
 
             ClearButtons();
+            Debug.Log($"[SquadSelect] Show idleCount={idleSquads.Count} [TODO REMOVE]");
 
             for (var i = 0; i < idleSquads.Count; i++)
             {
@@ -42,7 +43,7 @@ namespace FantasyGuildmaster.UI
                 var label = button.GetComponentInChildren<TMP_Text>();
                 if (label != null)
                 {
-                    var exhaustedTag = squad.exhausted ? " - Exhausted" : string.Empty;
+                    var exhaustedTag = squad.exhausted ? " (Resting)" : string.Empty;
                     label.text = $"{squad.name} ({squad.membersCount}){exhaustedTag}";
                     label.textWrappingMode = TextWrappingModes.NoWrap;
                     label.overflowMode = TextOverflowModes.Ellipsis;

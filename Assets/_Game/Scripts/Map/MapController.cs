@@ -420,8 +420,9 @@ namespace FantasyGuildmaster.Map
             if (reportSquad != null)
             {
                 reportSquad.exhausted = true;
+                reportSquad.exhaustedReason = "Needs rest";
                 reportSquad.contractsDoneToday++;
-                Debug.Log($"[Squad] Exhausted after contract squad={reportSquad.id} day={_dayIndex} contractsToday={reportSquad.contractsDoneToday} [TODO REMOVE]");
+                Debug.Log($"[Squad] Exhausted after contract: squad={reportSquad.id} contract={report.contractId} [TODO REMOVE]");
 
                 var cohesionDelta = reportSquad.lastRosterChangeDay == _dayIndex ? 1 : 3;
                 reportSquad.cohesion = Mathf.Clamp(reportSquad.cohesion + cohesionDelta, 0, 100);
@@ -607,6 +608,7 @@ namespace FantasyGuildmaster.Map
                 }
 
                 squad.exhausted = false;
+                squad.exhaustedReason = null;
                 squad.contractsDoneToday = 0;
                 if (squad.lastRosterChangeDay != _dayIndex - 1)
                 {
@@ -622,7 +624,7 @@ namespace FantasyGuildmaster.Map
                 detailsPanel.SetIdleSquadsCount(GetIdleSquads().Count);
             }
 
-            Debug.Log($"[Day] NextDay dayIndex={_dayIndex} reset exhausted for all squads [TODO REMOVE]");
+            Debug.Log($"[Day] Reset squad exhaustion, day={_dayIndex} [TODO REMOVE]");
         }
 
         private void RefreshContractsForNextDay()

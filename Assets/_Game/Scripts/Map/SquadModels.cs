@@ -41,6 +41,7 @@ namespace FantasyGuildmaster.Map
         public string currentRegionId;
         public List<SquadMemberData> members = new();
         public bool exhausted;
+        public string exhaustedReason;
         public int cohesion = 35;
         public int lastRosterChangeDay;
         public int contractsDoneToday;
