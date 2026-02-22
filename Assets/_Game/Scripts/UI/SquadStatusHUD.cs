@@ -40,8 +40,6 @@ namespace FantasyGuildmaster.UI
         private Coroutine _tick;
         private bool _nullSafeLogPrinted;
         private bool _legacyMissingRefsLogged;
-        private bool _legacyZeroRowsLogged;
-        private bool _legacyModeLogPrinted;
         private bool _scrollFixLogPrinted;
 
         private void Awake()
@@ -147,24 +145,11 @@ namespace FantasyGuildmaster.UI
             tasks ??= System.Array.Empty<TravelTask>();
             resolveRegionName ??= id => string.IsNullOrEmpty(id) ? "?" : id;
 
-            var canUseScrollRows = rosterScrollRect != null
+            var canUseScroll = rosterScrollRect != null
                 && rosterViewport != null
-                && rosterContent != null
-                && rosterRowPrefab != null;
+                && rosterContent != null;
 
-            if (forceLegacyText)
-            {
-                if (!_legacyModeLogPrinted)
-                {
-                    _legacyModeLogPrinted = true;
-                    Debug.Log("[RosterHUD] forceLegacyText enabled -> showing TMP block");
-                }
-
-                RenderLegacyText(BuildLegacyText(squads, tasks, resolveRegionName));
-                return;
-            }
-
-            if (!canUseScrollRows)
+            if (!canUseScroll)
             {
                 if (!_legacyMissingRefsLogged)
                 {
@@ -176,26 +161,7 @@ namespace FantasyGuildmaster.UI
                 return;
             }
 
-            var createdRows = RenderScrollRows(squads, tasks, resolveRegionName);
-            if (createdRows <= 0)
-            {
-                if (!_legacyZeroRowsLogged)
-                {
-                    _legacyZeroRowsLogged = true;
-                    Debug.Log("[RosterHUD] Using legacy fallback (0 rows) [TODO REMOVE]");
-                }
-
-                RenderLegacyText(BuildLegacyText(squads, tasks, resolveRegionName));
-                return;
-            }
-
-            if (bodyText != null)
-            {
-                bodyText.gameObject.SetActive(false);
-            }
-
-            EnsureScrollAnchorsAndMask();
-            LayoutRebuilder.ForceRebuildLayoutImmediate(rosterContent);
+            RenderScrollText(BuildLegacyText(squads, tasks, resolveRegionName));
         }
 
         private int RenderScrollRows(IReadOnlyList<SquadData> squads, IReadOnlyList<TravelTask> tasks, System.Func<string, string> resolveRegionName)
@@ -383,6 +349,48 @@ namespace FantasyGuildmaster.UI
             }
         }
 
+        private void RenderScrollText(string text)
+        {
+            EnsureBodyText();
+            EnsureRosterScrollInfrastructure();
+            EnsureScrollAnchorsAndMask();
+            if (bodyText == null || rosterContent == null)
+            {
+                RenderLegacyText(text);
+                return;
+            }
+
+            if (bodyText.transform.parent != rosterContent)
+            {
+                bodyText.transform.SetParent(rosterContent, false);
+            }
+
+            var rect = bodyText.rectTransform;
+            rect.anchorMin = new Vector2(0f, 1f);
+            rect.anchorMax = new Vector2(1f, 1f);
+            rect.pivot = new Vector2(0.5f, 1f);
+            rect.anchoredPosition = Vector2.zero;
+            rect.sizeDelta = Vector2.zero;
+
+            bodyText.gameObject.SetActive(true);
+            bodyText.text = text;
+            bodyText.enableWordWrapping = true;
+            bodyText.textWrappingMode = TextWrappingModes.Normal;
+            bodyText.overflowMode = TextOverflowModes.Masking;
+            bodyText.raycastTarget = false;
+            bodyText.ForceMeshUpdate(true);
+
+            for (var i = 0; i < _rowPool.Count; i++)
+            {
+                if (_rowPool[i] != null)
+                {
+                    _rowPool[i].gameObject.SetActive(false);
+                }
+            }
+
+            LayoutRebuilder.ForceRebuildLayoutImmediate(rosterContent);
+        }
+
         private string BuildSoloStateText(HunterData hunter, System.Func<string, string> resolveRegionName)
         {
             if (_map == null || hunter == null) return "Idle";
@@ -504,6 +512,7 @@ namespace FantasyGuildmaster.UI
                 rosterScrollRect = scrollGo.GetComponent<ScrollRect>();
                 rosterScrollRect.horizontal = false;
                 rosterScrollRect.vertical = true;
+                rosterScrollRect.movementType = ScrollRect.MovementType.Clamped;
 
                 var viewportGo = new GameObject("Viewport", typeof(RectTransform), typeof(Image), typeof(RectMask2D));
                 viewportGo.transform.SetParent(scrollGo.transform, false);
