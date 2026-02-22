@@ -24,23 +24,13 @@ namespace FantasyGuildmaster.UI
         private GameState _gameState;
         private Coroutine _tick;
 
-        private void Awake()
-        {
-            EnsureBodyText();
-        }
+        private void Awake() => EnsureBodyText();
 
-        private void OnEnable()
-        {
-            StartCoroutine(DelayedBindAndStart());
-        }
+        private void OnEnable() => StartCoroutine(DelayedBindAndStart());
 
         private void OnDisable()
         {
-            if (_gameState != null)
-            {
-                _gameState.OnGoldChanged -= OnGoldChanged;
-            }
-
+            if (_gameState != null) _gameState.OnGoldChanged -= OnGoldChanged;
             if (_tick != null) StopCoroutine(_tick);
             _tick = null;
         }
@@ -50,11 +40,7 @@ namespace FantasyGuildmaster.UI
             yield return null;
             BindIfNeeded();
             RefreshNow();
-
-            if (_tick == null)
-            {
-                _tick = StartCoroutine(TickRoutine());
-            }
+            if (_tick == null) _tick = StartCoroutine(TickRoutine());
         }
 
         private IEnumerator TickRoutine()
@@ -75,13 +61,8 @@ namespace FantasyGuildmaster.UI
 
         public void BindGameState(GameState gs)
         {
-            if (_gameState != null)
-            {
-                _gameState.OnGoldChanged -= OnGoldChanged;
-            }
-
+            if (_gameState != null) _gameState.OnGoldChanged -= OnGoldChanged;
             _gameState = gs;
-
             if (_gameState != null)
             {
                 _gameState.OnGoldChanged += OnGoldChanged;
@@ -96,17 +77,9 @@ namespace FantasyGuildmaster.UI
 
         public void OnPointerClick(PointerEventData eventData)
         {
-            if (_map == null || bodyText == null || eventData == null)
-            {
-                return;
-            }
-
+            if (_map == null || bodyText == null || eventData == null) return;
             var linkIndex = TMP_TextUtilities.FindIntersectingLink(bodyText, eventData.position, eventData.pressEventCamera);
-            if (linkIndex < 0 || linkIndex >= bodyText.textInfo.linkCount)
-            {
-                return;
-            }
-
+            if (linkIndex < 0 || linkIndex >= bodyText.textInfo.linkCount) return;
             var linkInfo = bodyText.textInfo.linkInfo[linkIndex];
             var squadId = linkInfo.GetLinkID();
             if (!string.IsNullOrWhiteSpace(squadId))
@@ -118,27 +91,17 @@ namespace FantasyGuildmaster.UI
 
         private void BindIfNeeded()
         {
-            if (_map != null)
-            {
-                return;
-            }
-
-            _map = UnityEngine.Object.FindFirstObjectByType<MapController>();
+            if (_map == null) _map = UnityEngine.Object.FindFirstObjectByType<MapController>();
         }
 
         public void RefreshNow()
         {
             EnsureBodyText();
             BindIfNeeded();
-
-            if (titleText != null && string.IsNullOrWhiteSpace(titleText.text))
-            {
-                titleText.text = "Squads";
-            }
-
+            if (titleText != null) titleText.text = "Roster";
             if (_map == null)
             {
-                bodyText.text = "Squads: (MapController not found)";
+                bodyText.text = "Roster: (MapController not found)";
                 return;
             }
 
@@ -147,53 +110,78 @@ namespace FantasyGuildmaster.UI
 
         private void Render(System.Collections.Generic.IReadOnlyList<SquadData> squads, System.Collections.Generic.IReadOnlyList<TravelTask> tasks, System.Func<string, string> resolveRegionName, long nowUnix)
         {
+            var sb = new StringBuilder(1024);
+            sb.AppendLine("<b>Squads</b>");
+
             if (squads == null || squads.Count == 0)
             {
-                bodyText.text = "No squads.";
-                return;
+                sb.AppendLine("- none");
+            }
+            else
+            {
+                var selectedId = _map != null ? _map.GetSelectedSquadId() : null;
+                for (var i = 0; i < squads.Count; i++)
+                {
+                    var squad = squads[i];
+                    if (squad == null) continue;
+                    var stateText = BuildSquadStateText(squad, tasks, resolveRegionName);
+                    var membersText = $"Members {((squad.hunterIds != null && squad.hunterIds.Count > 0) ? squad.hunterIds.Count : squad.membersCount)}";
+                    var readinessText = $"Readiness {ComputeReadinessPercent(squad)}%";
+                    var line = $"[Squad] {squad.name} | {stateText} | {membersText} | Cohesion {squad.cohesion} | {readinessText}";
+                    var isSelected = !string.IsNullOrEmpty(selectedId) && selectedId == squad.id;
+                    var color = isSelected ? "#FFE08A" : "#E9F4FF";
+                    sb.Append($"<link={squad.id}><color={color}>{line}</color></link>");
+                    sb.Append('\n');
+                }
             }
 
-            var selectedId = _map != null ? _map.GetSelectedSquadId() : null;
-            var sb = new StringBuilder(512);
-
-            for (var i = 0; i < squads.Count; i++)
+            sb.AppendLine("<b>Solo Hunters</b>");
+            var solos = _map.GetSoloHunters();
+            if (solos == null || solos.Count == 0)
             {
-                var squad = squads[i];
-                if (squad == null)
+                sb.Append("- none");
+            }
+            else
+            {
+                for (var i = 0; i < solos.Count; i++)
                 {
-                    continue;
-                }
-
-                var stateText = BuildStateText(squad, tasks, resolveRegionName);
-                var membersText = BuildMembersText(squad);
-                var readinessText = $"Readiness {ComputeReadinessPercent(squad)}%";
-                var squadName = string.IsNullOrWhiteSpace(squad.name) ? squad.id : squad.name;
-                var line = $"{squadName} | {stateText} | {membersText} | {readinessText}";
-                var isSelected = !string.IsNullOrEmpty(selectedId) && selectedId == squad.id;
-                var color = isSelected ? "#FFE08A" : "#E9F4FF";
-
-                sb.Append($"<link={squad.id}><color={color}>{line}</color></link>");
-                if (i < squads.Count - 1)
-                {
-                    sb.Append('\n');
+                    var hunter = solos[i];
+                    if (hunter == null) continue;
+                    var state = BuildSoloStateText(hunter, resolveRegionName);
+                    var lone = hunter.loneWolf ? " LoneWolf" : string.Empty;
+                    var exhausted = hunter.exhaustedToday ? " Exhausted" : string.Empty;
+                    sb.AppendLine($"[Solo] {hunter.name} [{hunter.rank}]{lone} | {state} | HP {hunter.hp}/{hunter.maxHp}{exhausted}");
                 }
             }
 
             bodyText.text = sb.ToString();
         }
 
-        private static string BuildStateText(SquadData squad, System.Collections.Generic.IReadOnlyList<TravelTask> tasks, System.Func<string, string> resolveRegionName)
+        private string BuildSoloStateText(HunterData hunter, System.Func<string, string> resolveRegionName)
+        {
+            if (_map == null || hunter == null) return "Idle";
+            var task = _map.GetTravelTaskForSoloHunter(hunter.id);
+            if (task == null)
+            {
+                return hunter.exhaustedToday ? "Exhausted" : "Idle";
+            }
+
+            if (task.phase == TravelPhase.Outbound)
+            {
+                var toRegion = resolveRegionName != null ? resolveRegionName(task.toRegionId) : task.toRegionId;
+                return $"Traveling -> {Truncate(toRegion, 12)} (OUT)";
+            }
+
+            return "Returning (RET)";
+        }
+
+        private static string BuildSquadStateText(SquadData squad, System.Collections.Generic.IReadOnlyList<TravelTask> tasks, System.Func<string, string> resolveRegionName)
         {
             var squadId = squad != null ? squad.id : null;
             var task = FindTaskForSquad(tasks, squadId);
             if (task == null)
             {
-                if (squad != null && squad.exhausted)
-                {
-                    return "Exhausted";
-                }
-
-                return "Idle";
+                return squad != null && squad.exhausted ? "Exhausted" : "Idle";
             }
 
             if (task.phase == TravelPhase.Outbound)
@@ -207,71 +195,34 @@ namespace FantasyGuildmaster.UI
 
         private static TravelTask FindTaskForSquad(System.Collections.Generic.IReadOnlyList<TravelTask> tasks, string squadId)
         {
-            if (tasks == null)
-            {
-                return null;
-            }
-
+            if (tasks == null || string.IsNullOrEmpty(squadId)) return null;
             for (var i = 0; i < tasks.Count; i++)
             {
                 var task = tasks[i];
-                if (task != null && task.squadId == squadId)
-                {
-                    return task;
-                }
+                if (task != null && task.squadId == squadId) return task;
             }
-
             return null;
-        }
-
-        private static string BuildMembersText(SquadData squad)
-        {
-            var members = squad != null ? squad.members : null;
-            if (members == null || members.Count == 0)
-            {
-                return "Members ?";
-            }
-
-            return $"Members {members.Count}";
         }
 
         private static int ComputeReadinessPercent(SquadData squad)
         {
             var members = squad != null ? squad.members : null;
-            if (members == null || members.Count == 0)
-            {
-                return 100;
-            }
-
-            float sum = 0f;
-            var validCount = 0;
+            if (members == null || members.Count == 0) return 100;
+            float sum = 0f; var validCount = 0;
             for (var i = 0; i < members.Count; i++)
             {
                 var member = members[i];
-                if (member == null || member.maxHp <= 0)
-                {
-                    continue;
-                }
-
+                if (member == null || member.maxHp <= 0) continue;
                 validCount++;
                 sum += Mathf.Clamp01(member.hp / (float)member.maxHp);
             }
-
-            if (validCount == 0)
-            {
-                return 100;
-            }
-
+            if (validCount == 0) return 100;
             return Mathf.RoundToInt((sum / validCount) * 100f);
         }
 
         private static string Truncate(string value, int maxChars)
         {
-            if (string.IsNullOrWhiteSpace(value) || value.Length <= maxChars)
-            {
-                return string.IsNullOrWhiteSpace(value) ? "Unknown" : value;
-            }
-
+            if (string.IsNullOrWhiteSpace(value) || value.Length <= maxChars) return string.IsNullOrWhiteSpace(value) ? "Unknown" : value;
             return value.Substring(0, Mathf.Max(1, maxChars - 1)) + "…";
         }
 
@@ -280,10 +231,7 @@ namespace FantasyGuildmaster.UI
             if (bodyText == null)
             {
                 var existing = transform.Find("BodyText");
-                if (existing != null)
-                {
-                    bodyText = existing.GetComponent<TMP_Text>();
-                }
+                if (existing != null) bodyText = existing.GetComponent<TMP_Text>();
             }
 
             if (bodyText == null)
@@ -300,14 +248,8 @@ namespace FantasyGuildmaster.UI
             rect.anchoredPosition = Vector2.zero;
             rect.sizeDelta = Vector2.zero;
 
-            if (goldText != null && goldText.font != null)
-            {
-                bodyText.font = goldText.font;
-            }
-            else if (TMP_Settings.defaultFontAsset != null)
-            {
-                bodyText.font = TMP_Settings.defaultFontAsset;
-            }
+            if (goldText != null && goldText.font != null) bodyText.font = goldText.font;
+            else if (TMP_Settings.defaultFontAsset != null) bodyText.font = TMP_Settings.defaultFontAsset;
 
             bodyText.color = Color.white;
             bodyText.fontSize = 15f;
@@ -319,10 +261,7 @@ namespace FantasyGuildmaster.UI
 
         private void OnGoldChanged(int value)
         {
-            if (goldText != null)
-            {
-                goldText.text = $"Gold: {value}";
-            }
+            if (goldText != null) goldText.text = $"Gold: {value}";
         }
     }
 }
