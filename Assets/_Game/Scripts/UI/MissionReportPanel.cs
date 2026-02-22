@@ -14,6 +14,7 @@ namespace FantasyGuildmaster.UI
         [SerializeField] private TMP_Text bodyText;
         [SerializeField] private Button continueButton;
         [SerializeField] private Image blockerImage;
+        [SerializeField] private RectTransform contentContainer;
 
         private Action _onContinue;
         private CanvasGroup _cg;
@@ -99,6 +100,8 @@ namespace FantasyGuildmaster.UI
             {
                 bodyText.text = BuildBodyText(data);
             }
+
+            RefreshLayout();
 
             var showSucceeded = gameObject.activeInHierarchy && _cg != null && _cg.alpha > 0.001f && continueButton != null;
             if (!showSucceeded)
@@ -202,9 +205,54 @@ namespace FantasyGuildmaster.UI
                 blockerImage.color = blockerImage.color.a <= 0f ? new Color(0f, 0f, 0f, 0.65f) : blockerImage.color;
             }
 
+            if (contentContainer == null && root != null)
+            {
+                contentContainer = root.transform.Find("Content") as RectTransform;
+            }
+
+            EnsureAutoResizeComponents();
+
             if (bodyText != null)
             {
                 bodyText.textWrappingMode = TextWrappingModes.Normal;
+            }
+        }
+
+
+        private void EnsureAutoResizeComponents()
+        {
+            if (contentContainer == null)
+            {
+                return;
+            }
+
+            contentContainer.pivot = new Vector2(0.5f, 1f);
+            var layout = contentContainer.GetComponent<VerticalLayoutGroup>() ?? contentContainer.gameObject.AddComponent<VerticalLayoutGroup>();
+            layout.childControlWidth = true;
+            layout.childControlHeight = true;
+            layout.childForceExpandHeight = false;
+
+            var fitter = contentContainer.GetComponent<ContentSizeFitter>() ?? contentContainer.gameObject.AddComponent<ContentSizeFitter>();
+            fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+            fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+            if (bodyText != null)
+            {
+                bodyText.textWrappingMode = TextWrappingModes.Normal;
+                bodyText.overflowMode = TextOverflowModes.Overflow;
+            }
+        }
+
+        private void RefreshLayout()
+        {
+            if (bodyText != null)
+            {
+                bodyText.ForceMeshUpdate(true);
+            }
+
+            if (contentContainer != null)
+            {
+                LayoutRebuilder.ForceRebuildLayoutImmediate(contentContainer);
             }
         }
 

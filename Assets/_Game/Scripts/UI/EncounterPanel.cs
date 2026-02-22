@@ -15,6 +15,7 @@ namespace FantasyGuildmaster.UI
         [SerializeField] private RectTransform optionsRoot;
         [SerializeField] private Button optionButtonPrefab;
         [SerializeField] private Button continueButton;
+        [SerializeField] private RectTransform contentContainer;
 
         private readonly List<Button> _optionButtons = new();
         private CanvasGroup _canvasGroup;
@@ -45,6 +46,8 @@ namespace FantasyGuildmaster.UI
             optionsRoot = runtimeOptionsRoot;
             optionButtonPrefab = runtimeOptionButtonPrefab;
             continueButton = runtimeContinueButton;
+            contentContainer = runtimeDescriptionText != null ? runtimeDescriptionText.transform.parent as RectTransform : null;
+            EnsureAutoResizeComponents();
         }
 
 
@@ -137,6 +140,7 @@ namespace FantasyGuildmaster.UI
             }
 
             RebuildOptions(encounter.options, onOptionSelected);
+            RefreshLayout();
         }
 
         public void ShowResult(string resultText, Action onContinue)
@@ -166,6 +170,8 @@ namespace FantasyGuildmaster.UI
                     onContinue?.Invoke();
                 });
             }
+
+            RefreshLayout();
         }
 
 
@@ -175,6 +181,46 @@ namespace FantasyGuildmaster.UI
             {
                 GamePauseService.Pop("Encounter");
                 _pauseHeld = false;
+            }
+        }
+
+
+        private void EnsureAutoResizeComponents()
+        {
+            if (contentContainer == null && descriptionText != null)
+            {
+                contentContainer = descriptionText.transform.parent as RectTransform;
+            }
+
+            if (contentContainer == null)
+            {
+                return;
+            }
+
+            contentContainer.pivot = new Vector2(0.5f, 1f);
+
+            var fitter = contentContainer.GetComponent<ContentSizeFitter>() ?? contentContainer.gameObject.AddComponent<ContentSizeFitter>();
+            fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+            fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+            if (descriptionText != null)
+            {
+                descriptionText.textWrappingMode = TextWrappingModes.Normal;
+                descriptionText.overflowMode = TextOverflowModes.Overflow;
+            }
+        }
+
+        private void RefreshLayout()
+        {
+            EnsureAutoResizeComponents();
+            if (descriptionText != null)
+            {
+                descriptionText.ForceMeshUpdate(true);
+            }
+
+            if (contentContainer != null)
+            {
+                LayoutRebuilder.ForceRebuildLayoutImmediate(contentContainer);
             }
         }
 

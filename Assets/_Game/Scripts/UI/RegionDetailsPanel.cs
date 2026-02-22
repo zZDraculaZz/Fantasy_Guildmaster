@@ -28,9 +28,22 @@ namespace FantasyGuildmaster.UI
         private RegionData _region;
         private ContractData _selectedContract;
         private int _idleSquadsCount;
+        private Func<ContractData, bool> _hasAnyEligibleParty;
+        private Func<ContractData, string> _formatContractReq;
+        private Func<ContractData, string> _formatNoEligibleReason;
         private readonly HashSet<string> _blockedContractIds = new();
 
         public event Action<RegionData, ContractData> AssignSquadRequested;
+
+        public void ConfigureEligibilityResolvers(Func<ContractData, bool> hasAnyEligibleParty, Func<ContractData, string> formatContractReq, Func<ContractData, string> formatNoEligibleReason)
+        {
+            _hasAnyEligibleParty = hasAnyEligibleParty;
+            _formatContractReq = formatContractReq;
+            _formatNoEligibleReason = formatNoEligibleReason;
+            RefreshSelectionVisuals();
+            UpdateAssignSquadButtonState();
+        }
+
 
         public void BlockContract(string contractId)
         {
@@ -157,17 +170,20 @@ namespace FantasyGuildmaster.UI
                 row.Bind(contract);
 
                 var isBlocked = _blockedContractIds.Contains(contract.id);
+                var hasEligibleParty = _hasAnyEligibleParty == null || _hasAnyEligibleParty(contract);
                 row.SetAssigned(isBlocked);
                 row.SetSelected(_selectedContract != null && _selectedContract.id == contract.id);
+                row.SetRequirements(_formatContractReq != null ? _formatContractReq(contract) : string.Empty);
+                row.SetUnavailableReason(!isBlocked && !hasEligibleParty ? (_formatNoEligibleReason != null ? _formatNoEligibleReason(contract) : "No eligible party") : null);
 
                 var button = row.GetComponent<Button>();
                 if (button != null)
                 {
-                    button.interactable = !isBlocked;
+                    button.interactable = !isBlocked && hasEligibleParty;
                     button.onClick.RemoveAllListeners();
                     button.onClick.AddListener(() =>
                     {
-                        if (isBlocked)
+                        if (isBlocked || !hasEligibleParty)
                         {
                             return;
                         }
@@ -184,7 +200,7 @@ namespace FantasyGuildmaster.UI
 
         private void OnAssignSquadClicked()
         {
-            if (_region == null || _selectedContract == null || _blockedContractIds.Contains(_selectedContract.id))
+            if (_region == null || _selectedContract == null || _blockedContractIds.Contains(_selectedContract.id) || (_hasAnyEligibleParty != null && !_hasAnyEligibleParty(_selectedContract)))
             {
                 return;
             }
@@ -199,8 +215,9 @@ namespace FantasyGuildmaster.UI
                 return;
             }
 
+            var selectedEligible = _selectedContract != null && (_hasAnyEligibleParty == null || _hasAnyEligibleParty(_selectedContract));
             var hasContract = GetFirstAvailableContract() != null;
-            assignSquadButton.interactable = hasContract && _idleSquadsCount > 0;
+            assignSquadButton.interactable = hasContract && _idleSquadsCount > 0 && selectedEligible;
         }
 
         private void RefreshSelectionVisuals()
@@ -213,8 +230,17 @@ namespace FantasyGuildmaster.UI
                     continue;
                 }
 
-                row.SetAssigned(_blockedContractIds.Contains(row.Contract.id));
+                var isBlocked = _blockedContractIds.Contains(row.Contract.id);
+                var hasEligibleParty = _hasAnyEligibleParty == null || _hasAnyEligibleParty(row.Contract);
+                row.SetAssigned(isBlocked);
                 row.SetSelected(_selectedContract != null && row.Contract.id == _selectedContract.id);
+                row.SetRequirements(_formatContractReq != null ? _formatContractReq(row.Contract) : string.Empty);
+                row.SetUnavailableReason(!isBlocked && !hasEligibleParty ? (_formatNoEligibleReason != null ? _formatNoEligibleReason(row.Contract) : "No eligible party") : null);
+                var button = row.GetComponent<Button>();
+                if (button != null)
+                {
+                    button.interactable = !isBlocked && hasEligibleParty;
+                }
             }
         }
 
