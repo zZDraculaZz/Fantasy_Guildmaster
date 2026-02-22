@@ -58,6 +58,13 @@ namespace FantasyGuildmaster.UI
                 sb.AppendLine("State: Returning (RET)");
             }
 
+            sb.AppendLine($"Cohesion: {Mathf.Clamp(squad.cohesion, 0, 100)}");
+            sb.AppendLine($"Status: {(squad.exhausted ? "Exhausted" : "Ready")}");
+            if (_map != null)
+            {
+                sb.AppendLine($"New recruits: {_map.GetNewRecruitsCount(squad)}");
+            }
+
             sb.AppendLine();
             sb.AppendLine("Members:");
             if (squad.members == null || squad.members.Count == 0)
@@ -76,7 +83,8 @@ namespace FantasyGuildmaster.UI
 
                     var name = string.IsNullOrWhiteSpace(member.name) ? $"Member {i + 1}" : member.name;
                     var status = string.IsNullOrWhiteSpace(member.status) ? "Ready" : member.status;
-                    sb.AppendLine($"- {name}: {member.hp}/{member.maxHp} ({status})");
+                    var newTag = _map != null && member.joinedDay == _map.GetCurrentDayIndex() ? " NEW" : string.Empty;
+                    sb.AppendLine($"- {name}: {member.hp}/{member.maxHp} ({status}) joinedDay={member.joinedDay}{newTag}");
                 }
             }
 

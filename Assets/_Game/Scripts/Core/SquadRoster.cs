@@ -8,6 +8,7 @@ namespace FantasyGuildmaster.Core
     public sealed class SquadRoster : MonoBehaviour
     {
         [SerializeField] private List<SquadData> squads = new();
+        [SerializeField] private HunterRoster hunterRoster;
 
         public List<SquadData> Squads => squads;
 
@@ -15,39 +16,80 @@ namespace FantasyGuildmaster.Core
 
         public void SeedDefaultSquadsIfEmpty()
         {
+            if (hunterRoster == null)
+            {
+                hunterRoster = FindFirstObjectByType<HunterRoster>();
+                if (hunterRoster == null)
+                {
+                    hunterRoster = gameObject.AddComponent<HunterRoster>();
+                }
+            }
+
+            hunterRoster.EnsureSeededDefaultHunters(0);
+
             if (squads.Count > 0)
             {
                 return;
             }
 
-            squads.Add(CreateDefaultSquad("squad_iron_hawks", "Iron Hawks"));
-            squads.Add(CreateDefaultSquad("squad_ash_blades", "Ash Blades"));
-            squads.Add(CreateDefaultSquad("squad_grim_lantern", "Grim Lantern"));
+            var assigned = new List<HunterData>();
+            for (var i = 0; i < hunterRoster.Hunters.Count; i++)
+            {
+                var h = hunterRoster.Hunters[i];
+                if (h != null && !h.loneWolf && assigned.Count < 9)
+                {
+                    assigned.Add(h);
+                }
+            }
 
-            Debug.Log($"[RosterDebug] Seeded squads: count={squads.Count}");
+            squads.Add(CreateDefaultSquad("squad_iron_hawks", "Iron Hawks", assigned, 0));
+            squads.Add(CreateDefaultSquad("squad_ash_blades", "Ash Blades", assigned, 3));
+            squads.Add(CreateDefaultSquad("squad_grim_lantern", "Grim Lantern", assigned, 6));
+
+            Debug.Log("[SquadRoster] Seeded squads with hunters. [TODO REMOVE]");
             NotifyChanged();
         }
 
-
-        private static SquadData CreateDefaultSquad(string squadId, string squadName)
+        private static SquadData CreateDefaultSquad(string squadId, string squadName, List<HunterData> assigned, int startIndex)
         {
-            var members = new List<SquadMemberData>
+            var hunterIds = new List<string>();
+            var members = new List<SquadMemberData>();
+            for (var i = startIndex; i < startIndex + 3 && i < assigned.Count; i++)
             {
-                new SquadMemberData { id = $"{squadId}_m1", name = "Vanguard", hp = 100, maxHp = 100, status = "Ready" },
-                new SquadMemberData { id = $"{squadId}_m2", name = "Scout", hp = 92, maxHp = 100, status = "Ready" },
-                new SquadMemberData { id = $"{squadId}_m3", name = "Support", hp = 85, maxHp = 100, status = "Ready" }
-            };
+                var h = assigned[i];
+                if (h == null)
+                {
+                    continue;
+                }
+
+                h.squadId = squadId;
+                hunterIds.Add(h.id);
+                members.Add(new SquadMemberData
+                {
+                    id = h.id,
+                    name = h.name,
+                    hp = h.hp,
+                    maxHp = h.maxHp,
+                    status = "Ready",
+                    joinedDay = h.joinedDay
+                });
+            }
 
             return new SquadData
             {
                 id = squadId,
                 name = squadName,
-                membersCount = members.Count,
+                membersCount = hunterIds.Count,
                 hp = 100,
                 maxHp = 100,
                 state = SquadState.IdleAtHQ,
                 currentRegionId = "guild_hq",
-                members = members
+                members = members,
+                hunterIds = hunterIds,
+                exhausted = false,
+                cohesion = 45,
+                contractsDoneToday = 0,
+                lastRosterChangeDay = 0
             };
         }
 
