@@ -50,6 +50,7 @@ namespace FantasyGuildmaster.Map
         private TravelTokenPool _travelTokenPool;
         private string _selectedSquadId;
         private readonly Queue<MissionReportData> _pendingReports = new();
+        private bool _reportOpen;
 
         private void Awake()
         {
@@ -325,13 +326,14 @@ namespace FantasyGuildmaster.Map
         private void TryShowNextMissionReport()
         {
             EnsureMissionReportPanel();
-            if (missionReportPanel == null || missionReportPanel.IsOpen || _pendingReports.Count == 0)
+            if (missionReportPanel == null || _reportOpen || missionReportPanel.IsOpen || _pendingReports.Count == 0)
             {
                 return;
             }
 
             var report = _pendingReports.Peek();
             Debug.Log($"[Report] Showing: squad={report.squadId} contract={report.contractId} reward={report.rewardGold} [TODO REMOVE]");
+            _reportOpen = true;
             missionReportPanel.Show(report, () => OnMissionReportContinue(report));
         }
         private void OnMissionReportContinue(MissionReportData report)
@@ -346,6 +348,7 @@ namespace FantasyGuildmaster.Map
             AddGold(report.rewardGold);
             CompleteContract(report.regionId, report.contractId);
             missionReportPanel?.Hide();
+            _reportOpen = false;
             Debug.Log($"[Report] Applied+Closed: squad={report.squadId} contract={report.contractId} reward={report.rewardGold} [TODO REMOVE]");
 
             RefreshSquadStatusHud();
@@ -361,6 +364,7 @@ namespace FantasyGuildmaster.Map
         {
             if (missionReportPanel != null)
             {
+                _reportOpen = missionReportPanel.IsOpen;
                 EnsureMissionReportInteractionInfra();
                 return;
             }
@@ -368,6 +372,8 @@ namespace FantasyGuildmaster.Map
             missionReportPanel = FindFirstObjectByType<MissionReportPanel>();
             if (missionReportPanel != null)
             {
+                _reportOpen = missionReportPanel.IsOpen;
+                EnsureMissionReportInteractionInfra();
                 return;
             }
 
@@ -386,12 +392,14 @@ namespace FantasyGuildmaster.Map
                 {
                     instance.transform.SetAsLastSibling();
                     missionReportPanel.Hide();
+                    _reportOpen = false;
                     EnsureMissionReportInteractionInfra();
                     return;
                 }
             }
 
             missionReportPanel = CreateRuntimeMissionReportPanel(canvas);
+            _reportOpen = false;
             EnsureMissionReportInteractionInfra();
         }
 

@@ -15,6 +15,7 @@ namespace FantasyGuildmaster.UI
         [SerializeField] private Image blockerImage;
 
         private Action _onContinue;
+        private CanvasGroup _cg;
 
         public bool IsOpen => root != null && root.activeSelf;
 
@@ -38,7 +39,8 @@ namespace FantasyGuildmaster.UI
         {
             EnsureRuntimeBindings();
             _onContinue = onContinue;
-            Debug.Log($"[ReportUI] Show called, binding Continue listener. button={(continueButton != null)} [TODO REMOVE]");
+            EnsureCanvasGroup();
+            Debug.Log($"[ReportUI] Show called, cgPresent={(_cg != null)} button={(continueButton != null)} [TODO REMOVE]");
 
             if (root != null)
             {
@@ -49,11 +51,13 @@ namespace FantasyGuildmaster.UI
                 {
                     content.SetAsLastSibling();
                 }
+            }
 
-                var canvasGroup = root.GetComponent<CanvasGroup>() ?? root.AddComponent<CanvasGroup>();
-                canvasGroup.interactable = true;
-                canvasGroup.blocksRaycasts = true;
-                canvasGroup.alpha = 1f;
+            if (_cg != null)
+            {
+                _cg.alpha = 1f;
+                _cg.interactable = true;
+                _cg.blocksRaycasts = true;
             }
 
             if (continueButton != null)
@@ -63,9 +67,7 @@ namespace FantasyGuildmaster.UI
                 continueButton.onClick.AddListener(() =>
                 {
                     Debug.Log("[ReportUI] Continue clicked [TODO REMOVE]");
-                    var callback = _onContinue;
-                    _onContinue = null;
-                    callback?.Invoke();
+                    onContinue?.Invoke();
                 });
 
                 var buttonText = continueButton.GetComponentsInChildren<TMP_Text>(true);
@@ -94,9 +96,27 @@ namespace FantasyGuildmaster.UI
         {
             EnsureRuntimeBindings();
             _onContinue = null;
+            EnsureCanvasGroup();
+            if (_cg != null)
+            {
+                _cg.alpha = 0f;
+                _cg.interactable = false;
+                _cg.blocksRaycasts = false;
+            }
+
             if (root != null)
             {
                 root.SetActive(false);
+            }
+        }
+
+        private void EnsureCanvasGroup()
+        {
+            var target = root != null ? root : gameObject;
+            _cg = target.GetComponent<CanvasGroup>();
+            if (_cg == null)
+            {
+                _cg = target.AddComponent<CanvasGroup>();
             }
         }
 
@@ -106,6 +126,8 @@ namespace FantasyGuildmaster.UI
             {
                 root = gameObject;
             }
+
+            EnsureCanvasGroup();
 
             if (blockerImage == null)
             {
