@@ -24,6 +24,11 @@ namespace FantasyGuildmaster.UI
         public void Refresh()
         {
             EnsureTexts();
+            if (titleText == null || bodyText == null)
+            {
+                return;
+            }
+
             if (_map == null)
             {
                 _map = FindFirstObjectByType<MapController>();
@@ -41,7 +46,7 @@ namespace FantasyGuildmaster.UI
             if (squad == null)
             {
                 titleText.text = "Squad Details";
-                bodyText.text = "Select a squad in Squad HUD.";
+                bodyText.text = "No party selected.";
                 RefreshLayout();
                 return;
             }
@@ -216,11 +221,29 @@ namespace FantasyGuildmaster.UI
             if (titleText == null)
             {
                 titleText = transform.Find("Title")?.GetComponent<TMP_Text>();
+                if (titleText == null)
+                {
+                    var titleGo = new GameObject("Title", typeof(RectTransform), typeof(TextMeshProUGUI));
+                    titleGo.transform.SetParent(transform, false);
+                    titleText = titleGo.GetComponent<TextMeshProUGUI>();
+                    titleText.fontSize = 22f;
+                    titleText.alignment = TextAlignmentOptions.TopLeft;
+                    titleText.textWrappingMode = TextWrappingModes.NoWrap;
+                    titleText.overflowMode = TextOverflowModes.Ellipsis;
+                }
             }
 
             if (bodyText == null)
             {
                 bodyText = transform.Find("BodyText")?.GetComponent<TMP_Text>();
+                if (bodyText == null)
+                {
+                    var bodyGo = new GameObject("BodyText", typeof(RectTransform), typeof(TextMeshProUGUI));
+                    bodyGo.transform.SetParent(transform, false);
+                    bodyText = bodyGo.GetComponent<TextMeshProUGUI>();
+                    bodyText.fontSize = 18f;
+                    bodyText.alignment = TextAlignmentOptions.TopLeft;
+                }
             }
 
             if (contentContainer == null)

@@ -23,6 +23,7 @@ namespace FantasyGuildmaster.UI
 
         private Image _backgroundImage;
         private bool _isAssigned;
+        private bool _reqLogPrinted;
 
         private ContractData _contract;
 
@@ -49,7 +50,8 @@ namespace FantasyGuildmaster.UI
         }
 
 
-        public void SetRequirements(string requirements)
+
+        private void EnsureReqText()
         {
             if (reqText == null)
             {
@@ -59,6 +61,28 @@ namespace FantasyGuildmaster.UI
                     reqText = transform.Find("RequirementsText")?.GetComponent<TMP_Text>();
                 }
             }
+
+            if (reqText != null)
+            {
+                return;
+            }
+
+            var reqGo = new GameObject("ReqText", typeof(RectTransform), typeof(TextMeshProUGUI));
+            reqGo.transform.SetParent(transform, false);
+            reqText = reqGo.GetComponent<TextMeshProUGUI>();
+            reqText.fontSize = 16f;
+            reqText.alignment = TextAlignmentOptions.MidlineRight;
+
+            var rect = reqText.rectTransform;
+            rect.anchorMin = new Vector2(0.52f, 0.52f);
+            rect.anchorMax = new Vector2(0.98f, 0.92f);
+            rect.offsetMin = Vector2.zero;
+            rect.offsetMax = Vector2.zero;
+        }
+
+        public void SetRequirements(string requirements)
+        {
+            EnsureReqText();
 
             if (reqText == null)
             {
@@ -70,6 +94,11 @@ namespace FantasyGuildmaster.UI
             reqText.overflowMode = TextOverflowModes.Ellipsis;
             reqText.raycastTarget = false;
             reqText.ForceMeshUpdate(true);
+            if (!_reqLogPrinted)
+            {
+                _reqLogPrinted = true;
+                Debug.Log($"[ContractRow] reqText set: {reqText.text} [TODO REMOVE]");
+            }
         }
 
         public void SetUnavailableReason(string reason)

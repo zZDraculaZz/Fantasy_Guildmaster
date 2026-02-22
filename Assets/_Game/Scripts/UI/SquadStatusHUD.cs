@@ -1,11 +1,11 @@
 using System.Collections;
+using System.Collections.Generic;
 using System.Text;
 using FantasyGuildmaster.Core;
 using FantasyGuildmaster.Map;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
-using System.Collections.Generic;
 using UnityEngine.UI;
 
 namespace FantasyGuildmaster.UI
@@ -19,15 +19,22 @@ namespace FantasyGuildmaster.UI
         [Header("Required UI (auto-created if missing)")]
         [SerializeField] private TMP_Text bodyText;
 
+        [Header("Optional Scroll Rows")]
+        [SerializeField] private ScrollRect rosterScrollRect;
+        [SerializeField] private RectTransform rosterViewport;
+        [SerializeField] private RectTransform rosterContent;
+        [SerializeField] private TMP_Text rosterRowPrefab;
+
         [Header("Behavior")]
         [SerializeField] private float refreshSeconds = 1f;
 
+        private readonly List<TMP_Text> _rowPool = new();
         private MapController _map;
         private GameState _gameState;
         private Coroutine _tick;
         private bool _nullSafeLogPrinted;
-        [SerializeField] private ScrollRect rosterScrollRect;
-        [SerializeField] private RectTransform rosterContent;
+        private bool _legacyMissingRefsLogged;
+        private bool _legacyZeroRowsLogged;
 
         private void Awake() => EnsureBodyText();
 
@@ -82,7 +89,7 @@ namespace FantasyGuildmaster.UI
 
         public void OnPointerClick(PointerEventData eventData)
         {
-            if (_map == null || bodyText == null || eventData == null) return;
+            if (_map == null || bodyText == null || eventData == null || !bodyText.gameObject.activeInHierarchy) return;
             var linkIndex = TMP_TextUtilities.FindIntersectingLink(bodyText, eventData.position, eventData.pressEventCamera);
             if (linkIndex < 0 || linkIndex >= bodyText.textInfo.linkCount) return;
             var linkInfo = bodyText.textInfo.linkInfo[linkIndex];
@@ -96,7 +103,7 @@ namespace FantasyGuildmaster.UI
 
         private void BindIfNeeded()
         {
-            if (_map == null) _map = UnityEngine.Object.FindFirstObjectByType<MapController>();
+            if (_map == null) _map = Object.FindFirstObjectByType<MapController>();
         }
 
         public void RefreshNow()
@@ -106,7 +113,7 @@ namespace FantasyGuildmaster.UI
             if (titleText != null) titleText.text = "Roster";
             if (_map == null)
             {
-                bodyText.text = "Roster: (MapController not found)";
+                RenderLegacyText("Roster: (MapController not found)");
                 return;
             }
 
@@ -114,6 +121,152 @@ namespace FantasyGuildmaster.UI
         }
 
         private void Render(IReadOnlyList<SquadData> squads, IReadOnlyList<TravelTask> tasks, System.Func<string, string> resolveRegionName, long nowUnix)
+        {
+            var squadsNull = squads == null;
+            var tasksNull = tasks == null;
+            var resolverNull = resolveRegionName == null;
+            if ((squadsNull || tasksNull || resolverNull) && !_nullSafeLogPrinted)
+            {
+                _nullSafeLogPrinted = true;
+                Debug.Log($"[HUD] Null-safe path used squadsNull={squadsNull} tasksNull={tasksNull} resolverNull={resolverNull} [TODO REMOVE]");
+            }
+
+            squads ??= System.Array.Empty<SquadData>();
+            tasks ??= System.Array.Empty<TravelTask>();
+            resolveRegionName ??= id => string.IsNullOrEmpty(id) ? "?" : id;
+
+            var canUseScrollRows = rosterScrollRect != null
+                && rosterViewport != null
+                && rosterContent != null
+                && rosterRowPrefab != null;
+
+            if (!canUseScrollRows)
+            {
+                if (!_legacyMissingRefsLogged)
+                {
+                    _legacyMissingRefsLogged = true;
+                    Debug.Log("[HUD] Using legacy roster rendering (missing scroll refs) [TODO REMOVE]");
+                }
+
+                RenderLegacyText(BuildLegacyText(squads, tasks, resolveRegionName));
+                return;
+            }
+
+            var createdRows = RenderScrollRows(squads, tasks, resolveRegionName);
+            if (createdRows <= 0)
+            {
+                if (!_legacyZeroRowsLogged)
+                {
+                    _legacyZeroRowsLogged = true;
+                    Debug.Log("[HUD] Scroll render produced 0 rows; fallback to legacy [TODO REMOVE]");
+                }
+
+                RenderLegacyText(BuildLegacyText(squads, tasks, resolveRegionName));
+                return;
+            }
+
+            if (bodyText != null)
+            {
+                bodyText.gameObject.SetActive(false);
+            }
+
+            LayoutRebuilder.ForceRebuildLayoutImmediate(rosterContent);
+        }
+
+        private int RenderScrollRows(IReadOnlyList<SquadData> squads, IReadOnlyList<TravelTask> tasks, System.Func<string, string> resolveRegionName)
+        {
+            if (rosterContent == null || rosterRowPrefab == null)
+            {
+                return 0;
+            }
+
+            var rowIndex = 0;
+            EnsureRow(ref rowIndex, "Squads", true);
+
+            var selectedId = _map != null ? _map.GetSelectedSquadId() : null;
+            if (squads == null || squads.Count == 0)
+            {
+                EnsureRow(ref rowIndex, "- none", false);
+            }
+            else
+            {
+                for (var i = 0; i < squads.Count; i++)
+                {
+                    var squad = squads[i];
+                    if (squad == null || string.IsNullOrEmpty(squad.id))
+                    {
+                        continue;
+                    }
+
+                    var stateText = BuildSquadStateText(squad, tasks, resolveRegionName);
+                    var membersText = $"Members {((squad.hunterIds != null && squad.hunterIds.Count > 0) ? squad.hunterIds.Count : squad.membersCount)}";
+                    var readinessText = $"Readiness {ComputeReadinessPercent(squad)}%";
+                    var selectedTag = selectedId == squad.id ? " *" : string.Empty;
+                    EnsureRow(ref rowIndex, $"[Squad] {squad.name}{selectedTag} | {stateText} | {membersText} | Cohesion {squad.cohesion} | {readinessText}", false);
+                }
+            }
+
+            EnsureRow(ref rowIndex, "Solo Hunters", true);
+            var solos = _map != null ? _map.GetSoloHunters() : null;
+            if (solos == null || solos.Count == 0)
+            {
+                EnsureRow(ref rowIndex, "- none", false);
+            }
+            else
+            {
+                for (var i = 0; i < solos.Count; i++)
+                {
+                    var hunter = solos[i];
+                    if (hunter == null || string.IsNullOrEmpty(hunter.id))
+                    {
+                        continue;
+                    }
+
+                    var state = BuildSoloStateText(hunter, resolveRegionName);
+                    var lone = hunter.loneWolf ? " LoneWolf" : string.Empty;
+                    var exhausted = hunter.exhaustedToday ? " Exhausted" : string.Empty;
+                    EnsureRow(ref rowIndex, $"[Solo] {hunter.name} [{hunter.rank}]{lone} | {state} | HP {hunter.hp}/{hunter.maxHp}{exhausted}", false);
+                }
+            }
+
+            for (var i = rowIndex; i < _rowPool.Count; i++)
+            {
+                if (_rowPool[i] != null)
+                {
+                    _rowPool[i].gameObject.SetActive(false);
+                }
+            }
+
+            return rowIndex;
+        }
+
+        private void EnsureRow(ref int rowIndex, string text, bool isHeader)
+        {
+            TMP_Text row;
+            if (rowIndex < _rowPool.Count)
+            {
+                row = _rowPool[rowIndex];
+            }
+            else
+            {
+                row = Instantiate(rosterRowPrefab, rosterContent);
+                row.gameObject.SetActive(true);
+                row.raycastTarget = false;
+                row.textWrappingMode = TextWrappingModes.NoWrap;
+                row.overflowMode = TextOverflowModes.Ellipsis;
+                _rowPool.Add(row);
+            }
+
+            row.gameObject.SetActive(true);
+            row.text = isHeader ? $"<b>{text}</b>" : text;
+            row.textWrappingMode = TextWrappingModes.NoWrap;
+            row.overflowMode = TextOverflowModes.Ellipsis;
+            row.raycastTarget = false;
+            row.ForceMeshUpdate(true);
+            rowIndex++;
+        }
+
+        private string BuildLegacyText(IReadOnlyList<SquadData> squads, IReadOnlyList<TravelTask> tasks, System.Func<string, string> resolveRegionName)
         {
             var squadsNull = squads == null;
             var tasksNull = tasks == null;
@@ -141,8 +294,7 @@ namespace FantasyGuildmaster.UI
                 for (var i = 0; i < squads.Count; i++)
                 {
                     var squad = squads[i];
-                    if (squad == null) continue;
-                    if (string.IsNullOrEmpty(squad.id)) continue;
+                    if (squad == null || string.IsNullOrEmpty(squad.id)) continue;
                     var stateText = BuildSquadStateText(squad, tasks, resolveRegionName);
                     var membersText = $"Members {((squad.hunterIds != null && squad.hunterIds.Count > 0) ? squad.hunterIds.Count : squad.membersCount)}";
                     var readinessText = $"Readiness {ComputeReadinessPercent(squad)}%";
@@ -165,8 +317,7 @@ namespace FantasyGuildmaster.UI
                 for (var i = 0; i < solos.Count; i++)
                 {
                     var hunter = solos[i];
-                    if (hunter == null) continue;
-                    if (string.IsNullOrEmpty(hunter.id)) continue;
+                    if (hunter == null || string.IsNullOrEmpty(hunter.id)) continue;
                     var state = BuildSoloStateText(hunter, resolveRegionName);
                     var lone = hunter.loneWolf ? " LoneWolf" : string.Empty;
                     var exhausted = hunter.exhaustedToday ? " Exhausted" : string.Empty;
@@ -174,8 +325,29 @@ namespace FantasyGuildmaster.UI
                 }
             }
 
-            bodyText.text = sb.ToString();
+            return sb.ToString();
+        }
+
+        private void RenderLegacyText(string text)
+        {
+            EnsureBodyText();
+            if (bodyText == null)
+            {
+                return;
+            }
+
+            bodyText.gameObject.SetActive(true);
+            bodyText.text = text;
             bodyText.ForceMeshUpdate(true);
+
+            for (var i = 0; i < _rowPool.Count; i++)
+            {
+                if (_rowPool[i] != null)
+                {
+                    _rowPool[i].gameObject.SetActive(false);
+                }
+            }
+
             if (rosterContent != null)
             {
                 LayoutRebuilder.ForceRebuildLayoutImmediate(rosterContent);
@@ -226,6 +398,7 @@ namespace FantasyGuildmaster.UI
                 var task = tasks[i];
                 if (task != null && task.squadId == squadId) return task;
             }
+
             return null;
         }
 
@@ -233,7 +406,8 @@ namespace FantasyGuildmaster.UI
         {
             var members = squad != null ? squad.members : null;
             if (members == null || members.Count == 0) return 100;
-            float sum = 0f; var validCount = 0;
+            float sum = 0f;
+            var validCount = 0;
             for (var i = 0; i < members.Count; i++)
             {
                 var member = members[i];
@@ -241,6 +415,7 @@ namespace FantasyGuildmaster.UI
                 validCount++;
                 sum += Mathf.Clamp01(member.hp / (float)member.maxHp);
             }
+
             if (validCount == 0) return 100;
             return Mathf.RoundToInt((sum / validCount) * 100f);
         }
@@ -283,7 +458,78 @@ namespace FantasyGuildmaster.UI
             bodyText.raycastTarget = true;
             bodyText.alignment = TextAlignmentOptions.TopLeft;
             bodyText.textWrappingMode = TextWrappingModes.Normal;
-            bodyText.overflowMode = TextOverflowModes.Ellipsis;
+            bodyText.overflowMode = TextOverflowModes.Overflow;
+        }
+
+        private void EnsureRosterScroll()
+        {
+            if (rosterScrollRect == null)
+            {
+                rosterScrollRect = transform.Find("RosterScrollView")?.GetComponent<ScrollRect>();
+            }
+
+            if (rosterScrollRect == null)
+            {
+                var scrollGo = new GameObject("RosterScrollView", typeof(RectTransform), typeof(Image), typeof(ScrollRect));
+                scrollGo.transform.SetParent(transform, false);
+                var scrollRect = scrollGo.GetComponent<RectTransform>();
+                scrollRect.anchorMin = Vector2.zero;
+                scrollRect.anchorMax = Vector2.one;
+                scrollRect.offsetMin = new Vector2(8f, 8f);
+                scrollRect.offsetMax = new Vector2(-8f, -8f);
+                scrollGo.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.01f);
+                rosterScrollRect = scrollGo.GetComponent<ScrollRect>();
+                rosterScrollRect.horizontal = false;
+                rosterScrollRect.vertical = true;
+
+                var viewportGo = new GameObject("Viewport", typeof(RectTransform), typeof(Image), typeof(RectMask2D));
+                viewportGo.transform.SetParent(scrollGo.transform, false);
+                rosterViewport = viewportGo.GetComponent<RectTransform>();
+                rosterViewport.anchorMin = Vector2.zero;
+                rosterViewport.anchorMax = Vector2.one;
+                rosterViewport.offsetMin = Vector2.zero;
+                rosterViewport.offsetMax = Vector2.zero;
+                viewportGo.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.01f);
+
+                var contentGo = new GameObject("Content", typeof(RectTransform), typeof(VerticalLayoutGroup), typeof(ContentSizeFitter));
+                contentGo.transform.SetParent(viewportGo.transform, false);
+                rosterContent = contentGo.GetComponent<RectTransform>();
+                rosterContent.anchorMin = new Vector2(0f, 1f);
+                rosterContent.anchorMax = new Vector2(1f, 1f);
+                rosterContent.pivot = new Vector2(0.5f, 1f);
+                rosterContent.anchoredPosition = Vector2.zero;
+                rosterContent.sizeDelta = Vector2.zero;
+
+                var layout = contentGo.GetComponent<VerticalLayoutGroup>();
+                layout.padding = new RectOffset(4, 4, 4, 4);
+                layout.spacing = 4f;
+                layout.childControlHeight = true;
+                layout.childControlWidth = true;
+                layout.childForceExpandHeight = false;
+                layout.childForceExpandWidth = true;
+
+                var fitter = contentGo.GetComponent<ContentSizeFitter>();
+                fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+                fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+                rosterScrollRect.viewport = rosterViewport;
+                rosterScrollRect.content = rosterContent;
+            }
+
+            if (rosterViewport == null && rosterScrollRect != null)
+            {
+                rosterViewport = rosterScrollRect.viewport;
+            }
+
+            if (rosterContent == null && rosterScrollRect != null)
+            {
+                rosterContent = rosterScrollRect.content;
+            }
+
+            if (bodyText != null && rosterContent != null && bodyText.transform.parent != rosterContent)
+            {
+                bodyText.transform.SetParent(rosterContent, false);
+            }
         }
 
 
