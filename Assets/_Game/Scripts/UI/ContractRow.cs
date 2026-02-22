@@ -14,6 +14,7 @@ namespace FantasyGuildmaster.UI
         [SerializeField] private TMP_Text titleText;
         [SerializeField] private TMP_Text timerText;
         [SerializeField] private TMP_Text rewardText;
+        [SerializeField] private TMP_Text requirementsText;
 
         private static readonly Color NormalBackground = new(0.18f, 0.18f, 0.18f, 0.82f);
         private static readonly Color SelectedBackground = new(0.35f, 0.32f, 0.12f, 0.92f);
@@ -72,6 +73,21 @@ namespace FantasyGuildmaster.UI
             if (rewardText != null)
             {
                 rewardText.text = $"{_contract.reward}g";
+            }
+
+            if (requirementsText == null)
+            {
+                requirementsText = transform.Find("RequirementsText")?.GetComponent<TMP_Text>();
+            }
+
+            if (requirementsText != null)
+            {
+                var typeTag = _contract.allowSquad && _contract.allowSolo
+                    ? "BOTH"
+                    : (_contract.allowSolo ? "SOLO" : "SQUAD");
+                requirementsText.text = $"{typeTag} • Rank {_contract.minRank}";
+                requirementsText.textWrappingMode = TextWrappingModes.NoWrap;
+                requirementsText.overflowMode = TextOverflowModes.Ellipsis;
             }
         }
 
