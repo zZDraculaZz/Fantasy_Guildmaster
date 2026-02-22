@@ -268,6 +268,99 @@ namespace FantasyGuildmaster.UI
 
         private string BuildLegacyText(IReadOnlyList<SquadData> squads, IReadOnlyList<TravelTask> tasks, System.Func<string, string> resolveRegionName)
         {
+            if (rosterContent == null || rosterRowPrefab == null)
+            {
+                return 0;
+            }
+
+            var rowIndex = 0;
+            EnsureRow(ref rowIndex, "Squads", true);
+
+            var selectedId = _map != null ? _map.GetSelectedSquadId() : null;
+            if (squads == null || squads.Count == 0)
+            {
+                EnsureRow(ref rowIndex, "- none", false);
+            }
+            else
+            {
+                for (var i = 0; i < squads.Count; i++)
+                {
+                    var squad = squads[i];
+                    if (squad == null || string.IsNullOrEmpty(squad.id))
+                    {
+                        continue;
+                    }
+
+                    var stateText = BuildSquadStateText(squad, tasks, resolveRegionName);
+                    var membersText = $"Members {((squad.hunterIds != null && squad.hunterIds.Count > 0) ? squad.hunterIds.Count : squad.membersCount)}";
+                    var readinessText = $"Readiness {ComputeReadinessPercent(squad)}%";
+                    var selectedTag = selectedId == squad.id ? " *" : string.Empty;
+                    EnsureRow(ref rowIndex, $"[Squad] {squad.name}{selectedTag} | {stateText} | {membersText} | Cohesion {squad.cohesion} | {readinessText}", false);
+                }
+            }
+
+            EnsureRow(ref rowIndex, "Solo Hunters", true);
+            var solos = _map != null ? _map.GetSoloHunters() : null;
+            if (solos == null || solos.Count == 0)
+            {
+                EnsureRow(ref rowIndex, "- none", false);
+            }
+            else
+            {
+                for (var i = 0; i < solos.Count; i++)
+                {
+                    var hunter = solos[i];
+                    if (hunter == null || string.IsNullOrEmpty(hunter.id))
+                    {
+                        continue;
+                    }
+
+                    var state = BuildSoloStateText(hunter, resolveRegionName);
+                    var lone = hunter.loneWolf ? " LoneWolf" : string.Empty;
+                    var exhausted = hunter.exhaustedToday ? " Exhausted" : string.Empty;
+                    EnsureRow(ref rowIndex, $"[Solo] {hunter.name} [{hunter.rank}]{lone} | {state} | HP {hunter.hp}/{hunter.maxHp}{exhausted}", false);
+                }
+            }
+
+            for (var i = rowIndex; i < _rowPool.Count; i++)
+            {
+                if (_rowPool[i] != null)
+                {
+                    _rowPool[i].gameObject.SetActive(false);
+                }
+            }
+
+            return rowIndex;
+        }
+
+        private void EnsureRow(ref int rowIndex, string text, bool isHeader)
+        {
+            TMP_Text row;
+            if (rowIndex < _rowPool.Count)
+            {
+                row = _rowPool[rowIndex];
+            }
+            else
+            {
+                row = Instantiate(rosterRowPrefab, rosterContent);
+                row.gameObject.SetActive(true);
+                row.raycastTarget = false;
+                row.textWrappingMode = TextWrappingModes.NoWrap;
+                row.overflowMode = TextOverflowModes.Ellipsis;
+                _rowPool.Add(row);
+            }
+
+            row.gameObject.SetActive(true);
+            row.text = isHeader ? $"<b>{text}</b>" : text;
+            row.textWrappingMode = TextWrappingModes.NoWrap;
+            row.overflowMode = TextOverflowModes.Ellipsis;
+            row.raycastTarget = false;
+            row.ForceMeshUpdate(true);
+            rowIndex++;
+        }
+
+        private string BuildLegacyText(IReadOnlyList<SquadData> squads, IReadOnlyList<TravelTask> tasks, System.Func<string, string> resolveRegionName)
+        {
             var squadsNull = squads == null;
             var tasksNull = tasks == null;
             var resolverNull = resolveRegionName == null;
@@ -441,7 +534,7 @@ namespace FantasyGuildmaster.UI
                 bodyText = go.GetComponent<TextMeshProUGUI>();
             }
 
-            EnsureRosterScroll();
+            EnsureRosterScrollInfrastructure();
 
             var rect = bodyText.rectTransform;
             rect.anchorMin = new Vector2(0f, 1f);
@@ -461,7 +554,7 @@ namespace FantasyGuildmaster.UI
             bodyText.overflowMode = TextOverflowModes.Overflow;
         }
 
-        private void EnsureRosterScroll()
+        private void EnsureRosterScrollInfrastructure()
         {
             if (rosterScrollRect == null)
             {
@@ -522,73 +615,6 @@ namespace FantasyGuildmaster.UI
             }
 
             if (rosterContent == null && rosterScrollRect != null)
-            {
-                rosterContent = rosterScrollRect.content;
-            }
-
-            if (bodyText != null && rosterContent != null && bodyText.transform.parent != rosterContent)
-            {
-                bodyText.transform.SetParent(rosterContent, false);
-            }
-        }
-
-
-        private void EnsureRosterScroll()
-        {
-            if (rosterScrollRect == null)
-            {
-                rosterScrollRect = transform.Find("RosterScrollView")?.GetComponent<ScrollRect>();
-            }
-
-            if (rosterScrollRect == null)
-            {
-                var scrollGo = new GameObject("RosterScrollView", typeof(RectTransform), typeof(Image), typeof(ScrollRect));
-                scrollGo.transform.SetParent(transform, false);
-                var scrollRect = scrollGo.GetComponent<RectTransform>();
-                scrollRect.anchorMin = Vector2.zero;
-                scrollRect.anchorMax = Vector2.one;
-                scrollRect.offsetMin = new Vector2(8f, 8f);
-                scrollRect.offsetMax = new Vector2(-8f, -8f);
-                scrollGo.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.01f);
-                rosterScrollRect = scrollGo.GetComponent<ScrollRect>();
-                rosterScrollRect.horizontal = false;
-                rosterScrollRect.vertical = true;
-
-                var viewportGo = new GameObject("Viewport", typeof(RectTransform), typeof(Image), typeof(RectMask2D));
-                viewportGo.transform.SetParent(scrollGo.transform, false);
-                var viewportRect = viewportGo.GetComponent<RectTransform>();
-                viewportRect.anchorMin = Vector2.zero;
-                viewportRect.anchorMax = Vector2.one;
-                viewportRect.offsetMin = Vector2.zero;
-                viewportRect.offsetMax = Vector2.zero;
-                viewportGo.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.01f);
-
-                var contentGo = new GameObject("Content", typeof(RectTransform), typeof(VerticalLayoutGroup), typeof(ContentSizeFitter));
-                contentGo.transform.SetParent(viewportGo.transform, false);
-                rosterContent = contentGo.GetComponent<RectTransform>();
-                rosterContent.anchorMin = new Vector2(0f, 1f);
-                rosterContent.anchorMax = new Vector2(1f, 1f);
-                rosterContent.pivot = new Vector2(0.5f, 1f);
-                rosterContent.anchoredPosition = Vector2.zero;
-                rosterContent.sizeDelta = Vector2.zero;
-
-                var layout = contentGo.GetComponent<VerticalLayoutGroup>();
-                layout.padding = new RectOffset(4, 4, 4, 4);
-                layout.spacing = 4f;
-                layout.childControlHeight = true;
-                layout.childControlWidth = true;
-                layout.childForceExpandHeight = false;
-                layout.childForceExpandWidth = true;
-
-                var fitter = contentGo.GetComponent<ContentSizeFitter>();
-                fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
-                fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-
-                rosterScrollRect.viewport = viewportRect;
-                rosterScrollRect.content = rosterContent;
-            }
-
-            if (rosterContent == null)
             {
                 rosterContent = rosterScrollRect.content;
             }
