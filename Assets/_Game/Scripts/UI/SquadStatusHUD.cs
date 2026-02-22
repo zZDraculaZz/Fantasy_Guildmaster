@@ -5,6 +5,8 @@ using FantasyGuildmaster.Map;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using System.Collections.Generic;
+using UnityEngine.UI;
 
 namespace FantasyGuildmaster.UI
 {
@@ -23,6 +25,9 @@ namespace FantasyGuildmaster.UI
         private MapController _map;
         private GameState _gameState;
         private Coroutine _tick;
+        private bool _nullSafeLogPrinted;
+        [SerializeField] private ScrollRect rosterScrollRect;
+        [SerializeField] private RectTransform rosterContent;
 
         private void Awake() => EnsureBodyText();
 
@@ -70,7 +75,7 @@ namespace FantasyGuildmaster.UI
             }
         }
 
-        public void Sync(System.Collections.Generic.IReadOnlyList<SquadData> squads, System.Collections.Generic.IReadOnlyList<TravelTask> tasks, System.Func<string, string> resolveRegionName, long nowUnix)
+        public void Sync(IReadOnlyList<SquadData> squads, IReadOnlyList<TravelTask> tasks, System.Func<string, string> resolveRegionName, long nowUnix)
         {
             Render(squads, tasks, resolveRegionName, nowUnix);
         }
@@ -108,8 +113,21 @@ namespace FantasyGuildmaster.UI
             Render(_map.GetSquads(), _map.GetTravelTasks(), _map.GetRegionNameById, SimulationTime.NowSeconds);
         }
 
-        private void Render(System.Collections.Generic.IReadOnlyList<SquadData> squads, System.Collections.Generic.IReadOnlyList<TravelTask> tasks, System.Func<string, string> resolveRegionName, long nowUnix)
+        private void Render(IReadOnlyList<SquadData> squads, IReadOnlyList<TravelTask> tasks, System.Func<string, string> resolveRegionName, long nowUnix)
         {
+            var squadsNull = squads == null;
+            var tasksNull = tasks == null;
+            var resolverNull = resolveRegionName == null;
+            if ((squadsNull || tasksNull || resolverNull) && !_nullSafeLogPrinted)
+            {
+                _nullSafeLogPrinted = true;
+                Debug.Log($"[HUD] Null-safe path used squadsNull={squadsNull} tasksNull={tasksNull} resolverNull={resolverNull} [TODO REMOVE]");
+            }
+
+            squads ??= System.Array.Empty<SquadData>();
+            tasks ??= System.Array.Empty<TravelTask>();
+            resolveRegionName ??= id => string.IsNullOrEmpty(id) ? "?" : id;
+
             var sb = new StringBuilder(1024);
             sb.AppendLine("<b>Squads</b>");
 
@@ -124,6 +142,7 @@ namespace FantasyGuildmaster.UI
                 {
                     var squad = squads[i];
                     if (squad == null) continue;
+                    if (string.IsNullOrEmpty(squad.id)) continue;
                     var stateText = BuildSquadStateText(squad, tasks, resolveRegionName);
                     var membersText = $"Members {((squad.hunterIds != null && squad.hunterIds.Count > 0) ? squad.hunterIds.Count : squad.membersCount)}";
                     var readinessText = $"Readiness {ComputeReadinessPercent(squad)}%";
@@ -136,7 +155,7 @@ namespace FantasyGuildmaster.UI
             }
 
             sb.AppendLine("<b>Solo Hunters</b>");
-            var solos = _map.GetSoloHunters();
+            var solos = _map != null ? _map.GetSoloHunters() : null;
             if (solos == null || solos.Count == 0)
             {
                 sb.Append("- none");
@@ -147,6 +166,7 @@ namespace FantasyGuildmaster.UI
                 {
                     var hunter = solos[i];
                     if (hunter == null) continue;
+                    if (string.IsNullOrEmpty(hunter.id)) continue;
                     var state = BuildSoloStateText(hunter, resolveRegionName);
                     var lone = hunter.loneWolf ? " LoneWolf" : string.Empty;
                     var exhausted = hunter.exhaustedToday ? " Exhausted" : string.Empty;
@@ -155,6 +175,11 @@ namespace FantasyGuildmaster.UI
             }
 
             bodyText.text = sb.ToString();
+            bodyText.ForceMeshUpdate(true);
+            if (rosterContent != null)
+            {
+                LayoutRebuilder.ForceRebuildLayoutImmediate(rosterContent);
+            }
         }
 
         private string BuildSoloStateText(HunterData hunter, System.Func<string, string> resolveRegionName)
@@ -175,7 +200,7 @@ namespace FantasyGuildmaster.UI
             return "Returning (RET)";
         }
 
-        private static string BuildSquadStateText(SquadData squad, System.Collections.Generic.IReadOnlyList<TravelTask> tasks, System.Func<string, string> resolveRegionName)
+        private static string BuildSquadStateText(SquadData squad, IReadOnlyList<TravelTask> tasks, System.Func<string, string> resolveRegionName)
         {
             var squadId = squad != null ? squad.id : null;
             var task = FindTaskForSquad(tasks, squadId);
@@ -193,7 +218,7 @@ namespace FantasyGuildmaster.UI
             return "Returning (RET)";
         }
 
-        private static TravelTask FindTaskForSquad(System.Collections.Generic.IReadOnlyList<TravelTask> tasks, string squadId)
+        private static TravelTask FindTaskForSquad(IReadOnlyList<TravelTask> tasks, string squadId)
         {
             if (tasks == null || string.IsNullOrEmpty(squadId)) return null;
             for (var i = 0; i < tasks.Count; i++)
@@ -241,12 +266,14 @@ namespace FantasyGuildmaster.UI
                 bodyText = go.GetComponent<TextMeshProUGUI>();
             }
 
+            EnsureRosterScroll();
+
             var rect = bodyText.rectTransform;
             rect.anchorMin = new Vector2(0f, 1f);
             rect.anchorMax = new Vector2(1f, 1f);
             rect.pivot = new Vector2(0.5f, 1f);
             rect.anchoredPosition = Vector2.zero;
-            rect.sizeDelta = Vector2.zero;
+            rect.sizeDelta = new Vector2(0f, 0f);
 
             if (goldText != null && goldText.font != null) bodyText.font = goldText.font;
             else if (TMP_Settings.defaultFontAsset != null) bodyText.font = TMP_Settings.defaultFontAsset;
@@ -257,6 +284,73 @@ namespace FantasyGuildmaster.UI
             bodyText.alignment = TextAlignmentOptions.TopLeft;
             bodyText.textWrappingMode = TextWrappingModes.Normal;
             bodyText.overflowMode = TextOverflowModes.Ellipsis;
+        }
+
+
+        private void EnsureRosterScroll()
+        {
+            if (rosterScrollRect == null)
+            {
+                rosterScrollRect = transform.Find("RosterScrollView")?.GetComponent<ScrollRect>();
+            }
+
+            if (rosterScrollRect == null)
+            {
+                var scrollGo = new GameObject("RosterScrollView", typeof(RectTransform), typeof(Image), typeof(ScrollRect));
+                scrollGo.transform.SetParent(transform, false);
+                var scrollRect = scrollGo.GetComponent<RectTransform>();
+                scrollRect.anchorMin = Vector2.zero;
+                scrollRect.anchorMax = Vector2.one;
+                scrollRect.offsetMin = new Vector2(8f, 8f);
+                scrollRect.offsetMax = new Vector2(-8f, -8f);
+                scrollGo.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.01f);
+                rosterScrollRect = scrollGo.GetComponent<ScrollRect>();
+                rosterScrollRect.horizontal = false;
+                rosterScrollRect.vertical = true;
+
+                var viewportGo = new GameObject("Viewport", typeof(RectTransform), typeof(Image), typeof(RectMask2D));
+                viewportGo.transform.SetParent(scrollGo.transform, false);
+                var viewportRect = viewportGo.GetComponent<RectTransform>();
+                viewportRect.anchorMin = Vector2.zero;
+                viewportRect.anchorMax = Vector2.one;
+                viewportRect.offsetMin = Vector2.zero;
+                viewportRect.offsetMax = Vector2.zero;
+                viewportGo.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.01f);
+
+                var contentGo = new GameObject("Content", typeof(RectTransform), typeof(VerticalLayoutGroup), typeof(ContentSizeFitter));
+                contentGo.transform.SetParent(viewportGo.transform, false);
+                rosterContent = contentGo.GetComponent<RectTransform>();
+                rosterContent.anchorMin = new Vector2(0f, 1f);
+                rosterContent.anchorMax = new Vector2(1f, 1f);
+                rosterContent.pivot = new Vector2(0.5f, 1f);
+                rosterContent.anchoredPosition = Vector2.zero;
+                rosterContent.sizeDelta = Vector2.zero;
+
+                var layout = contentGo.GetComponent<VerticalLayoutGroup>();
+                layout.padding = new RectOffset(4, 4, 4, 4);
+                layout.spacing = 4f;
+                layout.childControlHeight = true;
+                layout.childControlWidth = true;
+                layout.childForceExpandHeight = false;
+                layout.childForceExpandWidth = true;
+
+                var fitter = contentGo.GetComponent<ContentSizeFitter>();
+                fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+                fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+                rosterScrollRect.viewport = viewportRect;
+                rosterScrollRect.content = rosterContent;
+            }
+
+            if (rosterContent == null)
+            {
+                rosterContent = rosterScrollRect.content;
+            }
+
+            if (bodyText != null && rosterContent != null && bodyText.transform.parent != rosterContent)
+            {
+                bodyText.transform.SetParent(rosterContent, false);
+            }
         }
 
         private void OnGoldChanged(int value)
