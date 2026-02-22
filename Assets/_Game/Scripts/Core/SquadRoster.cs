@@ -24,7 +24,7 @@ namespace FantasyGuildmaster.Core
             squads.Add(CreateDefaultSquad("squad_ash_blades", "Ash Blades"));
             squads.Add(CreateDefaultSquad("squad_grim_lantern", "Grim Lantern"));
 
-            Debug.Log($"[RosterDebug] Seeded squads: count={squads.Count}");
+            Debug.Log("[Roster] Seed cohesion/exhausted initialized [TODO REMOVE]");
             NotifyChanged();
         }
 
@@ -33,9 +33,9 @@ namespace FantasyGuildmaster.Core
         {
             var members = new List<SquadMemberData>
             {
-                new SquadMemberData { id = $"{squadId}_m1", name = "Vanguard", hp = 100, maxHp = 100, status = "Ready" },
-                new SquadMemberData { id = $"{squadId}_m2", name = "Scout", hp = 92, maxHp = 100, status = "Ready" },
-                new SquadMemberData { id = $"{squadId}_m3", name = "Support", hp = 85, maxHp = 100, status = "Ready" }
+                new SquadMemberData { id = $"{squadId}_m1", name = "Vanguard", hp = 100, maxHp = 100, status = "Ready", joinedDay = 0 },
+                new SquadMemberData { id = $"{squadId}_m2", name = "Scout", hp = 92, maxHp = 100, status = "Ready", joinedDay = 0 },
+                new SquadMemberData { id = $"{squadId}_m3", name = "Support", hp = 85, maxHp = 100, status = "Ready", joinedDay = 0 }
             };
 
             return new SquadData
@@ -47,7 +47,11 @@ namespace FantasyGuildmaster.Core
                 maxHp = 100,
                 state = SquadState.IdleAtHQ,
                 currentRegionId = "guild_hq",
-                members = members
+                members = members,
+                exhausted = false,
+                cohesion = 45,
+                contractsDoneToday = 0,
+                lastRosterChangeDay = 0
             };
         }
 
