@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using FantasyGuildmaster.Core;
 
 namespace FantasyGuildmaster.Map
 {
@@ -40,6 +41,7 @@ namespace FantasyGuildmaster.Map
         public SquadState state;
         public string currentRegionId;
         public List<SquadMemberData> members = new();
+        public List<string> hunterIds = new();
         public bool exhausted;
         public string exhaustedReason;
         public int cohesion = 35;
@@ -53,6 +55,7 @@ namespace FantasyGuildmaster.Map
     public sealed class TravelTask
     {
         public string squadId;
+        public string soloHunterId;
         public string fromRegionId;
         public string toRegionId;
         public string contractId;
