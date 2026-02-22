@@ -151,7 +151,8 @@ namespace FantasyGuildmaster.Encounter
                     continue;
                 }
 
-                var index = Mathf.Abs((request.regionId + request.squadId).GetHashCode()) % _encounters.Count;
+                var partyKey = !string.IsNullOrEmpty(request.squadId) ? request.squadId : request.soloHunterId;
+                var index = Mathf.Abs((request.regionId + partyKey).GetHashCode()) % _encounters.Count;
                 var encounter = _encounters[index];
                 _isPresentingEncounter = true;
                 encounterPanel.gameObject.SetActive(true);
