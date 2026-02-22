@@ -17,6 +17,14 @@ namespace FantasyGuildmaster.UI
         [SerializeField] private float paddingTop = 42f;
         [SerializeField] private float paddingBottom = 8f;
 
+        [Header("Safe Mode")]
+        [SerializeField] private bool forceLegacyText = true;
+        private bool _legacyModeLogPrinted = false;
+        [SerializeField] private float paddingLeft = 8f;
+        [SerializeField] private float paddingRight = 8f;
+        [SerializeField] private float paddingTop = 42f;
+        [SerializeField] private float paddingBottom = 8f;
+
         private MapController _map;
         private bool _scrollFixLogPrinted;
 
@@ -154,7 +162,6 @@ namespace FantasyGuildmaster.UI
             if (bodyText != null)
             {
                 bodyText.gameObject.SetActive(true);
-                bodyText.enableWordWrapping = true;
                 bodyText.textWrappingMode = TextWrappingModes.Normal;
                 bodyText.overflowMode = TextOverflowModes.Overflow;
                 bodyText.ForceMeshUpdate(true);

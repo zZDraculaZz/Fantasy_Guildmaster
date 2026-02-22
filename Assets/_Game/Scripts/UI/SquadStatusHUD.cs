@@ -330,7 +330,6 @@ namespace FantasyGuildmaster.UI
             ConfigureLegacyBodyTextLayout();
             bodyText.gameObject.SetActive(true);
             bodyText.text = text;
-            bodyText.enableWordWrapping = true;
             bodyText.textWrappingMode = TextWrappingModes.Normal;
             bodyText.overflowMode = TextOverflowModes.Overflow;
             bodyText.ForceMeshUpdate(true);
@@ -374,7 +373,6 @@ namespace FantasyGuildmaster.UI
 
             bodyText.gameObject.SetActive(true);
             bodyText.text = text;
-            bodyText.enableWordWrapping = true;
             bodyText.textWrappingMode = TextWrappingModes.Normal;
             bodyText.overflowMode = TextOverflowModes.Masking;
             bodyText.raycastTarget = false;
