@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using FantasyGuildmaster.Core;
 using FantasyGuildmaster.Encounter;
 using TMPro;
 using UnityEngine;
@@ -17,6 +18,7 @@ namespace FantasyGuildmaster.UI
 
         private readonly List<Button> _optionButtons = new();
         private CanvasGroup _canvasGroup;
+        private bool _pauseHeld;
 
         private void Awake()
         {
@@ -71,6 +73,12 @@ namespace FantasyGuildmaster.UI
             _canvasGroup.alpha = 1f;
             _canvasGroup.interactable = true;
             _canvasGroup.blocksRaycasts = true;
+
+            if (!_pauseHeld)
+            {
+                GamePauseService.Push("Encounter");
+                _pauseHeld = true;
+            }
 
             transform.SetAsLastSibling();
 
@@ -149,8 +157,24 @@ namespace FantasyGuildmaster.UI
                 continueButton.onClick.AddListener(() =>
                 {
                     gameObject.SetActive(false);
+                    if (_pauseHeld)
+                    {
+                        GamePauseService.Pop("Encounter");
+                        _pauseHeld = false;
+                    }
+
                     onContinue?.Invoke();
                 });
+            }
+        }
+
+
+        private void OnDisable()
+        {
+            if (_pauseHeld)
+            {
+                GamePauseService.Pop("Encounter");
+                _pauseHeld = false;
             }
         }
 

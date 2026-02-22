@@ -13,6 +13,13 @@ namespace FantasyGuildmaster.Map
 {
     public sealed class MapController : MonoBehaviour
     {
+        private enum DayState
+        {
+            MapActive,
+            ResolvingEvents,
+            ShowingReports,
+            EveningGuildHall
+        }
         private const string GuildHqId = "guild_hq";
         private const string GuildHqName = "Guild HQ";
         private const bool DEBUG_TRAVEL = true;
@@ -32,10 +39,18 @@ namespace FantasyGuildmaster.Map
         [SerializeField] private GameManager gameManager;
         [SerializeField] private GameState gameState;
         [SerializeField] private SquadRoster squadRoster;
+        [SerializeField] private HunterRoster hunterRoster;
         [SerializeField] private GameClock gameClock;
         [SerializeField] private SquadStatusHUD squadStatusHud;
         [SerializeField] private SquadDetailsPanel squadDetailsPanel;
         [SerializeField] private MissionReportPanel missionReportPanel;
+        [SerializeField] private GuildHallPanel guildHallPanel;
+        [SerializeField] private Button endDayButton;
+        [SerializeField] private TMP_Text endDayHintText;
+        [SerializeField] private GameObject endDayConfirmPanel;
+        [SerializeField] private TMP_Text endDayConfirmBodyText;
+        [SerializeField] private Button endDayConfirmYesButton;
+        [SerializeField] private Button endDayConfirmNoButton;
 
         private readonly Dictionary<string, List<ContractData>> _contractsByRegion = new();
         private readonly Dictionary<string, RegionData> _regionById = new();
@@ -44,12 +59,20 @@ namespace FantasyGuildmaster.Map
         private readonly Dictionary<string, ContractIcon> _iconByContractId = new();
         private readonly List<TravelTask> _travelTasks = new();
         private readonly Dictionary<string, TravelToken> _travelTokenBySquadId = new();
+        private readonly Dictionary<string, TravelToken> _travelTokenBySoloHunterId = new();
 
         private GameData _gameData;
         private ContractIconPool _iconPool;
         private TravelTokenPool _travelTokenPool;
         private string _selectedSquadId;
         private readonly Queue<MissionReportData> _pendingReports = new();
+        private bool _reportOpen;
+        private int _dayIndex = 0;
+        private GuildHallEveningData _guildHallEveningData;
+        private float _stuckPauseSince = -1f;
+        private DayState _dayState = DayState.MapActive;
+        private bool _endDayRequested;
+        private bool _endDayConfirmPauseHeld;
 
         private void Awake()
         {
@@ -58,6 +81,7 @@ namespace FantasyGuildmaster.Map
             EnsureGuildHqRegion();
             BuildRegionIndex();
             SeedContracts();
+            EnsureHunterRoster();
             EnsureSquadRoster();
             EnsureSelectedSquad();
             SpawnMarkers();
@@ -65,6 +89,9 @@ namespace FantasyGuildmaster.Map
             SyncAllContractIcons();
             EnsureEncounterDependencies();
             EnsureMissionReportPanel();
+            EnsureGuildHallPanel();
+            EnsureEndDayButton();
+            EnsureEndDayConfirmPanel();
 
             if (gameState == null)
             {
@@ -80,7 +107,7 @@ namespace FantasyGuildmaster.Map
 
             if (encounterManager != null)
             {
-                encounterManager.Configure(FindSquad, AddGold, HandleSquadDestroyed, NotifyRosterChanged);
+                encounterManager.Configure(FindSquad, FindHunter, AddGold, HandleSquadDestroyed, NotifyRosterChanged, GetSquadCohesionModifier, GetCurrentDayIndex);
             }
 
             if (detailsPanel != null)
@@ -95,6 +122,7 @@ namespace FantasyGuildmaster.Map
             }
 
             RefreshSquadStatusHud();
+            UpdateEndDayUiState();
 
             var firstPlayableRegion = GetFirstPlayableRegion();
             if (firstPlayableRegion != null)
@@ -137,9 +165,50 @@ namespace FantasyGuildmaster.Map
             {
                 gameClock.TickSecond -= OnTick;
             }
+
+            HideEndDayConfirm();
         }
 
-        private void OnTick()
+        private void Update()
+        {
+            if (GamePauseService.Count <= 0)
+            {
+                _stuckPauseSince = -1f;
+                return;
+            }
+
+            if (IsAnyContextModalActive())
+            {
+                _stuckPauseSince = -1f;
+                return;
+            }
+
+            if (_stuckPauseSince < 0f)
+            {
+                _stuckPauseSince = Time.unscaledTime;
+                return;
+            }
+
+            if (Time.unscaledTime - _stuckPauseSince > 0.25f)
+            {
+                Debug.LogError("[Pause] Stuck pause detected -> ResetAll [TODO REMOVE]");
+                GamePauseService.ResetAll("StuckPause");
+                _stuckPauseSince = -1f;
+            }
+        }
+
+        private bool IsAnyContextModalActive()
+        {
+            var encounterPanel = FindFirstObjectByType<EncounterPanel>();
+            var encounterActive = encounterPanel != null && encounterPanel.gameObject.activeInHierarchy;
+            var reportActive = missionReportPanel != null && missionReportPanel.gameObject.activeInHierarchy;
+            var squadSelectActive = squadSelectPanel != null && squadSelectPanel.gameObject.activeInHierarchy;
+            var guildHallActive = guildHallPanel != null && guildHallPanel.gameObject.activeInHierarchy;
+            var endDayConfirmActive = endDayConfirmPanel != null && endDayConfirmPanel.activeInHierarchy;
+            return encounterActive || reportActive || squadSelectActive || guildHallActive || endDayConfirmActive;
+        }
+
+        private void OnTick(long simNow)
         {
             TickContracts();
             SyncAllContractIcons();
@@ -152,6 +221,7 @@ namespace FantasyGuildmaster.Map
             }
 
             RefreshSquadStatusHud();
+            UpdateEndDayUiState();
         }
 
         private void TickContracts()
@@ -177,12 +247,19 @@ namespace FantasyGuildmaster.Map
 
         private void TickTravelTasks()
         {
-            var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            var now = SimulationTime.NowSeconds;
             var completedTasks = new List<TravelTask>();
 
             for (var i = 0; i < _travelTasks.Count; i++)
             {
                 var task = _travelTasks[i];
+                if (task == null || string.IsNullOrEmpty(task.fromRegionId) || string.IsNullOrEmpty(task.toRegionId))
+                {
+                    Debug.LogError("[Travel] Invalid task (missing region ids), removing. [TODO REMOVE]");
+                    completedTasks.Add(task);
+                    continue;
+                }
+
                 if (!_markersByRegion.TryGetValue(task.fromRegionId, out var fromMarker)
                     || !_markersByRegion.TryGetValue(task.toRegionId, out var toMarker)
                     || fromMarker == null
@@ -191,15 +268,32 @@ namespace FantasyGuildmaster.Map
                     continue;
                 }
 
-                if (_travelTokenBySquadId.TryGetValue(task.squadId, out var token) && token != null)
+                if (string.IsNullOrEmpty(task.squadId) && string.IsNullOrEmpty(task.soloHunterId))
+                {
+                    Debug.LogError("[Travel] Invalid task (no squadId and no hunterId), removing. [TODO REMOVE]");
+                    completedTasks.Add(task);
+                    continue;
+                }
+
+                TravelToken token = null;
+                if (!string.IsNullOrEmpty(task.squadId))
+                {
+                    _travelTokenBySquadId.TryGetValue(task.squadId, out token);
+                }
+                else if (!string.IsNullOrEmpty(task.soloHunterId))
+                {
+                    _travelTokenBySoloHunterId.TryGetValue(task.soloHunterId, out token);
+                }
+
+                if (token != null)
                 {
                     var progress = task.GetProgress(now);
                     var pos = Vector2.Lerp(fromMarker.AnchoredPosition, toMarker.AnchoredPosition, progress);
-                    var remaining = Mathf.Max(0, (int)(task.endUnix - now));
+                    var remaining = Mathf.Max(0, (int)(task.endSimSeconds - now));
                     token.UpdateView(pos, ToTimerText(remaining));
                 }
 
-                if (now >= task.endUnix)
+                if (now >= task.endSimSeconds)
                 {
                     completedTasks.Add(task);
                 }
@@ -208,6 +302,11 @@ namespace FantasyGuildmaster.Map
             for (var i = 0; i < completedTasks.Count; i++)
             {
                 var task = completedTasks[i];
+                if (task == null)
+                {
+                    continue;
+                }
+
                 HandleTravelTaskCompleted(task, now);
             }
 
@@ -215,19 +314,45 @@ namespace FantasyGuildmaster.Map
             {
                 _travelTasks.Remove(completedTasks[i]);
             }
+
+            if (completedTasks.Count > 0)
+            {
+                TryAdvanceDayFlow("TravelTaskCompleted");
+            }
         }
 
         private void HandleTravelTaskCompleted(TravelTask task, long nowUnix)
         {
+            if (task == null)
+            {
+                return;
+            }
+
             var squad = FindSquad(task.squadId);
-            if (squad == null)
+            if (squad == null && string.IsNullOrEmpty(task.soloHunterId))
             {
                 RemoveTravelToken(task.squadId);
                 return;
             }
 
+            var soloHunter = !string.IsNullOrEmpty(task.soloHunterId) && hunterRoster != null ? hunterRoster.GetById(task.soloHunterId) : null;
+
             if (task.phase == TravelPhase.Outbound)
             {
+                if (soloHunter != null)
+                {
+                    if (encounterManager != null)
+                    {
+                        encounterManager.EnqueueEncounter(task.toRegionId, null, () => OnEncounterResolved(null, task.toRegionId, task.contractId, task.contractReward, soloHunter.id), soloHunter.id);
+                        TryAdvanceDayFlow("EncounterQueued");
+                    }
+                    else
+                    {
+                        OnEncounterResolved(null, task.toRegionId, task.contractId, task.contractReward, soloHunter.id);
+                    }
+
+                    return;
+                }
                 if (DEBUG_TRAVEL)
                 {
                     Debug.Log($"[TravelDebug] Outbound complete: squad={squad.name}, now={nowUnix}, region={task.toRegionId}");
@@ -245,6 +370,7 @@ namespace FantasyGuildmaster.Map
                     }
 
                     encounterManager.EnqueueEncounter(task.toRegionId, squad.id, () => OnEncounterResolved(squad.id, task.toRegionId, task.contractId, task.contractReward));
+                    TryAdvanceDayFlow("EncounterQueued");
                 }
                 else
                 {
@@ -260,19 +386,42 @@ namespace FantasyGuildmaster.Map
                 Debug.Log($"[TravelDebug] Return complete: squad={squad.name}, now={nowUnix}, reward={task.contractReward}");
             }
 
-            squad.currentRegionId = GuildHqId;
-            squad.state = SquadState.IdleAtHQ;
-            NotifyRosterChanged();
-            RemoveTravelToken(task.squadId);
+            if (soloHunter != null)
+            {
+                soloHunter.squadId = null;
+                RemoveSoloTravelToken(soloHunter.id);
+            }
+            else
+            {
+                squad.currentRegionId = GuildHqId;
+                squad.state = SquadState.IdleAtHQ;
+                NotifyRosterChanged();
+                RemoveTravelToken(task.squadId);
+            }
 
-            var report = BuildMissionReport(task, squad);
+            var report = BuildMissionReport(task, squad, soloHunter);
             _pendingReports.Enqueue(report);
-            Debug.Log($"[Report] Enqueued: squad={report.squadId} contract={report.contractId} reward={report.rewardGold}");
+            Debug.Log($"[Report] Enqueued: squad={report.squadId} contract={report.contractId} reward={report.rewardGold} [TODO REMOVE]");
+            TryAdvanceDayFlow("ReportEnqueued");
             TryShowNextMissionReport();
         }
 
-        private void OnEncounterResolved(string squadId, string regionId, string contractId, int contractReward)
+        private void OnEncounterResolved(string squadId, string regionId, string contractId, int contractReward, string soloHunterId = null)
         {
+            if (!string.IsNullOrEmpty(soloHunterId))
+            {
+                var soloHunter = hunterRoster != null ? hunterRoster.GetById(soloHunterId) : null;
+                if (soloHunter == null || soloHunter.hp <= 0)
+                {
+                    RestoreContractAvailability(regionId, contractId);
+                    return;
+                }
+
+                StartSoloTravelTask(soloHunter, GuildHqId, contractId, contractReward, TravelPhase.Return);
+                TryAdvanceDayFlow("EncounterResolved");
+                return;
+            }
+
             var squad = FindSquad(squadId);
             if (squad == null || squad.hp <= 0)
             {
@@ -294,12 +443,14 @@ namespace FantasyGuildmaster.Map
             {
                 detailsPanel.SetIdleSquadsCount(GetIdleSquads().Count);
             }
+
+            TryAdvanceDayFlow("EncounterResolved");
         }
 
-        private MissionReportData BuildMissionReport(TravelTask task, SquadData squad)
+        private MissionReportData BuildMissionReport(TravelTask task, SquadData squad, HunterData soloHunter = null)
         {
-            var readiness = ComputeReadinessPercent(squad);
-            var membersSummary = BuildMembersSummary(squad);
+            var readiness = soloHunter != null ? Mathf.RoundToInt(Mathf.Clamp01(soloHunter.maxHp > 0 ? soloHunter.hp / (float)soloHunter.maxHp : 1f) * 100f) : ComputeReadinessPercent(squad);
+            var membersSummary = soloHunter != null ? $"Solo: {soloHunter.name}" : BuildMembersSummary(squad);
             var regionName = ResolveRegionName(task.fromRegionId);
             var contractTitle = ResolveContractTitle(task.fromRegionId, task.contractId);
             var outcome = readiness < 70
@@ -309,7 +460,8 @@ namespace FantasyGuildmaster.Map
             return new MissionReportData
             {
                 squadId = squad?.id,
-                squadName = squad?.name,
+                soloHunterId = soloHunter?.id,
+                squadName = soloHunter != null ? soloHunter.name : squad?.name,
                 regionId = task.fromRegionId,
                 regionName = regionName,
                 contractId = task.contractId,
@@ -325,18 +477,29 @@ namespace FantasyGuildmaster.Map
         private void TryShowNextMissionReport()
         {
             EnsureMissionReportPanel();
-            if (missionReportPanel == null || missionReportPanel.IsOpen || _pendingReports.Count == 0)
+            EnsureGuildHallPanel();
+            EnsureEndDayButton();
+            EnsureEndDayConfirmPanel();
+            if (missionReportPanel == null || _reportOpen || missionReportPanel.IsOpen || _pendingReports.Count == 0)
             {
                 return;
             }
 
             var report = _pendingReports.Peek();
-            Debug.Log($"[Report] Showing: squad={report.squadId} contract={report.contractId} reward={report.rewardGold}");
-            missionReportPanel.Show(report, () => OnMissionReportContinue(report));
+            Debug.Log($"[Report] Showing: squad={report.squadId} contract={report.contractId} reward={report.rewardGold} [TODO REMOVE]");
+            _reportOpen = true;
+            var shown = missionReportPanel.Show(report, () => OnMissionReportContinue(report));
+            if (!shown)
+            {
+                _reportOpen = false;
+                Debug.LogError("[Report] MissionReport failed to show; applying fallback continuation. [TODO REMOVE]");
+                OnMissionReportContinue(report);
+            }
         }
-
         private void OnMissionReportContinue(MissionReportData report)
         {
+            Debug.Log($"[Report] onContinue invoked: squad={report?.squadId} contract={report?.contractId} reward={report?.rewardGold} [TODO REMOVE]");
+
             if (_pendingReports.Count > 0)
             {
                 _pendingReports.Dequeue();
@@ -344,21 +507,724 @@ namespace FantasyGuildmaster.Map
 
             AddGold(report.rewardGold);
             CompleteContract(report.regionId, report.contractId);
-            Debug.Log($"[Report] Applied+Closed: squad={report.squadId} contract={report.contractId} reward={report.rewardGold}");
+
+            var reportSquad = FindSquad(report.squadId);
+            if (reportSquad != null)
+            {
+                reportSquad.exhausted = true;
+                reportSquad.exhaustedReason = "Needs rest";
+                reportSquad.contractsDoneToday++;
+                Debug.Log($"[Squad] Exhausted after contract: squad={reportSquad.id} contract={report.contractId} [TODO REMOVE]");
+
+                var cohesionDelta = reportSquad.lastRosterChangeDay == _dayIndex ? 1 : 3;
+                reportSquad.cohesion = Mathf.Clamp(reportSquad.cohesion + cohesionDelta, 0, 100);
+                Debug.Log($"[Cohesion] After mission squad={reportSquad.id} cohesion={reportSquad.cohesion} delta={cohesionDelta} [TODO REMOVE]");
+            }
+
+            if (!string.IsNullOrEmpty(report.soloHunterId) && hunterRoster != null)
+            {
+                var hunter = hunterRoster.GetById(report.soloHunterId);
+                if (hunter != null)
+                {
+                    hunter.exhaustedToday = true;
+                }
+            }
+
+            missionReportPanel?.Hide();
+            _reportOpen = false;
+            Debug.Log($"[Report] Applied+Closed: squad={report.squadId} contract={report.contractId} reward={report.rewardGold} [TODO REMOVE]");
 
             RefreshSquadStatusHud();
+            UpdateEndDayUiState();
             if (detailsPanel != null)
             {
                 detailsPanel.SetIdleSquadsCount(GetIdleSquads().Count);
             }
 
+            TryAdvanceDayFlow("MissionReportClosed");
             if (_pendingReports.Count > 0)
             {
                 TryShowNextMissionReport();
             }
-            else
+        }
+
+
+        private void OnEndDayButtonClicked()
+        {
+            if (IsEndDayBlocked(out var reason))
             {
-                missionReportPanel?.Hide();
+                Debug.Log($"[EndDay] blocked reason={reason} [TODO REMOVE]");
+                UpdateEndDayUiState();
+                return;
+            }
+
+            if (IsEndDayWarning(out var warning))
+            {
+                Debug.Log($"[EndDay] warning shown {warning} [TODO REMOVE]");
+                ShowEndDayConfirm(warning);
+                return;
+            }
+
+            _endDayRequested = true;
+            Debug.Log("[EndDay] confirmed -> request end day [TODO REMOVE]");
+            TryAdvanceDayFlow("EndDay");
+            UpdateEndDayUiState();
+        }
+
+        private void EnsureEndDayButton()
+        {
+            EnsureEndDayHeaderLayout();
+            if (endDayButton == null)
+            {
+                endDayButton = transform.Find("MapCanvas/OverlayLayer/RegionDetailsPanel/HeaderContainer/EndDayButton")?.GetComponent<Button>();
+            }
+
+            if (endDayButton == null)
+            {
+                endDayButton = transform.Find("MapCanvas/OverlayLayer/EndDayButton")?.GetComponent<Button>();
+            }
+
+            if (endDayButton == null)
+            {
+                var canvas = EnsureCanvas();
+                if (canvas == null)
+                {
+                    return;
+                }
+
+                var button = CreateButton(canvas.transform, "EndDayButton", "End Day");
+                endDayButton = button;
+            }
+
+            EnsureEndDayHeaderLayout();
+
+            if (endDayButton != null)
+            {
+                endDayButton.onClick.RemoveListener(OnEndDayButtonClicked);
+                endDayButton.onClick.AddListener(OnEndDayButtonClicked);
+            }
+
+            UpdateEndDayUiState();
+        }
+
+        private void EnsureEndDayHeaderLayout()
+        {
+            if (detailsPanel == null)
+            {
+                return;
+            }
+
+            var panel = detailsPanel.transform as RectTransform;
+            if (panel == null)
+            {
+                return;
+            }
+
+            var header = panel.Find("HeaderContainer") as RectTransform;
+            if (header == null)
+            {
+                var headerGo = new GameObject("HeaderContainer", typeof(RectTransform), typeof(HorizontalLayoutGroup), typeof(LayoutElement));
+                headerGo.transform.SetParent(panel, false);
+                header = headerGo.GetComponent<RectTransform>();
+                header.SetSiblingIndex(0);
+
+                var headerLayout = headerGo.GetComponent<HorizontalLayoutGroup>();
+                headerLayout.childControlWidth = true;
+                headerLayout.childControlHeight = true;
+                headerLayout.childForceExpandWidth = false;
+                headerLayout.childForceExpandHeight = false;
+                headerLayout.spacing = 10f;
+                headerLayout.padding = new RectOffset(0, 0, 0, 0);
+
+                var headerElement = headerGo.GetComponent<LayoutElement>();
+                headerElement.minHeight = 40f;
+                headerElement.preferredHeight = 44f;
+            }
+
+            var regionName = panel.Find("RegionName")?.GetComponent<TMP_Text>();
+            if (regionName != null && regionName.transform.parent != header)
+            {
+                regionName.transform.SetParent(header, false);
+            }
+
+            if (regionName != null)
+            {
+                regionName.textWrappingMode = TextWrappingModes.NoWrap;
+                regionName.overflowMode = TextOverflowModes.Ellipsis;
+                var nameLayout = regionName.GetComponent<LayoutElement>() ?? regionName.gameObject.AddComponent<LayoutElement>();
+                nameLayout.flexibleWidth = 1f;
+                nameLayout.minWidth = 120f;
+            }
+
+            if (endDayButton != null && endDayButton.transform.parent != header)
+            {
+                endDayButton.transform.SetParent(header, false);
+            }
+
+            if (endDayButton != null)
+            {
+                var buttonLayout = endDayButton.GetComponent<LayoutElement>() ?? endDayButton.gameObject.AddComponent<LayoutElement>();
+                buttonLayout.preferredWidth = 160f;
+                buttonLayout.minWidth = 140f;
+                buttonLayout.flexibleWidth = 0f;
+                var buttonRect = endDayButton.GetComponent<RectTransform>();
+                if (buttonRect != null)
+                {
+                    buttonRect.sizeDelta = new Vector2(160f, 36f);
+                }
+            }
+
+            if (endDayHintText == null)
+            {
+                var hint = panel.Find("EndDayHint")?.GetComponent<TMP_Text>();
+                if (hint == null)
+                {
+                    var hintGo = new GameObject("EndDayHint", typeof(RectTransform), typeof(TextMeshProUGUI), typeof(LayoutElement));
+                    hintGo.transform.SetParent(panel, false);
+                    hintGo.transform.SetSiblingIndex(Mathf.Min(1, panel.childCount - 1));
+                    hint = hintGo.GetComponent<TextMeshProUGUI>();
+                    hint.fontSize = 16f;
+                    hint.alignment = TextAlignmentOptions.Left;
+                    hint.color = new Color(1f, 0.85f, 0.55f, 1f);
+                    hint.textWrappingMode = TextWrappingModes.Normal;
+                    var hintLayout = hintGo.GetComponent<LayoutElement>();
+                    hintLayout.minHeight = 20f;
+                    hintLayout.preferredHeight = 24f;
+                }
+
+                endDayHintText = hint;
+            }
+        }
+
+        private bool IsEndDayBlocked(out string reason)
+        {
+            if (_travelTasks.Count > 0)
+            {
+                reason = "Squads are still on missions.";
+                return true;
+            }
+
+            var encounterQueued = encounterManager != null && encounterManager.PendingEncounterCount > 0;
+            var encounterActive = encounterManager != null && encounterManager.IsEncounterActive;
+            if (encounterQueued || encounterActive)
+            {
+                reason = "Resolve encounters/reports first.";
+                return true;
+            }
+
+            var reportActive = missionReportPanel != null && missionReportPanel.IsOpen;
+            if (_pendingReports.Count > 0 || reportActive)
+            {
+                reason = "Resolve encounters/reports first.";
+                return true;
+            }
+
+            if (IsAnyContextModalActive())
+            {
+                reason = "Close active windows first.";
+                return true;
+            }
+
+            reason = null;
+            return false;
+        }
+
+        private bool IsEndDayWarning(out string warning)
+        {
+            warning = null;
+            if (IsEndDayBlocked(out _))
+            {
+                return false;
+            }
+
+            var availableContracts = 0;
+            foreach (var pair in _contractsByRegion)
+            {
+                if (pair.Key == GuildHqId || pair.Value == null)
+                {
+                    continue;
+                }
+
+                for (var i = 0; i < pair.Value.Count; i++)
+                {
+                    var contract = pair.Value[i];
+                    if (contract == null || contract.IsExpired || IsContractAssigned(contract.id))
+                    {
+                        continue;
+                    }
+
+                    availableContracts++;
+                }
+            }
+
+            var readyIdleSquads = 0;
+            var squads = GetRosterSquads();
+            for (var i = 0; i < squads.Count; i++)
+            {
+                var squad = squads[i];
+                if (squad == null || squad.IsDestroyed)
+                {
+                    continue;
+                }
+
+                if (squad.state == SquadState.IdleAtHQ && !squad.exhausted)
+                {
+                    readyIdleSquads++;
+                }
+            }
+
+            if (availableContracts > 0 && readyIdleSquads > 0)
+            {
+                warning = $"You still have {availableContracts} available contracts and {readyIdleSquads} ready squads. End the day anyway?";
+                return true;
+            }
+
+            return false;
+        }
+
+        private bool IsContractAssigned(string contractId)
+        {
+            if (string.IsNullOrEmpty(contractId))
+            {
+                return false;
+            }
+
+            for (var i = 0; i < _travelTasks.Count; i++)
+            {
+                if (_travelTasks[i] != null && _travelTasks[i].contractId == contractId)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private void UpdateEndDayUiState()
+        {
+            if (endDayButton == null)
+            {
+                return;
+            }
+
+            if (IsEndDayBlocked(out var reason))
+            {
+                endDayButton.interactable = false;
+                var label = endDayButton.GetComponentInChildren<TMP_Text>();
+                if (label != null)
+                {
+                    label.text = "End Day";
+                }
+
+                if (endDayHintText != null)
+                {
+                    endDayHintText.text = $"Cannot end day: {reason}";
+                }
+
+                return;
+            }
+
+            endDayButton.interactable = true;
+            if (endDayHintText != null)
+            {
+                endDayHintText.text = string.Empty;
+            }
+
+            var buttonLabel = endDayButton.GetComponentInChildren<TMP_Text>();
+            if (buttonLabel != null)
+            {
+                buttonLabel.text = IsEndDayWarning(out _) ? "End Day (Confirm)" : "End Day";
+            }
+        }
+
+        private void EnsureEndDayConfirmPanel()
+        {
+            if (endDayConfirmPanel == null)
+            {
+                var canvas = EnsureCanvas();
+                if (canvas == null)
+                {
+                    return;
+                }
+
+                var root = new GameObject("EndDayConfirmPanel", typeof(RectTransform), typeof(Image), typeof(CanvasGroup));
+                root.transform.SetParent(canvas.transform, false);
+                var rect = root.GetComponent<RectTransform>();
+                rect.anchorMin = Vector2.zero;
+                rect.anchorMax = Vector2.one;
+                rect.offsetMin = Vector2.zero;
+                rect.offsetMax = Vector2.zero;
+                var bg = root.GetComponent<Image>();
+                bg.color = new Color(0f, 0f, 0f, 0.55f);
+
+                var content = new GameObject("Content", typeof(RectTransform), typeof(Image), typeof(VerticalLayoutGroup));
+                content.transform.SetParent(root.transform, false);
+                var contentRect = content.GetComponent<RectTransform>();
+                contentRect.anchorMin = new Vector2(0.5f, 0.5f);
+                contentRect.anchorMax = new Vector2(0.5f, 0.5f);
+                contentRect.pivot = new Vector2(0.5f, 0.5f);
+                contentRect.sizeDelta = new Vector2(720f, 280f);
+                var contentImage = content.GetComponent<Image>();
+                contentImage.color = new Color(0.08f, 0.1f, 0.14f, 0.98f);
+                var contentLayoutElement = content.GetComponent<LayoutElement>() ?? content.AddComponent<LayoutElement>();
+                contentLayoutElement.minWidth = 420f;
+                contentLayoutElement.preferredWidth = 560f;
+                contentLayoutElement.minHeight = 260f;
+                contentLayoutElement.preferredHeight = 280f;
+                var v = content.GetComponent<VerticalLayoutGroup>();
+                v.padding = new RectOffset(18, 18, 18, 18);
+                v.spacing = 12f;
+                v.childControlHeight = true;
+                v.childControlWidth = true;
+                v.childForceExpandHeight = false;
+
+                var title = CreateText(content.transform, "Title", 30f, FontStyles.Bold, TextAlignmentOptions.Left);
+                title.text = "End Day?";
+                var titleLayout = title.gameObject.AddComponent<LayoutElement>();
+                titleLayout.preferredHeight = 40f;
+
+                var body = CreateText(content.transform, "Body", 22f, FontStyles.Normal, TextAlignmentOptions.TopLeft);
+                body.textWrappingMode = TextWrappingModes.Normal;
+                body.overflowMode = TextOverflowModes.Overflow;
+                body.text = "";
+                var bodyLayout = body.gameObject.AddComponent<LayoutElement>();
+                bodyLayout.preferredHeight = 120f;
+
+                var row = new GameObject("Buttons", typeof(RectTransform), typeof(HorizontalLayoutGroup));
+                row.transform.SetParent(content.transform, false);
+                var h = row.GetComponent<HorizontalLayoutGroup>();
+                h.spacing = 12f;
+                h.childAlignment = TextAnchor.MiddleCenter;
+                h.childControlWidth = true;
+                h.childControlHeight = true;
+                h.childForceExpandHeight = false;
+                h.childForceExpandWidth = false;
+
+                var rowLayout = row.GetComponent<LayoutElement>() ?? row.AddComponent<LayoutElement>();
+                rowLayout.minHeight = 56f;
+                rowLayout.preferredHeight = 60f;
+
+                var yes = CreateButton(row.transform, "ConfirmButton", "Confirm");
+                var no = CreateButton(row.transform, "CancelButton", "Cancel");
+                ConfigureEndDayConfirmButtonVisuals(yes);
+                ConfigureEndDayConfirmButtonVisuals(no);
+
+                endDayConfirmPanel = root;
+                endDayConfirmBodyText = body;
+                endDayConfirmYesButton = yes;
+                endDayConfirmNoButton = no;
+            }
+
+            if (endDayConfirmYesButton != null)
+            {
+                endDayConfirmYesButton.onClick.RemoveAllListeners();
+                endDayConfirmYesButton.onClick.AddListener(OnEndDayConfirmYes);
+            }
+
+            if (endDayConfirmNoButton != null)
+            {
+                endDayConfirmNoButton.onClick.RemoveAllListeners();
+                endDayConfirmNoButton.onClick.AddListener(HideEndDayConfirm);
+            }
+
+            if (endDayConfirmPanel != null)
+            {
+                endDayConfirmPanel.SetActive(false);
+            }
+        }
+
+        private void ConfigureEndDayConfirmButtonVisuals(Button button)
+        {
+            if (button == null)
+            {
+                return;
+            }
+
+            var layout = button.GetComponent<LayoutElement>() ?? button.gameObject.AddComponent<LayoutElement>();
+            layout.minWidth = 160f;
+            layout.preferredWidth = 180f;
+            layout.minHeight = 44f;
+
+            var label = button.GetComponentInChildren<TMP_Text>();
+            if (label == null)
+            {
+                return;
+            }
+
+            label.textWrappingMode = TextWrappingModes.NoWrap;
+            label.overflowMode = TextOverflowModes.Ellipsis;
+            label.enableAutoSizing = true;
+            label.fontSizeMin = 14f;
+            label.fontSizeMax = 20f;
+            label.alignment = TextAlignmentOptions.Center;
+            label.raycastTarget = false;
+        }
+
+        private void ShowEndDayConfirm(string warning)
+        {
+            EnsureEndDayConfirmPanel();
+            if (endDayConfirmPanel == null)
+            {
+                return;
+            }
+
+            if (endDayConfirmBodyText != null)
+            {
+                endDayConfirmBodyText.text = warning;
+            }
+
+            endDayConfirmPanel.SetActive(true);
+            if (!_endDayConfirmPauseHeld)
+            {
+                GamePauseService.Push("EndDayConfirm");
+                _endDayConfirmPauseHeld = true;
+            }
+        }
+
+        private void HideEndDayConfirm()
+        {
+            if (endDayConfirmPanel != null)
+            {
+                endDayConfirmPanel.SetActive(false);
+            }
+
+            if (_endDayConfirmPauseHeld)
+            {
+                GamePauseService.Pop("EndDayConfirm");
+                _endDayConfirmPauseHeld = false;
+            }
+        }
+
+        private void OnEndDayConfirmYes()
+        {
+            HideEndDayConfirm();
+            _endDayRequested = true;
+            Debug.Log("[EndDay] confirmed -> request end day [TODO REMOVE]");
+            TryAdvanceDayFlow("EndDayConfirm");
+            UpdateEndDayUiState();
+        }
+
+        private void TryAdvanceDayFlow(string trigger)
+        {
+            if (_dayState == DayState.EveningGuildHall)
+            {
+                LogDayFlow(trigger, IsAnyContextModalActive());
+                return;
+            }
+
+            var reportActive = missionReportPanel != null && missionReportPanel.IsOpen;
+            var encounterQueued = encounterManager != null && encounterManager.PendingEncounterCount > 0;
+            var encounterActive = encounterManager != null && encounterManager.IsEncounterActive;
+            if (_pendingReports.Count > 0 || reportActive)
+            {
+                _dayState = DayState.ShowingReports;
+                LogDayFlow(trigger, IsAnyContextModalActive());
+                return;
+            }
+
+            if (encounterQueued || encounterActive)
+            {
+                _dayState = DayState.ResolvingEvents;
+                LogDayFlow(trigger, IsAnyContextModalActive());
+                return;
+            }
+
+            var anyModal = IsAnyContextModalActive();
+            if (_endDayRequested && CanEnterEveningNow(anyModal))
+            {
+                _dayState = DayState.EveningGuildHall;
+                LogDayFlow(trigger, anyModal);
+                EnterGuildHallEvening();
+                return;
+            }
+
+            _dayState = DayState.MapActive;
+            LogDayFlow(trigger, anyModal);
+        }
+
+        private bool CanEnterEveningNow(bool anyModal)
+        {
+            if (!_endDayRequested)
+            {
+                return false;
+            }
+
+            if (_travelTasks.Count > 0)
+            {
+                return false;
+            }
+
+            var encounterQueued = encounterManager != null && encounterManager.PendingEncounterCount > 0;
+            var encounterActive = encounterManager != null && encounterManager.IsEncounterActive;
+            if (encounterQueued || encounterActive)
+            {
+                return false;
+            }
+
+            var reportActive = missionReportPanel != null && missionReportPanel.IsOpen;
+            if (_pendingReports.Count > 0 || reportActive)
+            {
+                return false;
+            }
+
+            if (anyModal)
+            {
+                return false;
+            }
+
+            return GamePauseService.Count == 0;
+        }
+
+        private void LogDayFlow(string trigger, bool anyModal)
+        {
+            Debug.Log($"[DayFlow] reason={trigger} endDayRequested={_endDayRequested} travelActive={_travelTasks.Count} encounters={(encounterManager != null ? encounterManager.PendingEncounterCount : 0)}/{(encounterManager != null && encounterManager.IsEncounterActive)} reports={_pendingReports.Count}/{(missionReportPanel != null && missionReportPanel.IsOpen)} modals={anyModal} [TODO REMOVE]");
+        }
+
+        private void EnterGuildHallEvening()
+        {
+            Debug.Log("[GuildHall] Enter evening [TODO REMOVE]");
+            EnsureGuildHallPanel();
+            EnsureEndDayButton();
+            EnsureEndDayConfirmPanel();
+            if (guildHallPanel == null)
+            {
+                Debug.LogWarning("[GuildHall] Panel missing, skipping evening. [TODO REMOVE]");
+                OnGuildHallNextDay();
+                return;
+            }
+
+            if (_guildHallEveningData == null)
+            {
+                _guildHallEveningData = GuildHallEveningLoader.Load();
+            }
+
+            _endDayRequested = false;
+            EnsureEventSystem();
+            guildHallPanel.ShowEvening(_guildHallEveningData, _dayIndex, OnGuildHallNextDay, ApplyRestEveningEffect);
+        }
+
+        private void ApplyRestEveningEffect()
+        {
+            var squads = GetRosterSquads();
+            for (var i = 0; i < squads.Count; i++)
+            {
+                var squad = squads[i];
+                if (squad == null || squad.IsDestroyed)
+                {
+                    continue;
+                }
+
+                if (squad.members == null)
+                {
+                    continue;
+                }
+
+                for (var m = 0; m < squad.members.Count; m++)
+                {
+                    var member = squad.members[m];
+                    if (member == null || member.maxHp <= 0)
+                    {
+                        continue;
+                    }
+
+                    member.hp = Mathf.Min(member.maxHp, member.hp + 5);
+                }
+            }
+
+            RefreshSquadStatusHud();
+            UpdateEndDayUiState();
+            squadDetailsPanel?.Refresh();
+        }
+
+        private void OnGuildHallNextDay()
+        {
+            guildHallPanel?.Hide();
+            _endDayRequested = false;
+            _dayIndex++;
+            var squads = GetRosterSquads();
+            for (var i = 0; i < squads.Count; i++)
+            {
+                var squad = squads[i];
+                if (squad == null)
+                {
+                    continue;
+                }
+
+                squad.exhausted = false;
+                squad.exhaustedReason = null;
+                squad.contractsDoneToday = 0;
+                if (squad.lastRosterChangeDay != _dayIndex - 1)
+                {
+                    squad.cohesion = Mathf.Clamp(squad.cohesion + 1, 0, 100);
+                }
+            }
+
+            if (hunterRoster != null)
+            {
+                for (var i = 0; i < hunterRoster.Hunters.Count; i++)
+                {
+                    if (hunterRoster.Hunters[i] != null)
+                    {
+                        hunterRoster.Hunters[i].exhaustedToday = false;
+                    }
+                }
+            }
+
+            RefreshContractsForNextDay();
+            SyncAllContractIcons();
+
+            if (detailsPanel != null)
+            {
+                detailsPanel.SetIdleSquadsCount(GetIdleSquads().Count);
+            }
+
+            Debug.Log($"[Day] Reset squad exhaustion, day={_dayIndex} [TODO REMOVE]");
+            UpdateEndDayUiState();
+        }
+
+        private void RefreshContractsForNextDay()
+        {
+            foreach (var region in _gameData.regions)
+            {
+                if (region == null || region.id == GuildHqId)
+                {
+                    continue;
+                }
+
+                var seed = (region.id != null ? region.id.GetHashCode() : 0) ^ (_dayIndex * 397);
+                var random = new System.Random(seed);
+                if (!_contractsByRegion.TryGetValue(region.id, out var contracts) || contracts == null)
+                {
+                    contracts = new List<ContractData>();
+                    _contractsByRegion[region.id] = contracts;
+                }
+
+                if (contracts.Count == 0)
+                {
+                    var count = random.Next(2, 5);
+                    for (var i = 0; i < count; i++)
+                    {
+                        contracts.Add(new ContractData
+                        {
+                            id = $"{region.id}_day{_dayIndex}_contract_{i}",
+                            title = $"Contract #{i + 1}: {region.name}",
+                            remainingSeconds = random.Next(45, 300),
+                            reward = random.Next(50, 250),
+                            iconKey = PickContractIconKey(i),
+                            minRank = i % 3 == 0 ? HunterRank.C : HunterRank.D,
+                            allowSquad = i % 5 != 0,
+                            allowSolo = true
+                        });
+                    }
+                }
+                else
+                {
+                    for (var i = 0; i < contracts.Count; i++)
+                    {
+                        contracts[i].remainingSeconds = random.Next(45, 300);
+                        contracts[i].reward = random.Next(50, 250);
+                    }
+                }
             }
         }
 
@@ -366,12 +1232,16 @@ namespace FantasyGuildmaster.Map
         {
             if (missionReportPanel != null)
             {
+                _reportOpen = missionReportPanel.IsOpen;
+                EnsureMissionReportInteractionInfra();
                 return;
             }
 
             missionReportPanel = FindFirstObjectByType<MissionReportPanel>();
             if (missionReportPanel != null)
             {
+                _reportOpen = missionReportPanel.IsOpen;
+                EnsureMissionReportInteractionInfra();
                 return;
             }
 
@@ -390,11 +1260,222 @@ namespace FantasyGuildmaster.Map
                 {
                     instance.transform.SetAsLastSibling();
                     missionReportPanel.Hide();
+                    _reportOpen = false;
+                    EnsureMissionReportInteractionInfra();
                     return;
                 }
             }
 
             missionReportPanel = CreateRuntimeMissionReportPanel(canvas);
+            _reportOpen = false;
+            EnsureMissionReportInteractionInfra();
+        }
+
+
+        private void EnsureMissionReportInteractionInfra()
+        {
+            EnsureEventSystem();
+            if (missionReportPanel == null)
+            {
+                return;
+            }
+
+            var canvas = missionReportPanel.GetComponentInParent<Canvas>();
+            if (canvas != null && canvas.GetComponent<GraphicRaycaster>() == null)
+            {
+                canvas.gameObject.AddComponent<GraphicRaycaster>();
+            }
+        }
+
+        private void EnsureGuildHallPanel()
+        {
+            if (guildHallPanel != null)
+            {
+                return;
+            }
+
+            guildHallPanel = FindFirstObjectByType<GuildHallPanel>();
+            if (guildHallPanel != null)
+            {
+                guildHallPanel.Hide();
+                return;
+            }
+
+            var prefab = Resources.Load<GameObject>("Prefabs/GuildHallPanel");
+            var canvas = EnsureCanvas();
+            if (canvas == null)
+            {
+                return;
+            }
+
+            if (prefab != null)
+            {
+                var instance = Instantiate(prefab, canvas.transform, false);
+                guildHallPanel = instance.GetComponent<GuildHallPanel>();
+                if (guildHallPanel != null)
+                {
+                    instance.transform.SetAsLastSibling();
+                    guildHallPanel.Hide();
+                    return;
+                }
+            }
+
+            guildHallPanel = CreateRuntimeGuildHallPanel(canvas);
+        }
+
+        private GuildHallPanel CreateRuntimeGuildHallPanel(Canvas canvas)
+        {
+            var root = new GameObject("GuildHallPanel", typeof(RectTransform), typeof(Image), typeof(CanvasGroup), typeof(GuildHallPanel));
+            root.transform.SetParent(canvas.transform, false);
+            var rootRect = root.GetComponent<RectTransform>();
+            rootRect.anchorMin = Vector2.zero;
+            rootRect.anchorMax = Vector2.one;
+            rootRect.offsetMin = Vector2.zero;
+            rootRect.offsetMax = Vector2.zero;
+            root.transform.SetAsLastSibling();
+
+            var dimmer = root.GetComponent<Image>();
+            dimmer.color = new Color(0f, 0f, 0f, 0.65f);
+            dimmer.raycastTarget = true;
+
+            var content = new GameObject("Content", typeof(RectTransform));
+            content.transform.SetParent(root.transform, false);
+            var contentRect = content.GetComponent<RectTransform>();
+            contentRect.anchorMin = Vector2.zero;
+            contentRect.anchorMax = Vector2.one;
+            contentRect.offsetMin = Vector2.zero;
+            contentRect.offsetMax = Vector2.zero;
+            content.transform.SetAsLastSibling();
+
+            var backgroundLayer = new GameObject("BackgroundLayer", typeof(RectTransform), typeof(Image));
+            backgroundLayer.transform.SetParent(content.transform, false);
+            var backgroundRect = backgroundLayer.GetComponent<RectTransform>();
+            backgroundRect.anchorMin = Vector2.zero;
+            backgroundRect.anchorMax = Vector2.one;
+            backgroundRect.offsetMin = Vector2.zero;
+            backgroundRect.offsetMax = Vector2.zero;
+            var backgroundImage = backgroundLayer.GetComponent<Image>();
+            backgroundImage.color = new Color(0.15f, 0.13f, 0.1f, 1f);
+            backgroundImage.raycastTarget = false;
+
+            var stageLayer = new GameObject("StageLayer", typeof(RectTransform), typeof(Image));
+            stageLayer.transform.SetParent(content.transform, false);
+            var stageRect = stageLayer.GetComponent<RectTransform>();
+            stageRect.anchorMin = new Vector2(0.05f, 0.20f);
+            stageRect.anchorMax = new Vector2(0.95f, 0.88f);
+            stageRect.offsetMin = Vector2.zero;
+            stageRect.offsetMax = Vector2.zero;
+            var stageImage = stageLayer.GetComponent<Image>();
+            stageImage.color = new Color(0.25f, 0.2f, 0.16f, 0.38f);
+            stageImage.raycastTarget = false;
+
+            var topBar = new GameObject("TopBar", typeof(RectTransform), typeof(Image));
+            topBar.transform.SetParent(content.transform, false);
+            var topRect = topBar.GetComponent<RectTransform>();
+            topRect.anchorMin = new Vector2(0.02f, 0.90f);
+            topRect.anchorMax = new Vector2(0.98f, 0.98f);
+            topRect.offsetMin = Vector2.zero;
+            topRect.offsetMax = Vector2.zero;
+            var topImage = topBar.GetComponent<Image>();
+            topImage.color = new Color(0.08f, 0.08f, 0.09f, 0.72f);
+            topImage.raycastTarget = false;
+
+            var title = CreateText(topBar.transform, "Title", 34f, FontStyles.Bold, TextAlignmentOptions.Left);
+            title.text = "GUILD HALL";
+            var titleRect = title.rectTransform;
+            titleRect.anchorMin = new Vector2(0f, 0f);
+            titleRect.anchorMax = new Vector2(0.7f, 1f);
+            titleRect.offsetMin = new Vector2(20f, 0f);
+            titleRect.offsetMax = Vector2.zero;
+
+            var day = CreateText(topBar.transform, "Day", 26f, FontStyles.Bold, TextAlignmentOptions.Right);
+            day.text = "Day 1";
+            var dayRect = day.rectTransform;
+            dayRect.anchorMin = new Vector2(0.58f, 0f);
+            dayRect.anchorMax = new Vector2(0.8f, 1f);
+            dayRect.offsetMin = Vector2.zero;
+            dayRect.offsetMax = Vector2.zero;
+
+            var hint = CreateText(topBar.transform, "Hint", 18f, FontStyles.Italic, TextAlignmentOptions.Center);
+            hint.text = "Click a character to talk";
+            var hintRect = hint.rectTransform;
+            hintRect.anchorMin = new Vector2(0.22f, 0f);
+            hintRect.anchorMax = new Vector2(0.58f, 1f);
+            hintRect.offsetMin = Vector2.zero;
+            hintRect.offsetMax = Vector2.zero;
+
+            var nextDayButton = CreateButton(topBar.transform, "NextDayButton", "Next Day");
+            var nextDayRect = (RectTransform)nextDayButton.transform;
+            nextDayRect.anchorMin = new Vector2(0.82f, 0.14f);
+            nextDayRect.anchorMax = new Vector2(0.99f, 0.86f);
+            nextDayRect.offsetMin = Vector2.zero;
+            nextDayRect.offsetMax = Vector2.zero;
+
+            var dialogueBar = new GameObject("DialogueBar", typeof(RectTransform), typeof(Image));
+            dialogueBar.transform.SetParent(content.transform, false);
+            var dialogueRect = dialogueBar.GetComponent<RectTransform>();
+            dialogueRect.anchorMin = new Vector2(0.02f, 0.02f);
+            dialogueRect.anchorMax = new Vector2(0.98f, 0.30f);
+            dialogueRect.offsetMin = Vector2.zero;
+            dialogueRect.offsetMax = Vector2.zero;
+            var dialogueImage = dialogueBar.GetComponent<Image>();
+            dialogueImage.color = new Color(0.06f, 0.07f, 0.09f, 0.88f);
+            dialogueImage.raycastTarget = true;
+
+            var speaker = CreateText(dialogueBar.transform, "Speaker", 28f, FontStyles.Bold, TextAlignmentOptions.Left);
+            var speakerRect = speaker.rectTransform;
+            speakerRect.anchorMin = new Vector2(0.02f, 0.72f);
+            speakerRect.anchorMax = new Vector2(0.52f, 0.98f);
+            speakerRect.offsetMin = Vector2.zero;
+            speakerRect.offsetMax = Vector2.zero;
+
+            var body = CreateText(dialogueBar.transform, "Body", 24f, FontStyles.Normal, TextAlignmentOptions.TopLeft);
+            body.textWrappingMode = TextWrappingModes.Normal;
+            var bodyRect = body.rectTransform;
+            bodyRect.anchorMin = new Vector2(0.02f, 0.12f);
+            bodyRect.anchorMax = new Vector2(0.74f, 0.70f);
+            bodyRect.offsetMin = Vector2.zero;
+            bodyRect.offsetMax = Vector2.zero;
+
+            var buttons = new GameObject("Buttons", typeof(RectTransform), typeof(HorizontalLayoutGroup));
+            buttons.transform.SetParent(dialogueBar.transform, false);
+            var buttonsRect = buttons.GetComponent<RectTransform>();
+            buttonsRect.anchorMin = new Vector2(0.76f, 0.12f);
+            buttonsRect.anchorMax = new Vector2(0.98f, 0.88f);
+            buttonsRect.offsetMin = Vector2.zero;
+            buttonsRect.offsetMax = Vector2.zero;
+            var buttonsLayout = buttons.GetComponent<HorizontalLayoutGroup>();
+            buttonsLayout.spacing = 10f;
+            buttonsLayout.childControlWidth = true;
+            buttonsLayout.childControlHeight = true;
+            buttonsLayout.childForceExpandWidth = true;
+
+            var nextButton = CreateButton(buttons.transform, "NextButton", "Next");
+            var skipButton = CreateButton(buttons.transform, "SkipButton", "Skip");
+
+            dialogueBar.SetActive(false);
+            stageLayer.transform.SetAsLastSibling();
+            dialogueBar.transform.SetAsLastSibling();
+            topBar.transform.SetAsLastSibling();
+
+            var panel = root.GetComponent<GuildHallPanel>();
+            panel.ConfigureRuntimeBindings(
+                root,
+                dimmer,
+                contentRect,
+                backgroundImage,
+                stageRect,
+                title,
+                day,
+                hint,
+                nextDayButton,
+                dialogueBar,
+                speaker,
+                body,
+                nextButton,
+                skipButton);
+            panel.Hide();
+            return panel;
         }
 
         private MissionReportPanel CreateRuntimeMissionReportPanel(Canvas canvas)
@@ -665,6 +1746,7 @@ namespace FantasyGuildmaster.Map
             labelRect.offsetMin = Vector2.zero;
             labelRect.offsetMax = Vector2.zero;
             label.text = labelText;
+            label.raycastTarget = false;
             return buttonGo.GetComponent<Button>();
         }
 
@@ -966,8 +2048,64 @@ namespace FantasyGuildmaster.Map
                 return;
             }
 
-            squadSelectPanel.Show(idle, squad =>
+            var soloHunters = hunterRoster != null ? hunterRoster.GetSoloHunters() : new List<HunterData>();
+            squadSelectPanel.Show(idle, soloHunters, option =>
             {
+                if (option.isSolo)
+                {
+                    var soloHunter = hunterRoster != null ? hunterRoster.GetById(option.hunterId) : null;
+                    if (soloHunter == null)
+                    {
+                        return;
+                    }
+
+                    if (soloHunter.exhaustedToday)
+                    {
+                        Debug.LogWarning("[Assign] blocked exhausted solo hunter [TODO REMOVE]");
+                        return;
+                    }
+
+                    if (!contract.allowSolo)
+                    {
+                        Debug.LogWarning("[Assign] blocked: contract forbids solo [TODO REMOVE]");
+                        return;
+                    }
+
+                    if (soloHunter.rank < contract.minRank)
+                    {
+                        Debug.LogWarning("[Assign] blocked: solo rank too low [TODO REMOVE]");
+                        return;
+                    }
+
+                    StartSoloTravelTask(soloHunter, region.id, contract.id, contract.reward, TravelPhase.Outbound);
+                    detailsPanel?.BlockContract(contract.id);
+                    return;
+                }
+
+                var squad = FindSquad(option.squadId);
+                if (squad == null)
+                {
+                    return;
+                }
+
+                if (squad.exhausted)
+                {
+                    Debug.LogWarning($"[Assign] blocked exhausted squad={squad.id} day={_dayIndex} [TODO REMOVE]");
+                    return;
+                }
+
+                if (!contract.allowSquad)
+                {
+                    Debug.LogWarning("[Assign] blocked: contract forbids squad [TODO REMOVE]");
+                    return;
+                }
+
+                if (GetSquadEffectiveRank(squad) < contract.minRank)
+                {
+                    Debug.LogWarning("[Assign] blocked: squad rank too low [TODO REMOVE]");
+                    return;
+                }
+
                 StartTravelTask(squad, GuildHqId, region.id, contract.id, contract.reward, TravelPhase.Outbound);
                 squad.state = SquadState.TravelingToRegion;
                 NotifyRosterChanged();
@@ -990,7 +2128,7 @@ namespace FantasyGuildmaster.Map
             }
 
             var duration = ResolveTravelDuration(toRegionId);
-            var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            var now = SimulationTime.NowSeconds;
 
             var task = new TravelTask
             {
@@ -1000,8 +2138,8 @@ namespace FantasyGuildmaster.Map
                 contractId = contractId,
                 contractReward = contractReward,
                 phase = phase,
-                startUnix = now,
-                endUnix = now + duration
+                startSimSeconds = now,
+                endSimSeconds = now + duration
             };
 
             RemoveExistingTaskForSquad(squad.id);
@@ -1011,8 +2149,35 @@ namespace FantasyGuildmaster.Map
             if (DEBUG_TRAVEL)
             {
                 var phaseLabel = phase == TravelPhase.Outbound ? "OUT" : "RET";
-                Debug.Log($"[TravelDebug] Travel task created: phase={phaseLabel}, squad={squad.name}, route={fromRegionId}->{toRegionId}, endUnix={task.endUnix}");
+                Debug.Log($"[TravelDebug] Travel task created: phase={phaseLabel}, squad={squad.name}, route={fromRegionId}->{toRegionId}, endSimSeconds={task.endSimSeconds}");
             }
+        }
+
+        private void StartSoloTravelTask(HunterData hunter, string toRegionId, string contractId, int contractReward, TravelPhase phase)
+        {
+            if (hunter == null)
+            {
+                return;
+            }
+
+            var duration = ResolveTravelDuration(toRegionId);
+            var now = SimulationTime.NowSeconds;
+            var task = new TravelTask
+            {
+                squadId = null,
+                soloHunterId = hunter.id,
+                fromRegionId = GuildHqId,
+                toRegionId = toRegionId,
+                contractId = contractId,
+                contractReward = contractReward,
+                phase = phase,
+                startSimSeconds = now,
+                endSimSeconds = now + duration
+            };
+
+            _travelTasks.Add(task);
+            AcquireOrUpdateSoloTravelToken(hunter, task);
+            Debug.Log($"[TravelDebug] Solo task created hunter={hunter.id} route={GuildHqId}->{toRegionId} [TODO REMOVE]");
         }
 
         private int ResolveTravelDuration(string regionId)
@@ -1038,7 +2203,7 @@ namespace FantasyGuildmaster.Map
 
         private void AcquireOrUpdateTravelToken(SquadData squad, TravelTask task)
         {
-            if (_travelTokenPool == null)
+            if (_travelTokenPool == null || squad == null || task == null || string.IsNullOrEmpty(task.squadId))
             {
                 return;
             }
@@ -1054,19 +2219,60 @@ namespace FantasyGuildmaster.Map
 
             if (_markersByRegion.TryGetValue(task.fromRegionId, out var fromMarker) && fromMarker != null)
             {
-                var remaining = Mathf.Max(0, (int)(task.endUnix - DateTimeOffset.UtcNow.ToUnixTimeSeconds()));
+                var remaining = Mathf.Max(0, (int)(task.endSimSeconds - SimulationTime.NowSeconds));
                 token.UpdateView(fromMarker.AnchoredPosition, ToTimerText(remaining));
             }
         }
 
         private void RemoveTravelToken(string squadId)
         {
+            if (string.IsNullOrEmpty(squadId))
+            {
+                return;
+            }
+
             if (_travelTokenBySquadId.TryGetValue(squadId, out var token))
             {
                 _travelTokenPool?.Return(token);
                 _travelTokenBySquadId.Remove(squadId);
             }
         }
+        private void AcquireOrUpdateSoloTravelToken(HunterData hunter, TravelTask task)
+        {
+            if (_travelTokenPool == null || hunter == null || string.IsNullOrEmpty(hunter.id))
+            {
+                return;
+            }
+
+            if (!_travelTokenBySoloHunterId.TryGetValue(hunter.id, out var token) || token == null)
+            {
+                token = _travelTokenPool.Get();
+                token.transform.SetParent(travelTokensRoot, false);
+                _travelTokenBySoloHunterId[hunter.id] = token;
+            }
+
+            token.Bind($"solo_{hunter.id}", $"Solo {hunter.name}");
+            if (_markersByRegion.TryGetValue(task.fromRegionId, out var fromMarker) && fromMarker != null)
+            {
+                var remaining = Mathf.Max(0, (int)(task.endSimSeconds - SimulationTime.NowSeconds));
+                token.UpdateView(fromMarker.AnchoredPosition, ToTimerText(remaining));
+            }
+        }
+
+        private void RemoveSoloTravelToken(string hunterId)
+        {
+            if (string.IsNullOrEmpty(hunterId))
+            {
+                return;
+            }
+
+            if (_travelTokenBySoloHunterId.TryGetValue(hunterId, out var token))
+            {
+                _travelTokenPool?.Return(token);
+                _travelTokenBySoloHunterId.Remove(hunterId);
+            }
+        }
+
 
         private void SyncAllContractIcons()
         {
@@ -1186,12 +2392,29 @@ namespace FantasyGuildmaster.Map
                         title = $"Contract #{i + 1}: {region.name}",
                         remainingSeconds = random.Next(45, 300),
                         reward = random.Next(50, 250),
-                        iconKey = PickContractIconKey(i)
+                        iconKey = PickContractIconKey(i),
+                        minRank = i % 3 == 0 ? HunterRank.C : HunterRank.D,
+                        allowSquad = i % 5 != 0,
+                        allowSolo = true
                     });
                 }
 
                 _contractsByRegion[region.id] = contracts;
             }
+        }
+
+        private void EnsureHunterRoster()
+        {
+            if (hunterRoster == null)
+            {
+                hunterRoster = FindFirstObjectByType<HunterRoster>();
+                if (hunterRoster == null)
+                {
+                    hunterRoster = gameObject.AddComponent<HunterRoster>();
+                }
+            }
+
+            hunterRoster.EnsureSeededDefaultHunters(_dayIndex);
         }
 
         private void EnsureSquadRoster()
@@ -1218,6 +2441,18 @@ namespace FantasyGuildmaster.Map
             squadRoster?.NotifyChanged();
         }
 
+        private void ApplyRosterChangedPenalty(SquadData squad)
+        {
+            if (squad == null)
+            {
+                return;
+            }
+
+            squad.lastRosterChangeDay = _dayIndex;
+            squad.cohesion = Mathf.Max(0, squad.cohesion - 8);
+            Debug.Log($"[Cohesion] Roster changed squad={squad.id} cohesion={squad.cohesion} day={_dayIndex} [TODO REMOVE]");
+        }
+
         private List<SquadData> GetIdleSquads()
         {
             var squads = GetRosterSquads();
@@ -1231,6 +2466,11 @@ namespace FantasyGuildmaster.Map
             }
 
             return list;
+        }
+
+        private HunterData FindHunter(string hunterId)
+        {
+            return hunterRoster != null ? hunterRoster.GetById(hunterId) : null;
         }
 
         private SquadData FindSquad(string squadId)
@@ -1392,7 +2632,7 @@ namespace FantasyGuildmaster.Map
 
         private void RefreshSquadStatusHud()
         {
-            var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            var now = SimulationTime.NowSeconds;
             if (squadStatusHud != null)
             {
                 squadStatusHud.Sync(GetRosterSquads(), _travelTasks, ResolveRegionName, now);
@@ -1409,6 +2649,56 @@ namespace FantasyGuildmaster.Map
         public IReadOnlyList<TravelTask> GetTravelTasks()
         {
             return _travelTasks;
+        }
+
+        public int GetCurrentDayIndex()
+        {
+            return _dayIndex;
+        }
+
+        public int GetNewRecruitsCount(SquadData squad)
+        {
+            if (squad == null || squad.members == null)
+            {
+                return 0;
+            }
+
+            var count = 0;
+            for (var i = 0; i < squad.members.Count; i++)
+            {
+                var member = squad.members[i];
+                if (member != null && member.joinedDay == _dayIndex)
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+
+        public int GetSquadCohesionModifier(SquadData squad, int dayIndex)
+        {
+            if (squad == null)
+            {
+                return 0;
+            }
+
+            var modFromCohesion = Mathf.RoundToInt((squad.cohesion - 50) / 5f);
+            var newbieCount = 0;
+            if (squad.members != null)
+            {
+                for (var i = 0; i < squad.members.Count; i++)
+                {
+                    var member = squad.members[i];
+                    if (member != null && member.joinedDay == dayIndex)
+                    {
+                        newbieCount++;
+                    }
+                }
+            }
+
+            var modFromNewbies = Mathf.Max(-15, -5 * newbieCount);
+            return Mathf.Clamp(modFromCohesion + modFromNewbies, -25, 15);
         }
 
         private string ResolveRegionName(string regionId)
@@ -1450,6 +2740,7 @@ namespace FantasyGuildmaster.Map
             _selectedSquadId = squadId;
             squadDetailsPanel?.Refresh();
             RefreshSquadStatusHud();
+            UpdateEndDayUiState();
         }
 
         public string GetSelectedSquadId()
@@ -1469,9 +2760,63 @@ namespace FantasyGuildmaster.Map
             return FindTaskForSquad(squadId);
         }
 
+        public IReadOnlyList<HunterData> GetSoloHunters()
+        {
+            return hunterRoster != null ? hunterRoster.GetSoloHunters() : new List<HunterData>();
+        }
+
+        public TravelTask GetTravelTaskForSoloHunter(string hunterId)
+        {
+            if (string.IsNullOrEmpty(hunterId))
+            {
+                return null;
+            }
+
+            for (var i = 0; i < _travelTasks.Count; i++)
+            {
+                var task = _travelTasks[i];
+                if (task != null && task.soloHunterId == hunterId)
+                {
+                    return task;
+                }
+            }
+
+            return null;
+        }
+
         public string GetRegionNameById(string regionId)
         {
             return ResolveRegionName(regionId);
+        }
+
+        private HunterRank GetSquadEffectiveRank(SquadData squad)
+        {
+            if (squad == null)
+            {
+                return HunterRank.E;
+            }
+
+            var minRank = HunterRank.S;
+            var hasAny = false;
+            if (hunterRoster != null && squad.hunterIds != null)
+            {
+                for (var i = 0; i < squad.hunterIds.Count; i++)
+                {
+                    var hunter = hunterRoster.GetById(squad.hunterIds[i]);
+                    if (hunter == null)
+                    {
+                        continue;
+                    }
+
+                    hasAny = true;
+                    if (hunter.rank < minRank)
+                    {
+                        minRank = hunter.rank;
+                    }
+                }
+            }
+
+            return hasAny ? minRank : HunterRank.E;
         }
 
         private static string ToTimerText(int remainingSeconds)
