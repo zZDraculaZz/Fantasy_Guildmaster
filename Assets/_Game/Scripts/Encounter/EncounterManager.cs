@@ -26,6 +26,8 @@ namespace FantasyGuildmaster.Encounter
         private Action<int> _addGold;
         private Action<string> _onSquadDestroyed;
         private Action _onSquadChanged;
+        private Func<SquadData, int, int> _getCohesionModifier;
+        private Func<int> _getDayIndex;
         private bool _isPresentingEncounter;
         private Canvas _fallbackCanvas;
 
@@ -42,12 +44,14 @@ namespace FantasyGuildmaster.Encounter
             encounterPanel = panel;
         }
 
-        public void Configure(Func<string, SquadData> resolveSquad, Action<int> addGold, Action<string> onSquadDestroyed, Action onSquadChanged = null)
+        public void Configure(Func<string, SquadData> resolveSquad, Action<int> addGold, Action<string> onSquadDestroyed, Action onSquadChanged = null, Func<SquadData, int, int> getCohesionModifier = null, Func<int> getDayIndex = null)
         {
             _resolveSquad = resolveSquad;
             _addGold = addGold;
             _onSquadDestroyed = onSquadDestroyed;
             _onSquadChanged = onSquadChanged;
+            _getCohesionModifier = getCohesionModifier;
+            _getDayIndex = getDayIndex;
         }
 
         public void EnqueueEncounter(string regionId, string squadId, Action onEncounterClosed)
@@ -165,8 +169,27 @@ namespace FantasyGuildmaster.Encounter
                 return;
             }
 
-            var success = UnityEngine.Random.value <= option.successChance;
             var squad = _resolveSquad?.Invoke(request.squadId);
+            var dayIndex = _getDayIndex != null ? _getDayIndex() : 0;
+            var modifier = _getCohesionModifier != null ? _getCohesionModifier(squad, dayIndex) : 0;
+            var newbieCount = 0;
+            if (squad != null && squad.members != null)
+            {
+                for (var i = 0; i < squad.members.Count; i++)
+                {
+                    var member = squad.members[i];
+                    if (member != null && member.joinedDay == dayIndex)
+                    {
+                        newbieCount++;
+                    }
+                }
+            }
+
+            var baseChance = Mathf.RoundToInt(option.successChance * 100f);
+            var finalChance = Mathf.Clamp(baseChance + modifier, 5, 95);
+            var roll = UnityEngine.Random.Range(1, 101);
+            var success = roll <= finalChance;
+            Debug.Log($"[Cohesion] squad={request.squadId} cohesion={(squad != null ? squad.cohesion : 0)} newbie={newbieCount} mod={modifier} base={baseChance} final={finalChance} roll={roll} [TODO REMOVE]");
             var result = success ? option.successText : option.failText;
 
             if (success && option.goldReward > 0)
@@ -174,14 +197,20 @@ namespace FantasyGuildmaster.Encounter
                 _addGold?.Invoke(option.goldReward);
             }
 
-            if (!success && option.hpLoss > 0 && squad != null)
+            if (!success && squad != null)
             {
-                squad.hp = Mathf.Max(0, squad.hp - option.hpLoss);
-                if (squad.hp <= 0)
+                squad.cohesion = Mathf.Clamp(squad.cohesion - 4, 0, 100);
+                Debug.Log($"[Cohesion] After mission squad={squad.id} cohesion={squad.cohesion} delta=-4 [TODO REMOVE]");
+
+                if (option.hpLoss > 0)
                 {
-                    squad.state = SquadState.Destroyed;
-                    _onSquadDestroyed?.Invoke(squad.id);
-                    result += "\nSquad destroyed";
+                    squad.hp = Mathf.Max(0, squad.hp - option.hpLoss);
+                    if (squad.hp <= 0)
+                    {
+                        squad.state = SquadState.Destroyed;
+                        _onSquadDestroyed?.Invoke(squad.id);
+                        result += "\nSquad destroyed";
+                    }
                 }
 
                 _onSquadChanged?.Invoke();

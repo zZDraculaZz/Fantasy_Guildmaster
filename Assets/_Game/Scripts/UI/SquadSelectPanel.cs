@@ -42,12 +42,22 @@ namespace FantasyGuildmaster.UI
                 var label = button.GetComponentInChildren<TMP_Text>();
                 if (label != null)
                 {
-                    label.text = $"{squad.name} ({squad.membersCount})";
+                    var exhaustedTag = squad.exhausted ? " - Exhausted" : string.Empty;
+                    label.text = $"{squad.name} ({squad.membersCount}){exhaustedTag}";
+                    label.textWrappingMode = TextWrappingModes.NoWrap;
+                    label.overflowMode = TextOverflowModes.Ellipsis;
                 }
 
+                button.interactable = !squad.exhausted;
                 button.onClick.RemoveAllListeners();
                 button.onClick.AddListener(() =>
                 {
+                    if (squad.exhausted)
+                    {
+                        Debug.LogWarning($"[Assign] blocked exhausted squad={squad.id} [TODO REMOVE]");
+                        return;
+                    }
+
                     onSelected?.Invoke(squad);
                     Hide();
                 });

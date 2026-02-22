@@ -59,7 +59,7 @@ namespace FantasyGuildmaster.Map
         private string _selectedSquadId;
         private readonly Queue<MissionReportData> _pendingReports = new();
         private bool _reportOpen;
-        private int _dayIndex = 1;
+        private int _dayIndex = 0;
         private GuildHallEveningData _guildHallEveningData;
         private float _stuckPauseSince = -1f;
         private DayState _dayState = DayState.MapActive;
@@ -95,7 +95,7 @@ namespace FantasyGuildmaster.Map
 
             if (encounterManager != null)
             {
-                encounterManager.Configure(FindSquad, AddGold, HandleSquadDestroyed, NotifyRosterChanged);
+                encounterManager.Configure(FindSquad, AddGold, HandleSquadDestroyed, NotifyRosterChanged, GetSquadCohesionModifier, GetCurrentDayIndex);
             }
 
             if (detailsPanel != null)
@@ -388,8 +388,6 @@ namespace FantasyGuildmaster.Map
         {
             EnsureMissionReportPanel();
             EnsureGuildHallPanel();
-            _dayState = DayState.MapActive;
-            _endDayRequested = false;
             if (missionReportPanel == null || _reportOpen || missionReportPanel.IsOpen || _pendingReports.Count == 0)
             {
                 return;
@@ -417,6 +415,19 @@ namespace FantasyGuildmaster.Map
 
             AddGold(report.rewardGold);
             CompleteContract(report.regionId, report.contractId);
+
+            var reportSquad = FindSquad(report.squadId);
+            if (reportSquad != null)
+            {
+                reportSquad.exhausted = true;
+                reportSquad.contractsDoneToday++;
+                Debug.Log($"[Squad] Exhausted after contract squad={reportSquad.id} day={_dayIndex} contractsToday={reportSquad.contractsDoneToday} [TODO REMOVE]");
+
+                var cohesionDelta = reportSquad.lastRosterChangeDay == _dayIndex ? 1 : 3;
+                reportSquad.cohesion = Mathf.Clamp(reportSquad.cohesion + cohesionDelta, 0, 100);
+                Debug.Log($"[Cohesion] After mission squad={reportSquad.id} cohesion={reportSquad.cohesion} delta={cohesionDelta} [TODO REMOVE]");
+            }
+
             missionReportPanel?.Hide();
             _reportOpen = false;
             Debug.Log($"[Report] Applied+Closed: squad={report.squadId} contract={report.contractId} reward={report.rewardGold} [TODO REMOVE]");
@@ -534,8 +545,6 @@ namespace FantasyGuildmaster.Map
         {
             Debug.Log("[GuildHall] Enter evening [TODO REMOVE]");
             EnsureGuildHallPanel();
-            _dayState = DayState.MapActive;
-            _endDayRequested = false;
             if (guildHallPanel == null)
             {
                 Debug.LogWarning("[GuildHall] Panel missing, skipping evening. [TODO REMOVE]");
@@ -587,9 +596,24 @@ namespace FantasyGuildmaster.Map
         private void OnGuildHallNextDay()
         {
             guildHallPanel?.Hide();
-            _dayState = DayState.MapActive;
-            _endDayRequested = false;
             _dayIndex++;
+            var squads = GetRosterSquads();
+            for (var i = 0; i < squads.Count; i++)
+            {
+                var squad = squads[i];
+                if (squad == null)
+                {
+                    continue;
+                }
+
+                squad.exhausted = false;
+                squad.contractsDoneToday = 0;
+                if (squad.lastRosterChangeDay != _dayIndex - 1)
+                {
+                    squad.cohesion = Mathf.Clamp(squad.cohesion + 1, 0, 100);
+                }
+            }
+
             RefreshContractsForNextDay();
             SyncAllContractIcons();
 
@@ -598,7 +622,7 @@ namespace FantasyGuildmaster.Map
                 detailsPanel.SetIdleSquadsCount(GetIdleSquads().Count);
             }
 
-            Debug.Log($"[GuildHall] Next Day dayIndex={_dayIndex} [TODO REMOVE]");
+            Debug.Log($"[Day] NextDay dayIndex={_dayIndex} reset exhausted for all squads [TODO REMOVE]");
         }
 
         private void RefreshContractsForNextDay()
@@ -1466,6 +1490,17 @@ namespace FantasyGuildmaster.Map
 
             squadSelectPanel.Show(idle, squad =>
             {
+                if (squad == null)
+                {
+                    return;
+                }
+
+                if (squad.exhausted)
+                {
+                    Debug.LogWarning($"[Assign] blocked exhausted squad={squad.id} day={_dayIndex} [TODO REMOVE]");
+                    return;
+                }
+
                 StartTravelTask(squad, GuildHqId, region.id, contract.id, contract.reward, TravelPhase.Outbound);
                 squad.state = SquadState.TravelingToRegion;
                 NotifyRosterChanged();
@@ -1716,6 +1751,18 @@ namespace FantasyGuildmaster.Map
             squadRoster?.NotifyChanged();
         }
 
+        private void ApplyRosterChangedPenalty(SquadData squad)
+        {
+            if (squad == null)
+            {
+                return;
+            }
+
+            squad.lastRosterChangeDay = _dayIndex;
+            squad.cohesion = Mathf.Max(0, squad.cohesion - 8);
+            Debug.Log($"[Cohesion] Roster changed squad={squad.id} cohesion={squad.cohesion} day={_dayIndex} [TODO REMOVE]");
+        }
+
         private List<SquadData> GetIdleSquads()
         {
             var squads = GetRosterSquads();
@@ -1907,6 +1954,56 @@ namespace FantasyGuildmaster.Map
         public IReadOnlyList<TravelTask> GetTravelTasks()
         {
             return _travelTasks;
+        }
+
+        public int GetCurrentDayIndex()
+        {
+            return _dayIndex;
+        }
+
+        public int GetNewRecruitsCount(SquadData squad)
+        {
+            if (squad == null || squad.members == null)
+            {
+                return 0;
+            }
+
+            var count = 0;
+            for (var i = 0; i < squad.members.Count; i++)
+            {
+                var member = squad.members[i];
+                if (member != null && member.joinedDay == _dayIndex)
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+
+        public int GetSquadCohesionModifier(SquadData squad, int dayIndex)
+        {
+            if (squad == null)
+            {
+                return 0;
+            }
+
+            var modFromCohesion = Mathf.RoundToInt((squad.cohesion - 50) / 5f);
+            var newbieCount = 0;
+            if (squad.members != null)
+            {
+                for (var i = 0; i < squad.members.Count; i++)
+                {
+                    var member = squad.members[i];
+                    if (member != null && member.joinedDay == dayIndex)
+                    {
+                        newbieCount++;
+                    }
+                }
+            }
+
+            var modFromNewbies = Mathf.Max(-15, -5 * newbieCount);
+            return Mathf.Clamp(modFromCohesion + modFromNewbies, -25, 15);
         }
 
         private string ResolveRegionName(string regionId)
