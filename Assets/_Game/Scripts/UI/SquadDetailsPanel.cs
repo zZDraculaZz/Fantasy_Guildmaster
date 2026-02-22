@@ -12,6 +12,10 @@ namespace FantasyGuildmaster.UI
         [SerializeField] private TMP_Text bodyText;
         [SerializeField] private RectTransform contentContainer;
         [SerializeField] private ScrollRect detailsScrollRect;
+        [SerializeField] private float paddingLeft = 8f;
+        [SerializeField] private float paddingRight = 8f;
+        [SerializeField] private float paddingTop = 42f;
+        [SerializeField] private float paddingBottom = 8f;
 
         [Header("Safe Mode")]
         [SerializeField] private bool forceLegacyText = true;
@@ -108,6 +112,21 @@ namespace FantasyGuildmaster.UI
             }
 
             bodyText.text = sb.ToString();
+            if (forceLegacyText)
+            {
+                if (!_legacyModeLogPrinted)
+                {
+                    _legacyModeLogPrinted = true;
+                    Debug.Log("[SquadDetails] forceLegacyText enabled -> showing TMP block");
+                }
+
+                ConfigureLegacyBodyTextLayout();
+            }
+            else
+            {
+                EnsureScrollAnchorsAndMask();
+            }
+
             RefreshLayout();
         }
 
@@ -256,7 +275,7 @@ namespace FantasyGuildmaster.UI
                 fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
             }
 
-            if (bodyText != null && contentContainer != null && bodyText.transform.parent != contentContainer)
+            if (!forceLegacyText && bodyText != null && contentContainer != null && bodyText.transform.parent != contentContainer)
             {
                 bodyText.transform.SetParent(contentContainer, false);
                 var rect = bodyText.rectTransform;
@@ -377,6 +396,14 @@ namespace FantasyGuildmaster.UI
 
             EnsureDetailsScroll();
             EnsureAutoResizeComponents();
+            if (forceLegacyText)
+            {
+                ConfigureLegacyBodyTextLayout();
+            }
+            else
+            {
+                EnsureScrollAnchorsAndMask();
+            }
         }
     }
 }

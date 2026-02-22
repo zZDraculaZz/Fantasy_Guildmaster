@@ -27,6 +27,7 @@ namespace FantasyGuildmaster.UI
         [SerializeField] private TMP_Text rosterRowPrefab;
 
         [Header("Behavior")]
+        public bool forceLegacyText = true;
         [SerializeField] private float refreshSeconds = 1f;
         [SerializeField] private float paddingLeft = 8f;
         [SerializeField] private float paddingRight = 8f;
@@ -576,7 +577,7 @@ namespace FantasyGuildmaster.UI
                 fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
             }
 
-            if (bodyText != null && rosterContent != null && bodyText.transform.parent != rosterContent)
+            if (!forceLegacyText && bodyText != null && rosterContent != null && bodyText.transform.parent != rosterContent)
             {
                 bodyText.transform.SetParent(rosterContent, false);
             }
