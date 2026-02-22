@@ -1,10 +1,10 @@
 {
   "forcedIntroSceneId": "forced_01",
   "characters": [
-    { "id": "quartermaster", "displayName": "Quartermaster", "talkSceneId": "talk_quartermaster", "posX": 0.30, "posY": 0.55 },
-    { "id": "captain", "displayName": "Captain", "talkSceneId": "talk_captain", "posX": 0.62, "posY": 0.55 },
-    { "id": "roster", "displayName": "Roster Desk", "talkSceneId": "review_roster", "posX": 0.46, "posY": 0.38 },
-    { "id": "rest", "displayName": "Dormitory", "talkSceneId": "rest_evening", "posX": 0.78, "posY": 0.35 }
+    { "id": "quartermaster", "displayName": "Quartermaster", "talkSceneId": "talk_quartermaster", "posX": 0.25, "posY": 0.60 },
+    { "id": "captain", "displayName": "Captain", "talkSceneId": "talk_captain", "posX": 0.55, "posY": 0.60 },
+    { "id": "roster_desk", "displayName": "Roster Desk", "talkSceneId": "open_roster", "posX": 0.40, "posY": 0.35 },
+    { "id": "dormitory", "displayName": "Dormitory", "talkSceneId": "rest_evening", "posX": 0.75, "posY": 0.35 }
   ],
   "scenes": [
     {
@@ -28,9 +28,9 @@
       ]
     },
     {
-      "id": "review_roster",
+      "id": "open_roster",
       "lines": [
-        { "speaker": "Guildmaster", "text": "Roster reviewed. No one goes out without proper rest." }
+        { "speaker": "Guildmaster", "text": "Roster reviewed. Squad details look stable for tomorrow." }
       ]
     },
     {

@@ -389,7 +389,7 @@ namespace FantasyGuildmaster.Map
             }
 
             EnsureEventSystem();
-            guildHallPanel.ShowEvening(_guildHallEveningData, OnGuildHallNextDay, ApplyRestEveningEffect);
+            guildHallPanel.ShowEvening(_guildHallEveningData, _dayIndex, OnGuildHallNextDay, ApplyRestEveningEffect);
         }
 
         private void ApplyRestEveningEffect()
@@ -589,97 +589,120 @@ namespace FantasyGuildmaster.Map
             root.transform.SetAsLastSibling();
 
             var dimmer = root.GetComponent<Image>();
-            dimmer.color = new Color(0f, 0f, 0f, 0.72f);
+            dimmer.color = new Color(0f, 0f, 0f, 0.65f);
             dimmer.raycastTarget = true;
 
-            var content = new GameObject("Content", typeof(RectTransform), typeof(Image), typeof(VerticalLayoutGroup));
+            var content = new GameObject("Content", typeof(RectTransform));
             content.transform.SetParent(root.transform, false);
             var contentRect = content.GetComponent<RectTransform>();
-            contentRect.anchorMin = new Vector2(0.5f, 0.5f);
-            contentRect.anchorMax = new Vector2(0.5f, 0.5f);
-            contentRect.pivot = new Vector2(0.5f, 0.5f);
-            contentRect.sizeDelta = new Vector2(1000f, 560f);
+            contentRect.anchorMin = Vector2.zero;
+            contentRect.anchorMax = Vector2.one;
+            contentRect.offsetMin = Vector2.zero;
+            contentRect.offsetMax = Vector2.zero;
             content.transform.SetAsLastSibling();
 
-            var contentImage = content.GetComponent<Image>();
-            contentImage.color = new Color(0.12f, 0.1f, 0.09f, 0.98f);
-            var contentLayout = content.GetComponent<VerticalLayoutGroup>();
-            contentLayout.padding = new RectOffset(18, 18, 16, 16);
-            contentLayout.spacing = 10f;
-            contentLayout.childControlWidth = true;
-            contentLayout.childControlHeight = false;
-            contentLayout.childForceExpandWidth = true;
-            contentLayout.childForceExpandHeight = false;
-
-            var backgroundGo = new GameObject("Background", typeof(RectTransform), typeof(Image), typeof(LayoutElement));
-            backgroundGo.transform.SetParent(content.transform, false);
-            var backgroundRect = backgroundGo.GetComponent<RectTransform>();
-            backgroundRect.anchorMin = new Vector2(0f, 0f);
-            backgroundRect.anchorMax = new Vector2(1f, 1f);
-            var backgroundImage = backgroundGo.GetComponent<Image>();
-            backgroundImage.color = new Color(0.18f, 0.15f, 0.12f, 1f);
+            var backgroundLayer = new GameObject("BackgroundLayer", typeof(RectTransform), typeof(Image));
+            backgroundLayer.transform.SetParent(content.transform, false);
+            var backgroundRect = backgroundLayer.GetComponent<RectTransform>();
+            backgroundRect.anchorMin = Vector2.zero;
+            backgroundRect.anchorMax = Vector2.one;
+            backgroundRect.offsetMin = Vector2.zero;
+            backgroundRect.offsetMax = Vector2.zero;
+            var backgroundImage = backgroundLayer.GetComponent<Image>();
+            backgroundImage.color = new Color(0.15f, 0.13f, 0.1f, 1f);
             backgroundImage.raycastTarget = false;
-            var backgroundLayout = backgroundGo.GetComponent<LayoutElement>();
-            backgroundLayout.minHeight = 380f;
-            backgroundLayout.flexibleHeight = 1f;
 
-            var hub = new GameObject("Hub", typeof(RectTransform), typeof(VerticalLayoutGroup));
-            hub.transform.SetParent(content.transform, false);
-            var hubLayout = hub.GetComponent<VerticalLayoutGroup>();
-            hubLayout.spacing = 6f;
-            hubLayout.childControlWidth = true;
-            hubLayout.childControlHeight = false;
-            hubLayout.childForceExpandWidth = true;
-            hubLayout.childForceExpandHeight = false;
-
-            var hubTitle = CreateText(hub.transform, "Title", 36f, FontStyles.Bold, TextAlignmentOptions.Center);
-            hubTitle.text = "GUILD HALL";
-            var hubSubtitle = CreateText(hub.transform, "Subtitle", 22f, FontStyles.Normal, TextAlignmentOptions.Center);
-            hubSubtitle.text = "Evening activities";
-            var hubHint = CreateText(hub.transform, "Hint", 18f, FontStyles.Italic, TextAlignmentOptions.Center);
-            hubHint.text = "Click a character to talk";
-
-            var stageGo = new GameObject("Stage", typeof(RectTransform), typeof(Image), typeof(LayoutElement));
-            stageGo.transform.SetParent(hub.transform, false);
-            var stageRect = stageGo.GetComponent<RectTransform>();
-            stageRect.anchorMin = new Vector2(0f, 0f);
-            stageRect.anchorMax = new Vector2(1f, 1f);
-            var stageImage = stageGo.GetComponent<Image>();
-            stageImage.color = new Color(0.24f, 0.2f, 0.16f, 0.6f);
+            var stageLayer = new GameObject("StageLayer", typeof(RectTransform), typeof(Image));
+            stageLayer.transform.SetParent(content.transform, false);
+            var stageRect = stageLayer.GetComponent<RectTransform>();
+            stageRect.anchorMin = new Vector2(0.05f, 0.20f);
+            stageRect.anchorMax = new Vector2(0.95f, 0.88f);
+            stageRect.offsetMin = Vector2.zero;
+            stageRect.offsetMax = Vector2.zero;
+            var stageImage = stageLayer.GetComponent<Image>();
+            stageImage.color = new Color(0.25f, 0.2f, 0.16f, 0.38f);
             stageImage.raycastTarget = false;
-            var stageLayout = stageGo.GetComponent<LayoutElement>();
-            stageLayout.minHeight = 300f;
-            stageLayout.flexibleHeight = 1f;
 
-            var nextDayButton = CreateButton(hub.transform, "NextDayButton", "Next Day");
+            var topBar = new GameObject("TopBar", typeof(RectTransform), typeof(Image));
+            topBar.transform.SetParent(content.transform, false);
+            var topRect = topBar.GetComponent<RectTransform>();
+            topRect.anchorMin = new Vector2(0.02f, 0.90f);
+            topRect.anchorMax = new Vector2(0.98f, 0.98f);
+            topRect.offsetMin = Vector2.zero;
+            topRect.offsetMax = Vector2.zero;
+            var topImage = topBar.GetComponent<Image>();
+            topImage.color = new Color(0.08f, 0.08f, 0.09f, 0.72f);
+            topImage.raycastTarget = false;
 
-            var dialogue = new GameObject("Dialogue", typeof(RectTransform), typeof(VerticalLayoutGroup));
-            dialogue.transform.SetParent(content.transform, false);
-            var dialogueLayout = dialogue.GetComponent<VerticalLayoutGroup>();
-            dialogueLayout.spacing = 8f;
-            dialogueLayout.childControlWidth = true;
-            dialogueLayout.childControlHeight = false;
-            dialogueLayout.childForceExpandWidth = true;
-            dialogueLayout.childForceExpandHeight = false;
+            var title = CreateText(topBar.transform, "Title", 34f, FontStyles.Bold, TextAlignmentOptions.Left);
+            title.text = "GUILD HALL";
+            var titleRect = title.rectTransform;
+            titleRect.anchorMin = new Vector2(0f, 0f);
+            titleRect.anchorMax = new Vector2(0.7f, 1f);
+            titleRect.offsetMin = new Vector2(20f, 0f);
+            titleRect.offsetMax = Vector2.zero;
 
-            var speaker = CreateText(dialogue.transform, "Speaker", 30f, FontStyles.Bold, TextAlignmentOptions.Left);
-            var body = CreateText(dialogue.transform, "Body", 24f, FontStyles.Normal, TextAlignmentOptions.TopLeft);
+            var day = CreateText(topBar.transform, "Day", 26f, FontStyles.Bold, TextAlignmentOptions.Right);
+            day.text = "Day 1";
+            var dayRect = day.rectTransform;
+            dayRect.anchorMin = new Vector2(0.45f, 0f);
+            dayRect.anchorMax = new Vector2(0.8f, 1f);
+            dayRect.offsetMin = Vector2.zero;
+            dayRect.offsetMax = Vector2.zero;
+
+            var nextDayButton = CreateButton(topBar.transform, "NextDayButton", "Next Day");
+            var nextDayRect = (RectTransform)nextDayButton.transform;
+            nextDayRect.anchorMin = new Vector2(0.82f, 0.14f);
+            nextDayRect.anchorMax = new Vector2(0.99f, 0.86f);
+            nextDayRect.offsetMin = Vector2.zero;
+            nextDayRect.offsetMax = Vector2.zero;
+
+            var dialogueBar = new GameObject("DialogueBar", typeof(RectTransform), typeof(Image));
+            dialogueBar.transform.SetParent(content.transform, false);
+            var dialogueRect = dialogueBar.GetComponent<RectTransform>();
+            dialogueRect.anchorMin = new Vector2(0.02f, 0.02f);
+            dialogueRect.anchorMax = new Vector2(0.98f, 0.30f);
+            dialogueRect.offsetMin = Vector2.zero;
+            dialogueRect.offsetMax = Vector2.zero;
+            var dialogueImage = dialogueBar.GetComponent<Image>();
+            dialogueImage.color = new Color(0.06f, 0.07f, 0.09f, 0.88f);
+            dialogueImage.raycastTarget = true;
+
+            var speaker = CreateText(dialogueBar.transform, "Speaker", 28f, FontStyles.Bold, TextAlignmentOptions.Left);
+            var speakerRect = speaker.rectTransform;
+            speakerRect.anchorMin = new Vector2(0.02f, 0.72f);
+            speakerRect.anchorMax = new Vector2(0.52f, 0.98f);
+            speakerRect.offsetMin = Vector2.zero;
+            speakerRect.offsetMax = Vector2.zero;
+
+            var body = CreateText(dialogueBar.transform, "Body", 24f, FontStyles.Normal, TextAlignmentOptions.TopLeft);
             body.textWrappingMode = TextWrappingModes.Normal;
-            var bodyLayout = body.gameObject.GetComponent<LayoutElement>() ?? body.gameObject.AddComponent<LayoutElement>();
-            bodyLayout.minHeight = 260f;
-            bodyLayout.flexibleHeight = 1f;
+            var bodyRect = body.rectTransform;
+            bodyRect.anchorMin = new Vector2(0.02f, 0.12f);
+            bodyRect.anchorMax = new Vector2(0.74f, 0.70f);
+            bodyRect.offsetMin = Vector2.zero;
+            bodyRect.offsetMax = Vector2.zero;
 
-            var dialogueButtons = new GameObject("Buttons", typeof(RectTransform), typeof(HorizontalLayoutGroup));
-            dialogueButtons.transform.SetParent(dialogue.transform, false);
-            var dialogueButtonsLayout = dialogueButtons.GetComponent<HorizontalLayoutGroup>();
-            dialogueButtonsLayout.spacing = 10f;
-            dialogueButtonsLayout.childControlWidth = true;
-            dialogueButtonsLayout.childControlHeight = true;
-            dialogueButtonsLayout.childForceExpandWidth = true;
+            var buttons = new GameObject("Buttons", typeof(RectTransform), typeof(HorizontalLayoutGroup));
+            buttons.transform.SetParent(dialogueBar.transform, false);
+            var buttonsRect = buttons.GetComponent<RectTransform>();
+            buttonsRect.anchorMin = new Vector2(0.76f, 0.12f);
+            buttonsRect.anchorMax = new Vector2(0.98f, 0.88f);
+            buttonsRect.offsetMin = Vector2.zero;
+            buttonsRect.offsetMax = Vector2.zero;
+            var buttonsLayout = buttons.GetComponent<HorizontalLayoutGroup>();
+            buttonsLayout.spacing = 10f;
+            buttonsLayout.childControlWidth = true;
+            buttonsLayout.childControlHeight = true;
+            buttonsLayout.childForceExpandWidth = true;
 
-            var nextButton = CreateButton(dialogueButtons.transform, "NextButton", "Next");
-            var skipButton = CreateButton(dialogueButtons.transform, "SkipButton", "Skip");
-            var backButton = CreateButton(dialogueButtons.transform, "BackButton", "Back to Hall");
+            var nextButton = CreateButton(buttons.transform, "NextButton", "Next");
+            var skipButton = CreateButton(buttons.transform, "SkipButton", "Skip");
+
+            dialogueBar.SetActive(false);
+            stageLayer.transform.SetAsLastSibling();
+            dialogueBar.transform.SetAsLastSibling();
+            topBar.transform.SetAsLastSibling();
 
             var panel = root.GetComponent<GuildHallPanel>();
             panel.ConfigureRuntimeBindings(
@@ -687,18 +710,15 @@ namespace FantasyGuildmaster.Map
                 dimmer,
                 contentRect,
                 backgroundImage,
-                hub,
-                hubTitle,
-                hubSubtitle,
-                hubHint,
                 stageRect,
+                title,
+                day,
                 nextDayButton,
-                dialogue,
+                dialogueBar,
                 speaker,
                 body,
                 nextButton,
-                skipButton,
-                backButton);
+                skipButton);
             panel.Hide();
             return panel;
         }
