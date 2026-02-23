@@ -736,6 +736,7 @@ namespace FantasyGuildmaster.UI
                 rosterContent.anchorMax = new Vector2(1f, 1f);
                 rosterContent.pivot = new Vector2(0.5f, 1f);
                 rosterContent.anchoredPosition = Vector2.zero;
+<<<<<<< fix-rosterscroll-ui-overlapping-and-scrolling-issues-zhl5hq
 
                 var layout = rosterContent.GetComponent<VerticalLayoutGroup>();
                 var drivenByLayoutGroup = layout != null && layout.enabled;
@@ -882,6 +883,175 @@ namespace FantasyGuildmaster.UI
             }
 
             return scrollbar;
+=======
+
+                var layout = rosterContent.GetComponent<VerticalLayoutGroup>();
+                var drivenByLayoutGroup = layout != null && layout.enabled;
+                if (layout != null)
+                {
+                    layout.childControlWidth = false;
+                    layout.childControlHeight = false;
+                    layout.childForceExpandWidth = false;
+                    layout.childForceExpandHeight = false;
+                    layout.enabled = false;
+                }
+
+                var fitter = rosterContent.GetComponent<ContentSizeFitter>() ?? rosterContent.gameObject.AddComponent<ContentSizeFitter>();
+                fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+                fitter.verticalFit = ContentSizeFitter.FitMode.Unconstrained;
+                fitter.enabled = false;
+
+                if (bodyText != null)
+                {
+                    if (bodyText.transform.parent != rosterContent)
+                    {
+                        bodyText.transform.SetParent(rosterContent, false);
+                    }
+
+                    var bodyRect = bodyText.rectTransform;
+                    bodyRect.anchorMin = new Vector2(0f, 1f);
+                    bodyRect.anchorMax = new Vector2(1f, 1f);
+                    bodyRect.pivot = new Vector2(0.5f, 1f);
+                    bodyRect.anchoredPosition = Vector2.zero;
+                    bodyRect.offsetMin = new Vector2(paddingLeft, -paddingBottom);
+                    bodyRect.offsetMax = new Vector2(-paddingRight, -paddingTop);
+
+                    var bodyFitter = bodyText.GetComponent<ContentSizeFitter>();
+                    if (bodyFitter != null)
+                    {
+                        bodyFitter.enabled = false;
+                    }
+
+                    bodyText.textWrappingMode = TextWrappingModes.Normal;
+                    bodyText.overflowMode = TextOverflowModes.Masking;
+                    bodyText.raycastTarget = false;
+                }
+
+                rosterScrollRect.content = rosterContent;
+                rosterScrollRect.viewport = rosterViewport;
+                rosterScrollRect.horizontal = false;
+                rosterScrollRect.vertical = true;
+                rosterScrollRect.movementType = ScrollRect.MovementType.Clamped;
+                rosterScrollRect.inertia = true;
+
+                if (verticalScrollbar != null)
+                {
+                    var scrollbarRect = verticalScrollbar.transform as RectTransform;
+                    if (scrollbarRect != null)
+                    {
+                        if (scrollbarRect.parent != rosterScrollRect.transform)
+                        {
+                            scrollbarRect.SetParent(rosterScrollRect.transform, false);
+                        }
+
+                        scrollbarRect.anchorMin = new Vector2(1f, 0f);
+                        scrollbarRect.anchorMax = new Vector2(1f, 1f);
+                        scrollbarRect.pivot = new Vector2(1f, 1f);
+                        scrollbarRect.sizeDelta = new Vector2(18f, scrollbarRect.sizeDelta.y);
+                        scrollbarRect.anchoredPosition = Vector2.zero;
+                        scrollbarRect.SetAsLastSibling();
+                    }
+
+                    rosterScrollRect.verticalScrollbar = verticalScrollbar;
+                    rosterScrollRect.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.AutoHideAndExpandViewport;
+                    rosterScrollRect.verticalScrollbarSpacing = 2f;
+                }
+
+                if (!_scrollFixLogPrinted)
+                {
+                    _scrollFixLogPrinted = true;
+                    var pivotInfo = rosterContent.pivot;
+                    Debug.Log($"[ScrollFix] RosterScroll wired: vis={rosterScrollRect.verticalScrollbarVisibility} contentPivot={pivotInfo} drivenByLayoutGroup={drivenByLayoutGroup} [TODO REMOVE]");
+                }
+
+                _scrollSetupDone = true;
+            }
+        }
+
+
+        private Scrollbar EnsureRosterVerticalScrollbar()
+        {
+            if (rosterScrollRect == null)
+            {
+                return null;
+            }
+
+            var scrollbar = rosterScrollRect.verticalScrollbar;
+            var scrollbarRect = rosterScrollRect.transform.Find("Scrollbar Vertical") as RectTransform;
+            if (scrollbar == null && scrollbarRect != null)
+            {
+                scrollbar = scrollbarRect.GetComponent<Scrollbar>() ?? scrollbarRect.gameObject.AddComponent<Scrollbar>();
+            }
+
+            if (scrollbar == null)
+            {
+                scrollbarRect = new GameObject("Scrollbar Vertical", typeof(RectTransform), typeof(Image), typeof(Scrollbar)).GetComponent<RectTransform>();
+                scrollbarRect.SetParent(rosterScrollRect.transform, false);
+
+                var bg = scrollbarRect.GetComponent<Image>();
+                bg.color = new Color(0.95f, 0.95f, 0.95f, 0.45f);
+
+                var slidingArea = new GameObject("Sliding Area", typeof(RectTransform)).GetComponent<RectTransform>();
+                slidingArea.SetParent(scrollbarRect, false);
+                slidingArea.anchorMin = Vector2.zero;
+                slidingArea.anchorMax = Vector2.one;
+                slidingArea.offsetMin = new Vector2(2f, 2f);
+                slidingArea.offsetMax = new Vector2(-2f, -2f);
+
+                var handle = new GameObject("Handle", typeof(RectTransform), typeof(Image)).GetComponent<RectTransform>();
+                handle.SetParent(slidingArea, false);
+                handle.anchorMin = Vector2.zero;
+                handle.anchorMax = Vector2.one;
+                handle.offsetMin = Vector2.zero;
+                handle.offsetMax = Vector2.zero;
+                var handleImage = handle.GetComponent<Image>();
+                handleImage.color = new Color(1f, 0.95f, 0.65f, 0.95f);
+
+                scrollbar = scrollbarRect.GetComponent<Scrollbar>();
+                scrollbar.handleRect = handle;
+                scrollbar.targetGraphic = handleImage;
+                scrollbar.direction = Scrollbar.Direction.BottomToTop;
+            }
+
+            var rect = scrollbar.transform as RectTransform;
+            if (rect != null)
+            {
+                if (rect.parent != rosterScrollRect.transform)
+                {
+                    rect.SetParent(rosterScrollRect.transform, false);
+                }
+
+                rect.anchorMin = new Vector2(1f, 0f);
+                rect.anchorMax = new Vector2(1f, 1f);
+                rect.pivot = new Vector2(1f, 1f);
+                rect.sizeDelta = new Vector2(18f, 0f);
+                rect.anchoredPosition = Vector2.zero;
+                rect.SetAsLastSibling();
+            }
+        }
+
+            return scrollbar;
+        }
+
+        private void ConfigureLegacyBodyTextLayout()
+        {
+            if (bodyText == null)
+            {
+                return;
+            }
+
+            if (bodyText.transform.parent != transform)
+            {
+                bodyText.transform.SetParent(transform, false);
+            }
+
+            var rect = bodyText.rectTransform;
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.one;
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.offsetMin = new Vector2(paddingLeft, paddingBottom);
+            rect.offsetMax = new Vector2(-paddingRight, -paddingTop);
+>>>>>>> main
         }
 
         private void ConfigureLegacyBodyTextLayout()
