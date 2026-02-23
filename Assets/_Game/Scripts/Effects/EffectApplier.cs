@@ -20,6 +20,9 @@ namespace FantasyGuildmaster.Effects
         public Func<string, HunterData> resolveHunter;
         public Action<int> addGold;
         public Action<int> addRep;
+        public Action<string> addTag;
+        public Action<string> removeTag;
+        public Action<string> enqueueForcedScene;
         public Action onStateChanged;
     }
 
@@ -122,10 +125,16 @@ namespace FantasyGuildmaster.Effects
                 }
                 case EffectTypes.InjuryAdd:
                 case EffectTypes.CurseAdd:
-                case EffectTypes.TagAdd:
-                case EffectTypes.TagRemove:
-                case EffectTypes.ForcedSceneTrigger:
                     Debug.Log($"[Effects] {effect.type} resolved id={effect.id} tier={effect.tier}");
+                    break;
+                case EffectTypes.TagAdd:
+                    ctx?.addTag?.Invoke(effect.id);
+                    break;
+                case EffectTypes.TagRemove:
+                    ctx?.removeTag?.Invoke(effect.id);
+                    break;
+                case EffectTypes.ForcedSceneTrigger:
+                    ctx?.enqueueForcedScene?.Invoke(effect.id);
                     break;
                 default:
                     Debug.LogWarning($"[Effects] Unknown effect type: {effect.type}");
