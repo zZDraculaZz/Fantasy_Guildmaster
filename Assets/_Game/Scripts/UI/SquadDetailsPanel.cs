@@ -169,6 +169,7 @@ namespace FantasyGuildmaster.UI
             }
 
             EnsureScrollAnchorsAndMask();
+            EnsureVerticalScrollbar();
             if (bodyText != null && contentContainer != null && bodyText.transform.parent != contentContainer)
             {
                 bodyText.transform.SetParent(contentContainer, false);
@@ -311,6 +312,74 @@ namespace FantasyGuildmaster.UI
             EnsureScrollAnchorsAndMask();
         }
 
+
+        private void EnsureVerticalScrollbar()
+        {
+            if (detailsScrollRect == null)
+            {
+                return;
+            }
+
+            Scrollbar scrollbar = detailsScrollRect.verticalScrollbar;
+            if (scrollbar == null)
+            {
+                var existing = detailsScrollRect.transform.Find("Scrollbar Vertical") as RectTransform;
+                if (existing == null)
+                {
+                    existing = new GameObject("Scrollbar Vertical", typeof(RectTransform), typeof(Image), typeof(Scrollbar)).GetComponent<RectTransform>();
+                    existing.SetParent(detailsScrollRect.transform, false);
+                    existing.anchorMin = new Vector2(1f, 0f);
+                    existing.anchorMax = new Vector2(1f, 1f);
+                    existing.pivot = new Vector2(1f, 1f);
+                    existing.sizeDelta = new Vector2(14f, 0f);
+                    existing.offsetMin = new Vector2(-14f, 0f);
+                    existing.offsetMax = Vector2.zero;
+
+                    var bg = existing.GetComponent<Image>();
+                    bg.color = new Color(1f, 1f, 1f, 0.2f);
+
+                    var slidingArea = new GameObject("Sliding Area", typeof(RectTransform)).GetComponent<RectTransform>();
+                    slidingArea.SetParent(existing, false);
+                    slidingArea.anchorMin = Vector2.zero;
+                    slidingArea.anchorMax = Vector2.one;
+                    slidingArea.offsetMin = new Vector2(2f, 2f);
+                    slidingArea.offsetMax = new Vector2(-2f, -2f);
+
+                    var handle = new GameObject("Handle", typeof(RectTransform), typeof(Image)).GetComponent<RectTransform>();
+                    handle.SetParent(slidingArea, false);
+                    handle.anchorMin = Vector2.zero;
+                    handle.anchorMax = Vector2.one;
+                    handle.offsetMin = Vector2.zero;
+                    handle.offsetMax = Vector2.zero;
+                    handle.GetComponent<Image>().color = new Color(1f, 1f, 1f, 0.75f);
+
+                    scrollbar = existing.GetComponent<Scrollbar>();
+                    scrollbar.handleRect = handle;
+                    scrollbar.targetGraphic = handle.GetComponent<Image>();
+                    scrollbar.direction = Scrollbar.Direction.BottomToTop;
+                    scrollbar.size = 0.2f;
+                }
+                else
+                {
+                    scrollbar = existing.GetComponent<Scrollbar>() ?? existing.gameObject.AddComponent<Scrollbar>();
+                    var handle = existing.Find("Sliding Area/Handle") as RectTransform;
+                    if (handle != null)
+                    {
+                        var handleImage = handle.GetComponent<Image>() ?? handle.gameObject.AddComponent<Image>();
+                        scrollbar.handleRect = handle;
+                        scrollbar.targetGraphic = handleImage;
+                    }
+                    scrollbar.direction = Scrollbar.Direction.BottomToTop;
+                }
+            }
+
+            if (scrollbar != null)
+            {
+                detailsScrollRect.verticalScrollbar = scrollbar;
+                detailsScrollRect.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.AutoHideAndExpandViewport;
+                detailsScrollRect.verticalScrollbarSpacing = 2f;
+            }
+        }
 
         private void ConfigureLegacyBodyTextLayout()
         {
