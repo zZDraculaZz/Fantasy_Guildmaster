@@ -650,12 +650,11 @@ namespace FantasyGuildmaster.UI
                     existing.anchorMin = new Vector2(1f, 0f);
                     existing.anchorMax = new Vector2(1f, 1f);
                     existing.pivot = new Vector2(1f, 1f);
-                    existing.sizeDelta = new Vector2(14f, 0f);
-                    existing.offsetMin = new Vector2(-14f, 0f);
-                    existing.offsetMax = Vector2.zero;
+                    existing.sizeDelta = new Vector2(18f, 0f);
+                    existing.anchoredPosition = Vector2.zero;
 
                     var bg = existing.GetComponent<Image>();
-                    bg.color = new Color(1f, 1f, 1f, 0.2f);
+                    bg.color = new Color(0.95f, 0.95f, 0.95f, 0.55f);
 
                     var slidingArea = new GameObject("Sliding Area", typeof(RectTransform)).GetComponent<RectTransform>();
                     slidingArea.SetParent(existing, false);
@@ -670,13 +669,14 @@ namespace FantasyGuildmaster.UI
                     handle.anchorMax = Vector2.one;
                     handle.offsetMin = Vector2.zero;
                     handle.offsetMax = Vector2.zero;
-                    handle.GetComponent<Image>().color = new Color(1f, 1f, 1f, 0.75f);
+                    handle.GetComponent<Image>().color = new Color(1f, 0.95f, 0.65f, 0.95f);
 
                     scrollbar = existing.GetComponent<Scrollbar>();
                     scrollbar.handleRect = handle;
                     scrollbar.targetGraphic = handle.GetComponent<Image>();
                     scrollbar.direction = Scrollbar.Direction.BottomToTop;
                     scrollbar.size = 0.2f;
+                    existing.SetAsLastSibling();
                 }
                 else
                 {
@@ -689,13 +689,24 @@ namespace FantasyGuildmaster.UI
                         scrollbar.targetGraphic = handleImage;
                     }
                     scrollbar.direction = Scrollbar.Direction.BottomToTop;
+                    existing.SetAsLastSibling();
                 }
             }
 
             if (scrollbar != null)
             {
+                var scrollbarRect = scrollbar.transform as RectTransform;
+                if (scrollbarRect != null)
+                {
+                    scrollbarRect.anchorMin = new Vector2(1f, 0f);
+                    scrollbarRect.anchorMax = new Vector2(1f, 1f);
+                    scrollbarRect.pivot = new Vector2(1f, 1f);
+                    scrollbarRect.sizeDelta = new Vector2(18f, 0f);
+                    scrollbarRect.anchoredPosition = Vector2.zero;
+                    scrollbarRect.SetAsLastSibling();
+                }
                 rosterScrollRect.verticalScrollbar = scrollbar;
-                rosterScrollRect.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.AutoHideAndExpandViewport;
+                rosterScrollRect.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.Permanent;
                 rosterScrollRect.verticalScrollbarSpacing = 2f;
             }
         }
