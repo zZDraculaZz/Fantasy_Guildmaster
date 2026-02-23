@@ -820,7 +820,6 @@ namespace FantasyGuildmaster.UI
             }
         }
 
-
         private Scrollbar EnsureRosterVerticalScrollbar()
         {
             if (rosterScrollRect == null)
@@ -880,7 +879,6 @@ namespace FantasyGuildmaster.UI
                 rect.anchoredPosition = Vector2.zero;
                 rect.SetAsLastSibling();
             }
-        }
 
             return scrollbar;
         }
@@ -903,18 +901,6 @@ namespace FantasyGuildmaster.UI
             rect.pivot = new Vector2(0.5f, 0.5f);
             rect.offsetMin = new Vector2(paddingLeft, paddingBottom);
             rect.offsetMax = new Vector2(-paddingRight, -paddingTop);
-        }
-
-        private float GetBodyTextHeight()
-        {
-            if (bodyText == null)
-            {
-                return 1f;
-            }
-
-            bodyText.ForceMeshUpdate(true);
-            var rendered = bodyText.textBounds.size.y + 12f;
-            return Mathf.Max(1f, bodyText.preferredHeight, rendered);
         }
 
         private void LogRosterRectsOnce()
