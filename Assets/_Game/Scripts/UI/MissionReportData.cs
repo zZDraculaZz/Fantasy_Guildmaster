@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using FantasyGuildmaster.Effects;
 
 namespace FantasyGuildmaster.UI
 {
@@ -17,5 +19,7 @@ namespace FantasyGuildmaster.UI
         public int readinessAfterPercent;
         public string membersSummary;
         public string outcomeText;
+        public List<ResolvedEffect> resolvedEffects = new();
+        public bool effectsApplied;
     }
 }

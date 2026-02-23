@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using FantasyGuildmaster.Effects;
 
 namespace FantasyGuildmaster.Encounter
 {
@@ -12,6 +13,8 @@ namespace FantasyGuildmaster.Encounter
         public string failText;
         public int goldReward;
         public int hpLoss;
+        public List<EffectDef> onSuccessEffects = new();
+        public List<EffectDef> onFailEffects = new();
     }
 
     [Serializable]
