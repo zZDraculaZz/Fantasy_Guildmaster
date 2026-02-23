@@ -24,6 +24,19 @@ namespace FantasyGuildmaster.UI
         private MapController _map;
         private bool _scrollFixLogPrinted;
         private bool _rectDebugLogPrinted;
+        private bool _detailsScrollSetupDone;
+        private bool _detailsScrollMissingLogged;
+
+
+        private void Awake()
+        {
+            EnsureDetailsScrollSetup();
+        }
+
+        private void OnEnable()
+        {
+            EnsureDetailsScrollSetup();
+        }
 
         public void BindMap(MapController map)
         {
@@ -168,8 +181,7 @@ namespace FantasyGuildmaster.UI
                 return;
             }
 
-            EnsureScrollAnchorsAndMask();
-            EnsureVerticalScrollbar();
+            EnsureDetailsScrollSetup();
             var previousNormalized = detailsScrollRect != null ? detailsScrollRect.verticalNormalizedPosition : 1f;
 
             if (bodyText != null && contentContainer != null && bodyText.transform.parent != contentContainer)
@@ -182,15 +194,23 @@ namespace FantasyGuildmaster.UI
             rect.anchorMax = new Vector2(1f, 1f);
             rect.pivot = new Vector2(0.5f, 1f);
             rect.anchoredPosition = Vector2.zero;
-            rect.sizeDelta = Vector2.zero;
+            rect.offsetMin = new Vector2(paddingLeft, -paddingBottom);
+            rect.offsetMax = new Vector2(-paddingRight, -paddingTop);
 
             bodyText.overflowMode = TextOverflowModes.Masking;
             bodyText.raycastTarget = false;
-            var preferredHeight = GetBodyTextHeight();
-            rect.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, preferredHeight);
+            bodyText.ForceMeshUpdate(true);
+            var preferredHeight = Mathf.Max(1f, bodyText.preferredHeight + paddingTop + paddingBottom);
             contentContainer.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, preferredHeight);
             Canvas.ForceUpdateCanvases();
             LayoutRebuilder.ForceRebuildLayoutImmediate(contentContainer);
+
+            if (!_rectDebugLogPrinted && detailsScrollRect != null && detailsScrollRect.viewport != null)
+            {
+                _rectDebugLogPrinted = true;
+                var vbar = detailsScrollRect.verticalScrollbar;
+                Debug.Log($"[DetailsScrollFix] viewportH={detailsScrollRect.viewport.rect.height} contentH={contentContainer.rect.height} prefH={bodyText.preferredHeight} vbar={(vbar != null)} vis={detailsScrollRect.verticalScrollbarVisibility} [TODO REMOVE]");
+            }
             if (detailsScrollRect != null)
             {
                 detailsScrollRect.StopMovement();
@@ -317,87 +337,168 @@ namespace FantasyGuildmaster.UI
                 rect.sizeDelta = Vector2.zero;
             }
 
-            EnsureScrollAnchorsAndMask();
         }
 
 
-        private void EnsureVerticalScrollbar()
+        private void EnsureDetailsScrollSetup()
         {
-            if (detailsScrollRect == null)
+            if (_detailsScrollSetupDone)
             {
                 return;
             }
 
-            Scrollbar scrollbar = detailsScrollRect.verticalScrollbar;
-            if (scrollbar == null)
+            EnsureDetailsScroll();
+            if (detailsScrollRect == null)
             {
-                var existing = detailsScrollRect.transform.Find("Scrollbar Vertical") as RectTransform;
-                if (existing == null)
+                if (!_detailsScrollMissingLogged)
                 {
-                    existing = new GameObject("Scrollbar Vertical", typeof(RectTransform), typeof(Image), typeof(Scrollbar)).GetComponent<RectTransform>();
-                    existing.SetParent(detailsScrollRect.transform, false);
-                    existing.anchorMin = new Vector2(1f, 0f);
-                    existing.anchorMax = new Vector2(1f, 1f);
-                    existing.pivot = new Vector2(1f, 1f);
-                    existing.sizeDelta = new Vector2(18f, 0f);
-                    existing.anchoredPosition = Vector2.zero;
-
-                    var bg = existing.GetComponent<Image>();
-                    bg.color = new Color(0.95f, 0.95f, 0.95f, 0.55f);
-
-                    var slidingArea = new GameObject("Sliding Area", typeof(RectTransform)).GetComponent<RectTransform>();
-                    slidingArea.SetParent(existing, false);
-                    slidingArea.anchorMin = Vector2.zero;
-                    slidingArea.anchorMax = Vector2.one;
-                    slidingArea.offsetMin = new Vector2(2f, 2f);
-                    slidingArea.offsetMax = new Vector2(-2f, -2f);
-
-                    var handle = new GameObject("Handle", typeof(RectTransform), typeof(Image)).GetComponent<RectTransform>();
-                    handle.SetParent(slidingArea, false);
-                    handle.anchorMin = Vector2.zero;
-                    handle.anchorMax = Vector2.one;
-                    handle.offsetMin = Vector2.zero;
-                    handle.offsetMax = Vector2.zero;
-                    handle.GetComponent<Image>().color = new Color(1f, 0.95f, 0.65f, 0.95f);
-
-                    scrollbar = existing.GetComponent<Scrollbar>();
-                    scrollbar.handleRect = handle;
-                    scrollbar.targetGraphic = handle.GetComponent<Image>();
-                    scrollbar.direction = Scrollbar.Direction.BottomToTop;
-                    scrollbar.size = 0.2f;
-                    existing.SetAsLastSibling();
+                    _detailsScrollMissingLogged = true;
+                    Debug.Log("[DetailsScrollFix] Missing ScrollRect reference [TODO REMOVE]");
                 }
-                else
+
+                return;
+            }
+
+            var viewport = detailsScrollRect.viewport != null
+                ? detailsScrollRect.viewport
+                : detailsScrollRect.transform.Find("Viewport") as RectTransform;
+            if (detailsScrollRect.viewport == null)
+            {
+                detailsScrollRect.viewport = viewport;
+            }
+
+            if (contentContainer == null)
+            {
+                contentContainer = detailsScrollRect.content != null
+                    ? detailsScrollRect.content
+                    : viewport != null
+                        ? viewport.Find("Content") as RectTransform
+                        : null;
+            }
+
+            if (bodyText == null)
+            {
+                bodyText = transform.Find("DetailsScroll/Viewport/Content/BodyText")?.GetComponent<TMP_Text>()
+                    ?? transform.Find("BodyText")?.GetComponent<TMP_Text>()
+                    ?? contentContainer?.Find("BodyText")?.GetComponent<TMP_Text>();
+            }
+
+            if (viewport == null || contentContainer == null || bodyText == null)
+            {
+                if (!_detailsScrollMissingLogged)
                 {
-                    scrollbar = existing.GetComponent<Scrollbar>() ?? existing.gameObject.AddComponent<Scrollbar>();
-                    var handle = existing.Find("Sliding Area/Handle") as RectTransform;
-                    if (handle != null)
+                    _detailsScrollMissingLogged = true;
+                    Debug.Log($"[DetailsScrollFix] Missing refs viewport={(viewport != null)} content={(contentContainer != null)} bodyText={(bodyText != null)} [TODO REMOVE]");
+                }
+
+                return;
+            }
+
+            if (viewport.GetComponent<RectMask2D>() == null && viewport.GetComponent<Mask>() == null)
+            {
+                viewport.gameObject.AddComponent<RectMask2D>();
+            }
+
+            viewport.anchorMin = Vector2.zero;
+            viewport.anchorMax = Vector2.one;
+            viewport.offsetMin = Vector2.zero;
+            viewport.offsetMax = Vector2.zero;
+
+            if (contentContainer.parent != viewport)
+            {
+                contentContainer.SetParent(viewport, false);
+            }
+
+            contentContainer.anchorMin = new Vector2(0f, 1f);
+            contentContainer.anchorMax = new Vector2(1f, 1f);
+            contentContainer.pivot = new Vector2(0.5f, 1f);
+            contentContainer.anchoredPosition = Vector2.zero;
+
+            var layout = contentContainer.GetComponent<VerticalLayoutGroup>();
+            var drivenByLayoutGroup = layout != null && layout.enabled;
+            if (layout != null)
+            {
+                layout.childControlWidth = false;
+                layout.childControlHeight = false;
+                layout.childForceExpandWidth = false;
+                layout.childForceExpandHeight = false;
+                layout.enabled = false;
+            }
+
+            var fitter = contentContainer.GetComponent<ContentSizeFitter>() ?? contentContainer.gameObject.AddComponent<ContentSizeFitter>();
+            fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+            fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+            if (bodyText.transform.parent != contentContainer)
+            {
+                bodyText.transform.SetParent(contentContainer, false);
+            }
+
+            var bodyRect = bodyText.rectTransform;
+            bodyRect.anchorMin = new Vector2(0f, 1f);
+            bodyRect.anchorMax = new Vector2(1f, 1f);
+            bodyRect.pivot = new Vector2(0.5f, 1f);
+            bodyRect.anchoredPosition = Vector2.zero;
+            bodyRect.offsetMin = new Vector2(paddingLeft, -paddingBottom);
+            bodyRect.offsetMax = new Vector2(-paddingRight, -paddingTop);
+
+            var bodyFitter = bodyText.GetComponent<ContentSizeFitter>();
+            if (bodyFitter != null)
+            {
+                bodyFitter.enabled = false;
+            }
+
+            bodyText.textWrappingMode = TextWrappingModes.Normal;
+            bodyText.overflowMode = TextOverflowModes.Masking;
+            bodyText.raycastTarget = false;
+
+            var vbar = detailsScrollRect.verticalScrollbar;
+            if (vbar == null)
+            {
+                var vbarRect = detailsScrollRect.transform.Find("Scrollbar Vertical") as RectTransform;
+                if (vbarRect != null)
+                {
+                    vbar = vbarRect.GetComponent<Scrollbar>() ?? vbarRect.gameObject.AddComponent<Scrollbar>();
+                }
+            }
+
+            if (vbar != null)
+            {
+                var vbarRect = vbar.transform as RectTransform;
+                if (vbarRect != null)
+                {
+                    if (vbarRect.parent != detailsScrollRect.transform)
                     {
-                        var handleImage = handle.GetComponent<Image>() ?? handle.gameObject.AddComponent<Image>();
-                        scrollbar.handleRect = handle;
-                        scrollbar.targetGraphic = handleImage;
+                        vbarRect.SetParent(detailsScrollRect.transform, false);
                     }
-                    scrollbar.direction = Scrollbar.Direction.BottomToTop;
-                    existing.SetAsLastSibling();
+
+                    vbarRect.anchorMin = new Vector2(1f, 0f);
+                    vbarRect.anchorMax = new Vector2(1f, 1f);
+                    vbarRect.pivot = new Vector2(1f, 1f);
+                    vbarRect.sizeDelta = new Vector2(18f, vbarRect.sizeDelta.y);
+                    vbarRect.anchoredPosition = Vector2.zero;
+                    vbarRect.SetAsLastSibling();
                 }
+
+                detailsScrollRect.verticalScrollbar = vbar;
+                detailsScrollRect.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.AutoHideAndExpandViewport;
+                detailsScrollRect.verticalScrollbarSpacing = 0f;
             }
 
-            if (scrollbar != null)
+            detailsScrollRect.content = contentContainer;
+            detailsScrollRect.viewport = viewport;
+            detailsScrollRect.horizontal = false;
+            detailsScrollRect.vertical = true;
+            detailsScrollRect.movementType = ScrollRect.MovementType.Clamped;
+            detailsScrollRect.inertia = true;
+
+            if (!_scrollFixLogPrinted)
             {
-                var scrollbarRect = scrollbar.transform as RectTransform;
-                if (scrollbarRect != null)
-                {
-                    scrollbarRect.anchorMin = new Vector2(1f, 0f);
-                    scrollbarRect.anchorMax = new Vector2(1f, 1f);
-                    scrollbarRect.pivot = new Vector2(1f, 1f);
-                    scrollbarRect.sizeDelta = new Vector2(18f, 0f);
-                    scrollbarRect.anchoredPosition = Vector2.zero;
-                    scrollbarRect.SetAsLastSibling();
-                }
-                detailsScrollRect.verticalScrollbar = scrollbar;
-                detailsScrollRect.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.Permanent;
-                detailsScrollRect.verticalScrollbarSpacing = 2f;
+                _scrollFixLogPrinted = true;
+                Debug.Log($"[ScrollFix] DetailsScroll wired: vis={detailsScrollRect.verticalScrollbarVisibility} contentPivot={contentContainer.pivot} drivenByLayoutGroup={drivenByLayoutGroup} [TODO REMOVE]");
             }
+
+            _detailsScrollSetupDone = true;
         }
 
         private void ConfigureLegacyBodyTextLayout()
@@ -418,77 +519,6 @@ namespace FantasyGuildmaster.UI
             rect.pivot = new Vector2(0.5f, 0.5f);
             rect.offsetMin = new Vector2(paddingLeft, paddingBottom);
             rect.offsetMax = new Vector2(-paddingRight, -paddingTop);
-        }
-
-        private void EnsureScrollAnchorsAndMask()
-        {
-            if (detailsScrollRect == null)
-            {
-                return;
-            }
-
-            var viewport = detailsScrollRect.viewport;
-            if (viewport != null)
-            {
-                viewport.anchorMin = Vector2.zero;
-                viewport.anchorMax = Vector2.one;
-                viewport.pivot = new Vector2(0.5f, 0.5f);
-                viewport.offsetMin = Vector2.zero;
-                viewport.offsetMax = Vector2.zero;
-                var viewportMask = viewport.GetComponent<RectMask2D>() ?? viewport.gameObject.AddComponent<RectMask2D>();
-                if (!forceLegacyText)
-                {
-                    viewportMask.enabled = true;
-                }
-            }
-
-            if (contentContainer == null)
-            {
-                contentContainer = detailsScrollRect.content;
-            }
-
-            if (contentContainer != null)
-            {
-                if (viewport != null && contentContainer.parent != viewport)
-                {
-                    contentContainer.SetParent(viewport, false);
-                }
-
-                contentContainer.anchorMin = new Vector2(0f, 1f);
-                contentContainer.anchorMax = new Vector2(1f, 1f);
-                contentContainer.pivot = new Vector2(0.5f, 1f);
-                contentContainer.anchoredPosition = new Vector2(0f, contentContainer.anchoredPosition.y);
-                contentContainer.sizeDelta = new Vector2(0f, Mathf.Max(contentContainer.sizeDelta.y, GetBodyTextHeight()));
-
-                if (detailsScrollRect != null)
-                {
-                    detailsScrollRect.viewport = viewport;
-                    detailsScrollRect.content = contentContainer;
-                }
-            }
-
-            if (bodyText != null && contentContainer != null)
-            {
-                var bodyRect = bodyText.rectTransform;
-                bodyRect.anchorMin = new Vector2(0f, 1f);
-                bodyRect.anchorMax = new Vector2(1f, 1f);
-                bodyRect.pivot = new Vector2(0.5f, 1f);
-                bodyRect.anchoredPosition = Vector2.zero;
-                bodyRect.sizeDelta = new Vector2(0f, GetBodyTextHeight());
-            }
-
-            if (detailsScrollRect != null)
-            {
-                detailsScrollRect.vertical = true;
-                detailsScrollRect.horizontal = false;
-                detailsScrollRect.scrollSensitivity = Mathf.Max(20f, detailsScrollRect.scrollSensitivity);
-            }
-
-            if (!_scrollFixLogPrinted)
-            {
-                _scrollFixLogPrinted = true;
-                Debug.Log("[ScrollFix] content anchors/pivot fixed");
-            }
         }
 
         private float GetBodyTextHeight()
@@ -574,7 +604,7 @@ namespace FantasyGuildmaster.UI
             }
             else
             {
-                EnsureScrollAnchorsAndMask();
+                EnsureDetailsScrollSetup();
             }
         }
     }
