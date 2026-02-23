@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using FantasyGuildmaster.Core;
 using FantasyGuildmaster.Data;
+using FantasyGuildmaster.Effects;
 using FantasyGuildmaster.UI;
 using TMPro;
 using UnityEngine;
@@ -32,7 +33,7 @@ namespace FantasyGuildmaster.Map
                 ? "Contract completed. Loot secured. Injuries reported."
                 : "Contract completed. Loot secured. Minor injuries.";
 
-            return new MissionReportData
+            var report = new MissionReportData
             {
                 squadId = squad?.id,
                 soloHunterId = soloHunter?.id,
@@ -45,8 +46,40 @@ namespace FantasyGuildmaster.Map
                 readinessBeforePercent = readiness,
                 readinessAfterPercent = readiness,
                 membersSummary = membersSummary,
-                outcomeText = outcome
+                outcomeText = outcome,
+                effectsApplied = false,
+                resolvedEffects = new List<ResolvedEffect>()
             };
+
+            var key = BuildEffectBucketKey(task.fromRegionId, task.contractId, squad?.id, soloHunter?.id);
+            if (_pendingEncounterEffectsByKey.TryGetValue(key, out var encounterEffects) && encounterEffects != null)
+            {
+                report.resolvedEffects.AddRange(encounterEffects);
+            }
+
+            _pendingEncounterEffectsByKey.Remove(key);
+
+            var baseDefs = new List<EffectDef>
+            {
+                new EffectDef { type = EffectTypes.Gold, delta = task.contractReward },
+                new EffectDef { type = EffectTypes.Exhaust }
+            };
+
+            if (squad != null)
+            {
+                var cohesionDelta = squad.lastRosterChangeDay == _dayIndex ? 1 : 3;
+                baseDefs.Add(new EffectDef { type = EffectTypes.Cohesion, delta = cohesionDelta });
+            }
+
+            var seed = FantasyGuildmaster.Services.DeterministicRng.Hash(
+                _runSeed,
+                _dayIndex,
+                unchecked((int)FantasyGuildmaster.Services.DeterministicRng.HashString(task.contractId)),
+                unchecked((int)FantasyGuildmaster.Services.DeterministicRng.HashString(task.fromRegionId)),
+                701);
+            var baseResolved = EffectResolver.Resolve(baseDefs, seed, 1000);
+            report.resolvedEffects.AddRange(baseResolved);
+            return report;
         }
 
         private void TryShowNextMissionReport()
@@ -74,41 +107,40 @@ namespace FantasyGuildmaster.Map
 
         private void OnMissionReportContinue(MissionReportData report)
         {
-            Debug.Log($"[Report] onContinue invoked: squad={report?.squadId} contract={report?.contractId} reward={report?.rewardGold} [TODO REMOVE]");
-
             if (_pendingReports.Count > 0)
             {
                 _pendingReports.Dequeue();
             }
 
-            AddGold(report.rewardGold);
+            if (report != null && !report.effectsApplied)
+            {
+                var ctx = new EffectContext
+                {
+                    contractId = report.contractId,
+                    regionId = report.regionId,
+                    squadId = report.squadId,
+                    hunterId = report.soloHunterId,
+                    resolveSquad = FindSquad,
+                    resolveHunter = FindHunter,
+                    addGold = AddGold,
+                    addRep = AddReputation,
+                    onStateChanged = NotifyRosterChanged
+                };
+
+                EffectApplier.Apply(report.resolvedEffects, ctx);
+                report.effectsApplied = true;
+            }
+
             CompleteContract(report.regionId, report.contractId);
 
             var reportSquad = FindSquad(report.squadId);
             if (reportSquad != null)
             {
-                reportSquad.exhausted = true;
-                reportSquad.exhaustedReason = "Needs rest";
                 reportSquad.contractsDoneToday++;
-                Debug.Log($"[Squad] Exhausted after contract: squad={reportSquad.id} contract={report.contractId} [TODO REMOVE]");
-
-                var cohesionDelta = reportSquad.lastRosterChangeDay == _dayIndex ? 1 : 3;
-                reportSquad.cohesion = Mathf.Clamp(reportSquad.cohesion + cohesionDelta, 0, 100);
-                Debug.Log($"[Cohesion] After mission squad={reportSquad.id} cohesion={reportSquad.cohesion} delta={cohesionDelta} [TODO REMOVE]");
-            }
-
-            if (!string.IsNullOrEmpty(report.soloHunterId) && hunterRoster != null)
-            {
-                var hunter = hunterRoster.GetById(report.soloHunterId);
-                if (hunter != null)
-                {
-                    hunter.exhaustedToday = true;
-                }
             }
 
             missionReportPanel?.Hide();
             _reportOpen = false;
-            Debug.Log($"[Report] Applied+Closed: squad={report.squadId} contract={report.contractId} reward={report.rewardGold} [TODO REMOVE]");
 
             RefreshSquadStatusHud();
             UpdateEndDayUiState();

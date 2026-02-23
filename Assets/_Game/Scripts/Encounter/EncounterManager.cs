@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using FantasyGuildmaster.Core;
+using FantasyGuildmaster.Effects;
 using FantasyGuildmaster.Map;
 using FantasyGuildmaster.Services;
 using FantasyGuildmaster.UI;
@@ -17,7 +18,7 @@ namespace FantasyGuildmaster.Encounter
             public string contractId;
             public string squadId;
             public string soloHunterId;
-            public Action onEncounterClosed;
+            public Action<List<ResolvedEffect>> onEncounterClosed;
         }
 
         [SerializeField] private EncounterPanel encounterPanel;
@@ -28,7 +29,6 @@ namespace FantasyGuildmaster.Encounter
 
         private Func<string, SquadData> _resolveSquad;
         private Func<string, HunterData> _resolveHunter;
-        private Action<int> _addGold;
         private Action<string> _onSquadDestroyed;
         private Action _onSquadChanged;
         private Func<SquadData, int, int> _getCohesionModifier;
@@ -53,27 +53,26 @@ namespace FantasyGuildmaster.Encounter
             encounterPanel = panel;
         }
 
-        public void Configure(Func<string, SquadData> resolveSquad, Func<string, HunterData> resolveHunter, Action<int> addGold, Action<string> onSquadDestroyed, Action onSquadChanged = null, Func<SquadData, int, int> getCohesionModifier = null, Func<int> getDayIndex = null)
+        public void Configure(Func<string, SquadData> resolveSquad, Func<string, HunterData> resolveHunter, Action<string> onSquadDestroyed, Action onSquadChanged = null, Func<SquadData, int, int> getCohesionModifier = null, Func<int> getDayIndex = null)
         {
             _resolveSquad = resolveSquad;
             _resolveHunter = resolveHunter;
-            _addGold = addGold;
             _onSquadDestroyed = onSquadDestroyed;
             _onSquadChanged = onSquadChanged;
             _getCohesionModifier = getCohesionModifier;
             _getDayIndex = getDayIndex;
         }
 
-        public void EnqueueEncounter(string regionId, string contractId, string squadId, Action onEncounterClosed, string soloHunterId = null)
+        public void EnqueueEncounter(string regionId, string contractId, string squadId, Action<List<ResolvedEffect>> onEncounterClosed, string soloHunterId = null)
         {
             StartEncounter(regionId, contractId, squadId, onEncounterClosed, soloHunterId);
         }
 
-        public void StartEncounter(string regionId, string contractId, string squadId, Action onEncounterClosed, string soloHunterId = null)
+        public void StartEncounter(string regionId, string contractId, string squadId, Action<List<ResolvedEffect>> onEncounterClosed, string soloHunterId = null)
         {
             if (string.IsNullOrEmpty(squadId) && string.IsNullOrEmpty(soloHunterId))
             {
-                onEncounterClosed?.Invoke();
+                onEncounterClosed?.Invoke(new List<ResolvedEffect>());
                 return;
             }
 
@@ -134,19 +133,19 @@ namespace FantasyGuildmaster.Encounter
 
                 if (_cancelledSquadIds.Contains(request.squadId))
                 {
-                    request.onEncounterClosed?.Invoke();
+                    request.onEncounterClosed?.Invoke(new List<ResolvedEffect>());
                     continue;
                 }
 
                 if (!EnsureEncounterPanelReadyForDisplay())
                 {
-                    request.onEncounterClosed?.Invoke();
+                    request.onEncounterClosed?.Invoke(new List<ResolvedEffect>());
                     continue;
                 }
 
                 if (_encounters.Count == 0)
                 {
-                    request.onEncounterClosed?.Invoke();
+                    request.onEncounterClosed?.Invoke(new List<ResolvedEffect>());
                     continue;
                 }
 
@@ -154,7 +153,7 @@ namespace FantasyGuildmaster.Encounter
                 var solo = !string.IsNullOrEmpty(request.soloHunterId) ? _resolveHunter?.Invoke(request.soloHunterId) : null;
                 if ((squad == null || squad.hp <= 0) && (solo == null || solo.hp <= 0))
                 {
-                    request.onEncounterClosed?.Invoke();
+                    request.onEncounterClosed?.Invoke(new List<ResolvedEffect>());
                     continue;
                 }
 
@@ -177,7 +176,7 @@ namespace FantasyGuildmaster.Encounter
                 {
                     _isPresentingEncounter = false;
                     Debug.Log($"[TravelDebug] Encounter continue: squad={request.squadId} (cancelled)");
-                    request.onEncounterClosed?.Invoke();
+                    request.onEncounterClosed?.Invoke(new List<ResolvedEffect>());
                     TryPresentNextEncounter();
                 });
                 return;
@@ -215,16 +214,13 @@ namespace FantasyGuildmaster.Encounter
             Debug.Log($"[Cohesion] party={partyId} cohesion={(squad != null ? squad.cohesion : 50)} newbies={newbieCount} rosterChangedToday={(squad != null && squad.lastRosterChangeDay == dayIndex)} base={baseChance} final={finalChance}");
             var result = success ? option.successText : option.failText;
 
-            if (success && option.goldReward > 0)
-            {
-                _addGold?.Invoke(option.goldReward);
-            }
+            var defs = BuildEffectDefs(option, success, squad != null);
+            var outcomeSalt = success ? 101 : 202;
+            var effectSeed = BuildEncounterOptionSeed(_runSeed, dayIndex, request.contractId, encounter != null ? encounter.id : null, optionId, outcomeSalt);
+            var resolvedEffects = EffectResolver.Resolve(defs, effectSeed, 0);
 
             if (!success && squad != null)
             {
-                squad.cohesion = Mathf.Clamp(squad.cohesion - 4, 0, 100);
-                Debug.Log($"[Cohesion] After mission squad={squad.id} cohesion={squad.cohesion} delta=-4 [TODO REMOVE]");
-
                 if (option.hpLoss > 0)
                 {
                     squad.hp = Mathf.Max(0, squad.hp - option.hpLoss);
@@ -249,9 +245,38 @@ namespace FantasyGuildmaster.Encounter
                 _isPresentingEncounter = false;
                 _cancelledSquadIds.Remove(request.squadId);
                 Debug.Log($"[TravelDebug] Encounter continue: squad={request.squadId}");
-                request.onEncounterClosed?.Invoke();
+                request.onEncounterClosed?.Invoke(resolvedEffects);
                 TryPresentNextEncounter();
             });
+        }
+
+        private static List<EffectDef> BuildEffectDefs(EncounterOption option, bool success, bool hasSquadTarget)
+        {
+            var defs = new List<EffectDef>();
+            if (success && option != null && option.goldReward != 0)
+            {
+                defs.Add(new EffectDef { type = EffectTypes.Gold, delta = option.goldReward });
+            }
+
+            if (!success && hasSquadTarget)
+            {
+                defs.Add(new EffectDef { type = EffectTypes.Cohesion, delta = -4 });
+            }
+
+            var source = success ? option?.onSuccessEffects : option?.onFailEffects;
+            if (source != null)
+            {
+                for (var i = 0; i < source.Count; i++)
+                {
+                    var def = source[i];
+                    if (def != null)
+                    {
+                        defs.Add(def);
+                    }
+                }
+            }
+
+            return defs;
         }
 
         private static string ResolveOptionId(EncounterData encounter, EncounterOption option)

@@ -1,6 +1,7 @@
 using System;
 using System.Text;
 using FantasyGuildmaster.Core;
+using FantasyGuildmaster.Effects;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -271,7 +272,19 @@ namespace FantasyGuildmaster.UI
             sb.AppendLine($"Readiness: {data.readinessBeforePercent}% -> {data.readinessAfterPercent}%");
             sb.AppendLine($"Members: {Safe(data.membersSummary, "Members not implemented yet")}");
             sb.AppendLine();
-            sb.Append(data.outcomeText);
+            sb.AppendLine(data.outcomeText);
+
+            var lines = EffectFormatter.FormatLines(data.resolvedEffects);
+            if (lines.Count > 0)
+            {
+                sb.AppendLine();
+                sb.AppendLine("Effects:");
+                for (var i = 0; i < lines.Count; i++)
+                {
+                    sb.Append("- ").AppendLine(lines[i]);
+                }
+            }
+
             return sb.ToString();
         }
 

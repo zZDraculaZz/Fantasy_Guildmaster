@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using FantasyGuildmaster.Core;
 using FantasyGuildmaster.Data;
+using FantasyGuildmaster.Effects;
 using FantasyGuildmaster.Encounter;
 using FantasyGuildmaster.UI;
 using TMPro;
@@ -23,6 +24,7 @@ namespace FantasyGuildmaster.Map
         private const string GuildHqId = "guild_hq";
         private const string GuildHqName = "Guild HQ";
         private const bool DEBUG_TRAVEL = true;
+        private const string RunSeedPrefsKey = "FantasyGuildmaster.RunSeed";
 
         [SerializeField] private RectTransform mapRect;
         [SerializeField] private RectTransform markersRoot;
@@ -67,8 +69,11 @@ namespace FantasyGuildmaster.Map
         private TravelTokenPool _travelTokenPool;
         private string _selectedSquadId;
         private readonly Queue<MissionReportData> _pendingReports = new();
+        private readonly Dictionary<string, List<ResolvedEffect>> _pendingEncounterEffectsByKey = new();
         private bool _reportOpen;
         private int _dayIndex = 0;
+        private int _reputation;
+        private int _runSeed;
         private GuildHallEveningData _guildHallEveningData;
         private float _stuckPauseSince = -1f;
         private DayState _dayState = DayState.MapActive;
@@ -78,6 +83,7 @@ namespace FantasyGuildmaster.Map
         private void Awake()
         {
             _gameData = GameDataLoader.Load();
+            EnsureRunSeed();
             ResolveRuntimeReferences();
             EnsureGuildHqRegion();
             BuildRegionIndex();
@@ -108,7 +114,7 @@ namespace FantasyGuildmaster.Map
 
             if (encounterManager != null)
             {
-                encounterManager.Configure(FindSquad, FindHunter, AddGold, HandleSquadDestroyed, NotifyRosterChanged, GetSquadCohesionModifier, GetCurrentDayIndex);
+                encounterManager.Configure(FindSquad, FindHunter, HandleSquadDestroyed, NotifyRosterChanged, GetSquadCohesionModifier, GetCurrentDayIndex);
             }
 
             if (detailsPanel != null)
@@ -346,7 +352,7 @@ namespace FantasyGuildmaster.Map
                 {
                     if (encounterManager != null)
                     {
-                        encounterManager.EnqueueEncounter(task.toRegionId, task.contractId, null, () => OnEncounterResolved(null, task.toRegionId, task.contractId, task.contractReward, soloHunter.id), soloHunter.id);
+                        encounterManager.EnqueueEncounter(task.toRegionId, task.contractId, null, effects => OnEncounterResolved(null, task.toRegionId, task.contractId, task.contractReward, soloHunter.id, effects), soloHunter.id);
                         TryAdvanceDayFlow("EncounterQueued");
                     }
                     else
@@ -390,7 +396,7 @@ namespace FantasyGuildmaster.Map
                 {
                     if (encounterManager != null)
                     {
-                        encounterManager.EnqueueEncounter(task.toRegionId, task.contractId, null, () => OnEncounterResolved(null, task.toRegionId, task.contractId, task.contractReward, assignedSoloHunter.id), assignedSoloHunter.id);
+                        encounterManager.EnqueueEncounter(task.toRegionId, task.contractId, null, effects => OnEncounterResolved(null, task.toRegionId, task.contractId, task.contractReward, assignedSoloHunter.id, effects), assignedSoloHunter.id);
                         TryAdvanceDayFlow("EncounterQueued");
                     }
                     else
@@ -443,7 +449,7 @@ namespace FantasyGuildmaster.Map
 
                 if (encounterManager != null)
                 {
-                    encounterManager.EnqueueEncounter(task.toRegionId, task.contractId, squad.id, () => OnEncounterResolved(squad.id, task.toRegionId, task.contractId, task.contractReward));
+                    encounterManager.EnqueueEncounter(task.toRegionId, task.contractId, squad.id, effects => OnEncounterResolved(squad.id, task.toRegionId, task.contractId, task.contractReward, null, effects));
                     TryAdvanceDayFlow("EncounterQueued");
                 }
                 else
@@ -479,8 +485,11 @@ namespace FantasyGuildmaster.Map
             TryShowNextMissionReport();
         }
 
-        private void OnEncounterResolved(string squadId, string regionId, string contractId, int contractReward, string soloHunterId = null)
+        private void OnEncounterResolved(string squadId, string regionId, string contractId, int contractReward, string soloHunterId = null, List<ResolvedEffect> resolvedEffects = null)
         {
+            var effectKey = BuildEffectBucketKey(regionId, contractId, squadId, soloHunterId);
+            _pendingEncounterEffectsByKey[effectKey] = resolvedEffects != null ? new List<ResolvedEffect>(resolvedEffects) : new List<ResolvedEffect>();
+
             if (!string.IsNullOrEmpty(soloHunterId))
             {
                 var soloHunter = hunterRoster != null ? hunterRoster.GetById(soloHunterId) : null;
@@ -1845,6 +1854,21 @@ namespace FantasyGuildmaster.Map
             return null;
         }
 
+
+        private void EnsureRunSeed()
+        {
+            if (PlayerPrefs.HasKey(RunSeedPrefsKey))
+            {
+                _runSeed = PlayerPrefs.GetInt(RunSeedPrefsKey);
+                return;
+            }
+
+            var bytes = Guid.NewGuid().ToByteArray();
+            _runSeed = BitConverter.ToInt32(bytes, 0);
+            PlayerPrefs.SetInt(RunSeedPrefsKey, _runSeed);
+            PlayerPrefs.Save();
+        }
+
         private void AddGold(int amount)
         {
             gameState?.AddGold(amount);
@@ -1853,6 +1877,16 @@ namespace FantasyGuildmaster.Map
             {
                 gameManager.AddGold(amount);
             }
+        }
+
+        private void AddReputation(int amount)
+        {
+            _reputation += amount;
+        }
+
+        private static string BuildEffectBucketKey(string regionId, string contractId, string squadId, string soloHunterId)
+        {
+            return $"{regionId}|{contractId}|{squadId}|{soloHunterId}";
         }
 
         private void HandleSquadDestroyed(string squadId)
