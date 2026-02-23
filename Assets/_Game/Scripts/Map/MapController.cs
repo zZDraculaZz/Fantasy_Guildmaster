@@ -346,7 +346,7 @@ namespace FantasyGuildmaster.Map
                 {
                     if (encounterManager != null)
                     {
-                        encounterManager.EnqueueEncounter(task.toRegionId, null, () => OnEncounterResolved(null, task.toRegionId, task.contractId, task.contractReward, soloHunter.id), soloHunter.id);
+                        encounterManager.EnqueueEncounter(task.toRegionId, task.contractId, null, () => OnEncounterResolved(null, task.toRegionId, task.contractId, task.contractReward, soloHunter.id), soloHunter.id);
                         TryAdvanceDayFlow("EncounterQueued");
                     }
                     else
@@ -390,7 +390,7 @@ namespace FantasyGuildmaster.Map
                 {
                     if (encounterManager != null)
                     {
-                        encounterManager.EnqueueEncounter(task.toRegionId, null, () => OnEncounterResolved(null, task.toRegionId, task.contractId, task.contractReward, assignedSoloHunter.id), assignedSoloHunter.id);
+                        encounterManager.EnqueueEncounter(task.toRegionId, task.contractId, null, () => OnEncounterResolved(null, task.toRegionId, task.contractId, task.contractReward, assignedSoloHunter.id), assignedSoloHunter.id);
                         TryAdvanceDayFlow("EncounterQueued");
                     }
                     else
@@ -443,7 +443,7 @@ namespace FantasyGuildmaster.Map
 
                 if (encounterManager != null)
                 {
-                    encounterManager.EnqueueEncounter(task.toRegionId, squad.id, () => OnEncounterResolved(squad.id, task.toRegionId, task.contractId, task.contractReward));
+                    encounterManager.EnqueueEncounter(task.toRegionId, task.contractId, squad.id, () => OnEncounterResolved(squad.id, task.toRegionId, task.contractId, task.contractReward));
                     TryAdvanceDayFlow("EncounterQueued");
                 }
                 else

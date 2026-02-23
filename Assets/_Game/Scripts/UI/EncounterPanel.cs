@@ -12,6 +12,7 @@ namespace FantasyGuildmaster.UI
     {
         [SerializeField] private TMP_Text titleText;
         [SerializeField] private TMP_Text descriptionText;
+        [SerializeField] private TMP_Text chanceBreakdownText;
         [SerializeField] private RectTransform optionsRoot;
         [SerializeField] private Button optionButtonPrefab;
         [SerializeField] private Button continueButton;
@@ -20,6 +21,8 @@ namespace FantasyGuildmaster.UI
         private readonly List<Button> _optionButtons = new();
         private CanvasGroup _canvasGroup;
         private bool _pauseHeld;
+
+        public string LastChanceBreakdown { get; private set; }
 
         private void Awake()
         {
@@ -122,6 +125,7 @@ namespace FantasyGuildmaster.UI
         public void ShowEncounter(EncounterData encounter, Action<EncounterOption> onOptionSelected)
         {
             EnsureVisibleAndInteractiveState();
+            SetChanceBreakdown(string.Empty);
 
             if (titleText != null)
             {
@@ -141,6 +145,15 @@ namespace FantasyGuildmaster.UI
 
             RebuildOptions(encounter.options, onOptionSelected);
             RefreshLayout();
+        }
+
+        public void SetChanceBreakdown(string breakdown)
+        {
+            LastChanceBreakdown = breakdown ?? string.Empty;
+            if (chanceBreakdownText != null)
+            {
+                chanceBreakdownText.text = LastChanceBreakdown;
+            }
         }
 
         public void ShowResult(string resultText, Action onContinue)
