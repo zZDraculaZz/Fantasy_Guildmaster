@@ -247,35 +247,21 @@ namespace FantasyGuildmaster.UI
                 contentContainer = detailsScrollRect.content;
                 if (contentContainer == null)
                 {
-                    var viewport = detailsScrollRect.viewport ?? detailsScrollRect.transform.Find("Viewport") as RectTransform;
-                    if (detailsScrollRect.viewport == null && viewport != null)
+                    var recoveredViewport = detailsScrollRect.viewport ?? detailsScrollRect.transform.Find("Viewport") as RectTransform;
+                    if (detailsScrollRect.viewport == null && recoveredViewport != null)
                     {
-                        detailsScrollRect.viewport = viewport;
+                        detailsScrollRect.viewport = recoveredViewport;
                     }
 
-                    if (viewport != null)
+                    if (recoveredViewport != null)
                     {
-                        contentContainer = viewport.Find("Content") as RectTransform;
+                        contentContainer = recoveredViewport.Find("Content") as RectTransform;
                         if (contentContainer != null)
                         {
                             detailsScrollRect.content = contentContainer;
                         }
                     }
                 }
-            }
-
-            if (detailsScrollRect != null)
-            {
-                var scrollLayoutGroup = detailsScrollRect.GetComponent<VerticalLayoutGroup>();
-                if (scrollLayoutGroup != null)
-                {
-                    scrollLayoutGroup.enabled = false;
-                }
-
-                var scrollLayoutElement = detailsScrollRect.GetComponent<LayoutElement>() ?? detailsScrollRect.gameObject.AddComponent<LayoutElement>();
-                scrollLayoutElement.minHeight = Mathf.Max(scrollLayoutElement.minHeight, 180f);
-                scrollLayoutElement.flexibleHeight = Mathf.Max(scrollLayoutElement.flexibleHeight, 1f);
-                scrollLayoutElement.preferredHeight = -1f;
             }
 
             if (detailsScrollRect != null)
