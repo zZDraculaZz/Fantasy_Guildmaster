@@ -1,8 +1,10 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using FantasyGuildmaster.Core;
 using FantasyGuildmaster.Data;
+using FantasyGuildmaster.Effects;
+using FantasyGuildmaster.Map;
+using FantasyGuildmaster.Services;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -11,53 +13,40 @@ namespace FantasyGuildmaster.UI
 {
     public sealed class GuildHallPanel : MonoBehaviour
     {
-        private enum ViewMode
-        {
-            Hub,
-            Dialogue
-        }
-
         [SerializeField] private GameObject root;
         [SerializeField] private Image dimmerImage;
         [SerializeField] private RectTransform contentRoot;
         [SerializeField] private Image backgroundImage;
         [SerializeField] private RectTransform stageLayer;
-
-        [Header("Top")]
         [SerializeField] private TMP_Text titleText;
         [SerializeField] private TMP_Text dayText;
         [SerializeField] private Button nextDayButton;
-
-        [Header("Hub")]
         [SerializeField] private TMP_Text hintText;
-
-        [Header("Dialogue Bar")]
         [SerializeField] private GameObject dialogueBar;
         [SerializeField] private TMP_Text speakerText;
         [SerializeField] private TMP_Text dialogueText;
         [SerializeField] private Button nextButton;
         [SerializeField] private Button skipButton;
 
-        private readonly List<GameObject> _characterHotspots = new();
+        private readonly List<Button> _runtimeButtons = new();
         private CanvasGroup _cg;
-        private GuildHallEveningData _data;
-        private GuildHallSceneData _activeScene;
-        private Coroutine _typeCoroutine;
-        private Action _onNextDay;
-        private Action _onRestApplied;
-        private Action _onSceneFinished;
-        private int _lineIndex;
-        private int _dayIndex;
-        private bool _lineComplete;
-        private bool _hubInputEnabled;
-        private ViewMode _mode;
         private bool _pauseHeld;
+        private GuildHallEveningData _data;
+        private EveningSessionState _session;
+        private int _dayIndex;
+        private int _runSeed;
+        private Action _onNextDay;
+        private Action<List<ResolvedEffect>, string, string> _applyEffects;
+        private Func<List<HunterData>> _getHunters;
+        private Func<List<SquadData>> _getSquads;
+        private Func<int> _getForcedCount;
+        private Func<string> _dequeueForced;
+        private Func<string, bool> _consumeDayTriggeredScene;
+        private bool _awaitingContinue;
 
-        private void Awake()
-        {
-            EnsureRuntimeBindings();
-            Hide();
-        }
+        private void Awake() { EnsureRuntimeBindings(); Hide(); }
+        private void OnDisable() { if (_pauseHeld) { GamePauseService.Pop("GuildHall"); _pauseHeld = false; } }
+
 
         public void ConfigureRuntimeBindings(
             GameObject rootObject,
@@ -92,449 +81,328 @@ namespace FantasyGuildmaster.UI
             EnsureRuntimeBindings();
         }
 
-        public void ShowEvening(GuildHallEveningData data, int dayIndex, Action onNextDay, Action onRestApplied)
+        public void ShowEvening(
+            GuildHallEveningData data,
+            int dayIndex,
+            int runSeed,
+            EveningSessionState session,
+            Action onNextDay,
+            Action<List<ResolvedEffect>, string, string> applyEffects,
+            Func<List<HunterData>> getHunters,
+            Func<List<SquadData>> getSquads,
+            Func<int> getForcedCount,
+            Func<string> dequeueForced,
+            Func<string, bool> consumeDayTriggeredScene)
         {
             EnsureRuntimeBindings();
             _data = data ?? new GuildHallEveningData();
             _dayIndex = dayIndex;
+            _runSeed = runSeed;
+            _session = session ?? new EveningSessionState { dayIndex = dayIndex };
             _onNextDay = onNextDay;
-            _onRestApplied = onRestApplied;
+            _applyEffects = applyEffects;
+            _getHunters = getHunters;
+            _getSquads = getSquads;
+            _getForcedCount = getForcedCount;
+            _dequeueForced = dequeueForced;
+            _consumeDayTriggeredScene = consumeDayTriggeredScene;
 
-            if (root != null)
-            {
-                root.SetActive(true);
-                root.transform.SetAsLastSibling();
-            }
+            if (root != null) root.SetActive(true);
+            if (_cg != null) { _cg.alpha = 1f; _cg.interactable = true; _cg.blocksRaycasts = true; }
+            if (!_pauseHeld) { GamePauseService.Push("GuildHall"); _pauseHeld = true; }
 
-            if (contentRoot != null)
-            {
-                contentRoot.SetAsLastSibling();
-            }
-
-            if (_cg != null)
-            {
-                _cg.alpha = 1f;
-                _cg.interactable = true;
-                _cg.blocksRaycasts = true;
-            }
-
-            if (!_pauseHeld)
-            {
-                GamePauseService.Push("GuildHall");
-                _pauseHeld = true;
-            }
-
-            BindCoreButtons();
-            BuildCharacterHotspots();
-            ShowHub();
-            Debug.Log($"[GuildHall] Enter overlay day={_dayIndex} [TODO REMOVE]");
-
-            if (!string.IsNullOrWhiteSpace(_data.forcedIntroSceneId))
-            {
-                _hubInputEnabled = false;
-                StartScene(_data.forcedIntroSceneId, null);
-                Debug.Log($"[GuildHall] Forced intro start id={_data.forcedIntroSceneId} [TODO REMOVE]");
-            }
-        }
-
-        private void OnDisable()
-        {
-            if (_pauseHeld)
-            {
-                GamePauseService.Pop("GuildHall");
-                _pauseHeld = false;
-            }
+            BindButton(nextDayButton, OnNextDayClicked);
+            BindButton(nextButton, ContinueFromPopup);
+            BindButton(skipButton, ContinueFromPopup);
+            ShowNextForcedOrHub();
         }
 
         public void Hide()
         {
-            EnsureRuntimeBindings();
-            StopTypewriter();
-            _activeScene = null;
-            _lineIndex = 0;
-            _lineComplete = false;
-            _hubInputEnabled = false;
-
-            if (_cg != null)
-            {
-                _cg.alpha = 0f;
-                _cg.interactable = false;
-                _cg.blocksRaycasts = false;
-            }
-
-            if (root != null)
-            {
-                root.SetActive(false);
-            }
-
-            if (_pauseHeld)
-            {
-                GamePauseService.Pop("GuildHall");
-                _pauseHeld = false;
-            }
+            ClearRuntimeButtons();
+            _awaitingContinue = false;
+            if (_cg != null) { _cg.alpha = 0f; _cg.interactable = false; _cg.blocksRaycasts = false; }
+            if (root != null) root.SetActive(false);
+            if (_pauseHeld) { GamePauseService.Pop("GuildHall"); _pauseHeld = false; }
         }
 
-        private void BindCoreButtons()
+        private void ShowNextForcedOrHub()
         {
-            BindButton(nextDayButton, OnNextDayClicked);
-            BindButton(nextButton, OnNextPressed);
-            BindButton(skipButton, OnSkipPressed);
-        }
-
-        private static void BindButton(Button button, Action action)
-        {
-            if (button == null)
+            if (_getForcedCount != null && _getForcedCount() > 0)
             {
+                var id = _dequeueForced != null ? _dequeueForced() : null;
+                ShowForcedSceneById(id);
                 return;
             }
 
-            button.onClick.RemoveAllListeners();
-            button.interactable = true;
-            button.onClick.AddListener(() => action?.Invoke());
+            if (!_session.forcedIntroFinished && _data?.forcedScenes != null)
+            {
+                for (var i = 0; i < _data.forcedScenes.Count; i++)
+                {
+                    var scene = _data.forcedScenes[i];
+                    if (scene?.trigger == null || !string.Equals(scene.trigger.type, "DAY_EQUALS", StringComparison.Ordinal) || scene.trigger.day != _dayIndex)
+                    {
+                        continue;
+                    }
+
+                    if (_consumeDayTriggeredScene != null && !_consumeDayTriggeredScene(scene.id))
+                    {
+                        continue;
+                    }
+
+                    _session.forcedIntroFinished = true;
+                    ShowForcedScene(scene);
+                    return;
+                }
+
+                _session.forcedIntroFinished = true;
+            }
+
+            ShowHub();
         }
 
-        private void OnNextDayClicked()
+        private void ShowForcedSceneById(string sceneId)
         {
-            if (_mode == ViewMode.Dialogue)
+            var scene = _data?.FindForcedScene(sceneId);
+            if (scene == null)
             {
+                ShowHub();
                 return;
             }
 
-            Debug.Log("[GuildHall] Next Day [TODO REMOVE]");
-            _onNextDay?.Invoke();
+            ShowForcedScene(scene);
+        }
+
+        private void ShowForcedScene(GuildHallForcedSceneData scene)
+        {
+            SetTop($"Day {_dayIndex}", "Forced Scene");
+            if (dialogueBar != null) dialogueBar.SetActive(false);
+            ClearRuntimeButtons();
+            if (hintText != null) hintText.text = scene.text ?? string.Empty;
+
+            var choices = scene.choices != null && scene.choices.Count > 0 ? scene.choices : new List<GuildHallChoiceData> { new GuildHallChoiceData { label = "Continue" } };
+            for (var i = 0; i < choices.Count; i++)
+            {
+                var choice = choices[i];
+                var index = i;
+                AddRuntimeButton(string.IsNullOrWhiteSpace(choice?.label) ? "Continue" : choice.label, () =>
+                {
+                    var defs = choice?.effects ?? new List<EffectDef>();
+                    var seed = DeterministicRng.Hash(_runSeed, _dayIndex, unchecked((int)DeterministicRng.HashString(scene.id)), index);
+                    var resolved = EffectResolver.Resolve(defs, seed, 3100);
+                    _applyEffects?.Invoke(resolved, null, null);
+                    ShowNextForcedOrHub();
+                }, true);
+            }
         }
 
         private void ShowHub()
         {
-            _mode = ViewMode.Hub;
-            _hubInputEnabled = true;
+            SetTop($"Day {_dayIndex}", $"Actions: {_session.apLeft}/{_session.maxAP}");
+            if (dialogueBar != null) dialogueBar.SetActive(false);
+            if (hintText != null) hintText.text = "Evening hub actions";
+            ClearRuntimeButtons();
 
-            if (titleText != null)
-            {
-                titleText.text = "GUILD HALL";
-            }
+            var restCost = _data.GetHubActionCost("rest", 1);
+            var talkCost = _data.GetHubActionCost("talk", 1);
+            var treatCost = _data.GetHubActionCost("treat", 1);
 
-            if (dayText != null)
-            {
-                dayText.text = $"Day {_dayIndex}";
-            }
-
-            if (hintText != null)
-            {
-                hintText.text = "Click a character to talk";
-            }
-
-            if (dialogueBar != null)
-            {
-                dialogueBar.SetActive(false);
-            }
+            AddRuntimeButton("Rest", OnRestClicked, _session.apLeft >= restCost);
+            AddRuntimeButton("Talk", OnTalkClicked, _session.apLeft >= talkCost);
+            AddRuntimeButton("Treat (Soon)", null, false);
 
             if (nextDayButton != null)
             {
                 nextDayButton.interactable = true;
             }
-
-            Debug.Log($"[GuildHall] Hub ready characters={_characterHotspots.Count} [TODO REMOVE]");
         }
 
-        private void StartScene(string sceneId, Action onFinished)
+        private void OnRestClicked()
         {
-            _activeScene = _data?.FindScene(sceneId);
-            _onSceneFinished = onFinished;
-
-            if (_activeScene == null || _activeScene.lines == null || _activeScene.lines.Count == 0)
-            {
-                _onSceneFinished?.Invoke();
-                _onSceneFinished = null;
-                ShowHub();
-                return;
-            }
-
-            _mode = ViewMode.Dialogue;
-            _lineIndex = 0;
-            _lineComplete = false;
-            _hubInputEnabled = false;
-
-            if (dialogueBar != null)
-            {
-                dialogueBar.SetActive(true);
-                dialogueBar.transform.SetAsLastSibling();
-            }
-
-            if (nextDayButton != null)
-            {
-                nextDayButton.interactable = false;
-            }
-
-            ShowCurrentLine();
-        }
-
-        private void OnCharacterClicked(GuildHallCharacterData character)
-        {
-            if (!_hubInputEnabled || _mode != ViewMode.Hub || character == null)
+            var cost = _data.GetHubActionCost("rest", 1);
+            if (_session.apLeft < cost)
             {
                 return;
             }
 
-            Debug.Log($"[GuildHall] Click character id={character.id} scene={character.talkSceneId} [TODO REMOVE]");
+            var hunters = _getHunters != null ? _getHunters() : new List<HunterData>();
+            var squads = _getSquads != null ? _getSquads() : new List<SquadData>();
+            ClearRuntimeButtons();
+            SetTop($"Day {_dayIndex}", $"Actions: {_session.apLeft}/{_session.maxAP}");
+            if (hintText != null) hintText.text = "Choose exhausted target to rest";
 
-            Action onFinish = null;
-            if (string.Equals(character.talkSceneId, "rest_evening", StringComparison.Ordinal))
+            var found = false;
+            for (var i = 0; i < hunters.Count; i++)
             {
-                onFinish = _onRestApplied;
+                var hunter = hunters[i];
+                if (hunter == null || !hunter.exhaustedToday) continue;
+                found = true;
+                AddRuntimeButton($"Hunter: {hunter.name}", () => ApplyRest(cost, hunter.id, null), true);
             }
 
-            StartScene(character.talkSceneId, onFinish);
+            for (var i = 0; i < squads.Count; i++)
+            {
+                var squad = squads[i];
+                if (squad == null || !squad.exhausted) continue;
+                found = true;
+                AddRuntimeButton($"Squad: {squad.name}", () => ApplyRest(cost, null, squad.id), true);
+            }
+
+            AddRuntimeButton("Back", ShowHub, true);
+            if (!found && hintText != null)
+            {
+                hintText.text = "No exhausted hunter or squad available.";
+            }
         }
 
-        private void ShowLockedHint(string reason)
+        private void ApplyRest(int cost, string hunterId, string squadId)
         {
-            if (hintText != null)
+            var effects = new List<ResolvedEffect>
             {
-                hintText.text = string.IsNullOrWhiteSpace(reason) ? "Unavailable" : reason;
-            }
-        }
+                new ResolvedEffect { type = EffectTypes.ClearExhaust, id = !string.IsNullOrWhiteSpace(hunterId) ? hunterId : squadId }
+            };
 
-        private void OnNextPressed()
-        {
-            if (!_lineComplete)
-            {
-                CompleteCurrentLine();
-                return;
-            }
-
-            AdvanceOrFinishScene();
-        }
-
-        private void OnSkipPressed()
-        {
-            if (!_lineComplete)
-            {
-                CompleteCurrentLine();
-                return;
-            }
-
-            AdvanceOrFinishScene();
-        }
-
-        private void AdvanceOrFinishScene()
-        {
-            if (_activeScene == null || _activeScene.lines == null)
-            {
-                EndSceneToHub();
-                return;
-            }
-
-            if (_lineIndex < _activeScene.lines.Count - 1)
-            {
-                _lineIndex++;
-                ShowCurrentLine();
-                return;
-            }
-
-            EndSceneToHub();
-        }
-
-        private void EndSceneToHub()
-        {
-            _onSceneFinished?.Invoke();
-            _onSceneFinished = null;
-            Debug.Log("[GuildHall] Scene end -> hub [TODO REMOVE]");
+            _applyEffects?.Invoke(effects, hunterId, squadId);
+            _session.apLeft = Mathf.Max(0, _session.apLeft - cost);
+            _session.performedActionIds.Add("rest");
             ShowHub();
         }
 
-        private void ShowCurrentLine()
+        private void OnTalkClicked()
         {
-            if (_activeScene == null || _activeScene.lines == null || _lineIndex < 0 || _lineIndex >= _activeScene.lines.Count)
+            var cost = _data.GetHubActionCost("talk", 1);
+            if (_session.apLeft < cost)
             {
                 return;
             }
 
-            var line = _activeScene.lines[_lineIndex] ?? new GuildHallLineData();
-            if (speakerText != null)
-            {
-                speakerText.text = string.IsNullOrWhiteSpace(line.speaker) ? "Narrator" : line.speaker;
-            }
-
-            if (dialogueText != null)
-            {
-                dialogueText.text = line.text ?? string.Empty;
-                dialogueText.maxVisibleCharacters = 0;
-            }
-
-            _lineComplete = false;
-            StopTypewriter();
-            _typeCoroutine = StartCoroutine(TypeCurrentLine());
+            ClearRuntimeButtons();
+            SetTop($"Day {_dayIndex}", $"Actions: {_session.apLeft}/{_session.maxAP}");
+            if (hintText != null) hintText.text = "Guild chatter drifts through the hall.";
+            AddRuntimeButton("Promise support (+1 REP)", () => ApplyTalkChoice(cost, 0), true);
+            AddRuntimeButton("Follow rumor (TAG + rumor_undead)", () => ApplyTalkChoice(cost, 1), true);
+            AddRuntimeButton("Back", ShowHub, true);
         }
 
-        private IEnumerator TypeCurrentLine()
+        private void ApplyTalkChoice(int cost, int choiceIndex)
         {
-            if (dialogueText == null)
+            var defs = new List<EffectDef>();
+            if (choiceIndex == 0)
             {
-                _lineComplete = true;
-                yield break;
+                defs.Add(new EffectDef { type = EffectTypes.Rep, delta = 1 });
+            }
+            else
+            {
+                defs.Add(new EffectDef { type = EffectTypes.TagAdd, id = "rumor_undead" });
             }
 
-            dialogueText.ForceMeshUpdate();
-            var total = dialogueText.textInfo.characterCount;
-            var shown = 0;
-            var timer = 0f;
-            const float charsPerSecond = 40f;
-
-            while (shown < total)
-            {
-                timer += Time.unscaledDeltaTime * charsPerSecond;
-                var target = Mathf.Min(total, Mathf.FloorToInt(timer));
-                if (target != shown)
-                {
-                    shown = target;
-                    dialogueText.maxVisibleCharacters = shown;
-                }
-
-                yield return null;
-            }
-
-            dialogueText.maxVisibleCharacters = total;
-            _lineComplete = true;
-            _typeCoroutine = null;
+            var seed = DeterministicRng.Hash(_runSeed, _dayIndex, 777, choiceIndex);
+            var resolved = EffectResolver.Resolve(defs, seed, 4100);
+            _applyEffects?.Invoke(resolved, null, null);
+            _session.apLeft = Mathf.Max(0, _session.apLeft - cost);
+            _session.performedActionIds.Add("talk");
+            ShowHub();
         }
 
-        private void CompleteCurrentLine()
+        private void OnNextDayClicked()
         {
-            StopTypewriter();
-            if (dialogueText != null)
+            if (_session.apLeft > 0)
             {
-                dialogueText.ForceMeshUpdate();
-                dialogueText.maxVisibleCharacters = dialogueText.textInfo.characterCount;
+                ClearRuntimeButtons();
+                if (hintText != null) hintText.text = $"You still have actions left ({_session.apLeft}). End evening anyway?";
+                AddRuntimeButton("End Evening", () => _onNextDay?.Invoke(), true);
+                AddRuntimeButton("Back", ShowHub, true);
+                return;
             }
 
-            _lineComplete = true;
+            _onNextDay?.Invoke();
         }
 
-        private void StopTypewriter()
+        private void ContinueFromPopup()
         {
-            if (_typeCoroutine == null)
+            if (!_awaitingContinue)
             {
                 return;
             }
 
-            StopCoroutine(_typeCoroutine);
-            _typeCoroutine = null;
+            _awaitingContinue = false;
+            ShowHub();
         }
 
-        private void BuildCharacterHotspots()
+        private void SetTop(string day, string title)
+        {
+            if (dayText != null) dayText.text = day;
+            if (titleText != null) titleText.text = title;
+        }
+
+        private void AddRuntimeButton(string label, Action onClick, bool interactable)
         {
             if (stageLayer == null)
             {
                 return;
             }
 
-            for (var i = 0; i < _characterHotspots.Count; i++)
+            var go = new GameObject(label, typeof(RectTransform), typeof(Image), typeof(Button));
+            go.transform.SetParent(stageLayer, false);
+            var rect = go.GetComponent<RectTransform>();
+            var index = _runtimeButtons.Count;
+            rect.anchorMin = new Vector2(0.5f, 0.5f);
+            rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.sizeDelta = new Vector2(420f, 52f);
+            rect.anchoredPosition = new Vector2(0f, 120f - (index * 60f));
+
+            var image = go.GetComponent<Image>();
+            image.color = interactable ? new Color(0.18f, 0.2f, 0.24f, 0.92f) : new Color(0.1f, 0.1f, 0.1f, 0.65f);
+
+            var textGo = new GameObject("Text", typeof(RectTransform), typeof(TextMeshProUGUI));
+            textGo.transform.SetParent(go.transform, false);
+            var textRect = textGo.GetComponent<RectTransform>();
+            textRect.anchorMin = Vector2.zero;
+            textRect.anchorMax = Vector2.one;
+            textRect.offsetMin = new Vector2(12f, 0f);
+            textRect.offsetMax = new Vector2(-12f, 0f);
+            var text = textGo.GetComponent<TextMeshProUGUI>();
+            text.text = label;
+            text.alignment = TextAlignmentOptions.MidlineLeft;
+            text.fontSize = 26f;
+            text.color = Color.white;
+            text.raycastTarget = false;
+
+            var button = go.GetComponent<Button>();
+            button.interactable = interactable && onClick != null;
+            button.onClick.RemoveAllListeners();
+            if (onClick != null)
             {
-                if (_characterHotspots[i] != null)
+                button.onClick.AddListener(() => onClick.Invoke());
+            }
+
+            _runtimeButtons.Add(button);
+        }
+
+        private void ClearRuntimeButtons()
+        {
+            for (var i = 0; i < _runtimeButtons.Count; i++)
+            {
+                if (_runtimeButtons[i] != null)
                 {
-                    Destroy(_characterHotspots[i]);
+                    Destroy(_runtimeButtons[i].gameObject);
                 }
             }
 
-            _characterHotspots.Clear();
+            _runtimeButtons.Clear();
+        }
 
-            if (_data?.characters == null)
-            {
-                return;
-            }
-
-            for (var i = 0; i < _data.characters.Count; i++)
-            {
-                var character = _data.characters[i];
-                if (character == null || string.IsNullOrWhiteSpace(character.talkSceneId))
-                {
-                    continue;
-                }
-
-                var hotspot = new GameObject($"Character_{character.id}", typeof(RectTransform), typeof(Image), typeof(Button), typeof(GuildHallCharacterWidget));
-                hotspot.transform.SetParent(stageLayer, false);
-
-                var rect = hotspot.GetComponent<RectTransform>();
-                rect.anchorMin = new Vector2(character.posX, character.posY);
-                rect.anchorMax = new Vector2(character.posX, character.posY);
-                rect.pivot = new Vector2(0.5f, 0.5f);
-                rect.sizeDelta = new Vector2(160f, 240f);
-
-                var badgeGo = new GameObject("Badge", typeof(RectTransform), typeof(TextMeshProUGUI));
-                badgeGo.transform.SetParent(hotspot.transform, false);
-                var badgeRect = badgeGo.GetComponent<RectTransform>();
-                badgeRect.anchorMin = new Vector2(0f, 1f);
-                badgeRect.anchorMax = new Vector2(0f, 1f);
-                badgeRect.pivot = new Vector2(0f, 1f);
-                badgeRect.sizeDelta = new Vector2(32f, 32f);
-                badgeRect.anchoredPosition = new Vector2(6f, -6f);
-
-                var nameGo = new GameObject("Name", typeof(RectTransform), typeof(TextMeshProUGUI));
-                nameGo.transform.SetParent(hotspot.transform, false);
-                var nameRect = nameGo.GetComponent<RectTransform>();
-                nameRect.anchorMin = new Vector2(0f, 0f);
-                nameRect.anchorMax = new Vector2(1f, 0f);
-                nameRect.pivot = new Vector2(0.5f, 0f);
-                nameRect.sizeDelta = new Vector2(0f, 40f);
-                nameRect.anchoredPosition = new Vector2(0f, 8f);
-
-                var disabledGo = new GameObject("DisabledOverlay", typeof(RectTransform), typeof(Image));
-                disabledGo.transform.SetParent(hotspot.transform, false);
-                var disabledRect = disabledGo.GetComponent<RectTransform>();
-                disabledRect.anchorMin = Vector2.zero;
-                disabledRect.anchorMax = Vector2.one;
-                disabledRect.offsetMin = Vector2.zero;
-                disabledRect.offsetMax = Vector2.zero;
-                var disabledImage = disabledGo.GetComponent<Image>();
-                disabledImage.color = new Color(0f, 0f, 0f, 0.45f);
-                disabledImage.raycastTarget = false;
-
-                var widget = hotspot.GetComponent<GuildHallCharacterWidget>();
-                widget.Setup(character, OnCharacterClicked, ShowLockedHint);
-
-                _characterHotspots.Add(hotspot);
-            }
-
-            stageLayer.SetAsLastSibling();
-            Debug.Log($"[GuildHall] Spawn widgets N={_characterHotspots.Count} [TODO REMOVE]");
+        private static void BindButton(Button button, Action action)
+        {
+            if (button == null) return;
+            button.onClick.RemoveAllListeners();
+            button.onClick.AddListener(() => action?.Invoke());
         }
 
         private void EnsureRuntimeBindings()
         {
-            if (root == null)
-            {
-                root = gameObject;
-            }
-
-            if (root.transform is RectTransform rootRect)
-            {
-                rootRect.anchorMin = Vector2.zero;
-                rootRect.anchorMax = Vector2.one;
-                rootRect.offsetMin = Vector2.zero;
-                rootRect.offsetMax = Vector2.zero;
-            }
-
-            _cg = root.GetComponent<CanvasGroup>();
-            if (_cg == null)
-            {
-                _cg = root.AddComponent<CanvasGroup>();
-            }
-
-            if (dimmerImage == null)
-            {
-                dimmerImage = root.GetComponent<Image>();
-            }
-
-            if (dimmerImage != null)
-            {
-                dimmerImage.raycastTarget = true;
-                if (dimmerImage.color.a <= 0f)
-                {
-                    dimmerImage.color = new Color(0f, 0f, 0f, 0.65f);
-                }
-            }
-
+            if (root == null) root = gameObject;
+            _cg = root.GetComponent<CanvasGroup>() ?? root.AddComponent<CanvasGroup>();
             contentRoot = contentRoot != null ? contentRoot : root.transform.Find("Content") as RectTransform;
             backgroundImage = backgroundImage != null ? backgroundImage : root.transform.Find("Content/BackgroundLayer")?.GetComponent<Image>();
             stageLayer = stageLayer != null ? stageLayer : root.transform.Find("Content/StageLayer") as RectTransform;
@@ -547,17 +415,6 @@ namespace FantasyGuildmaster.UI
             dialogueText = dialogueText != null ? dialogueText : root.transform.Find("Content/DialogueBar/Body")?.GetComponent<TMP_Text>();
             nextButton = nextButton != null ? nextButton : root.transform.Find("Content/DialogueBar/Buttons/NextButton")?.GetComponent<Button>();
             skipButton = skipButton != null ? skipButton : root.transform.Find("Content/DialogueBar/Buttons/SkipButton")?.GetComponent<Button>();
-
-            if (backgroundImage != null)
-            {
-                backgroundImage.raycastTarget = false;
-            }
-
-            var allText = root.GetComponentsInChildren<TMP_Text>(true);
-            for (var i = 0; i < allText.Length; i++)
-            {
-                allText[i].raycastTarget = false;
-            }
         }
     }
 }

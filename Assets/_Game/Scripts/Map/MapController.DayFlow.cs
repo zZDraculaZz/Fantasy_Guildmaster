@@ -124,6 +124,9 @@ namespace FantasyGuildmaster.Map
                     resolveHunter = FindHunter,
                     addGold = AddGold,
                     addRep = AddReputation,
+                    addTag = AddTag,
+                    removeTag = RemoveTag,
+                    enqueueForcedScene = EnqueueForcedScene,
                     onStateChanged = NotifyRosterChanged
                 };
 
@@ -732,7 +735,7 @@ namespace FantasyGuildmaster.Map
 
         private void LogDayFlow(string trigger, bool anyModal)
         {
-            Debug.Log($"[DayFlow] reason={trigger} endDayRequested={_endDayRequested} travelActive={_travelTasks.Count} encounters={(encounterManager != null ? encounterManager.PendingEncounterCount : 0)}/{(encounterManager != null && encounterManager.IsEncounterActive)} reports={_pendingReports.Count}/{(missionReportPanel != null && missionReportPanel.IsOpen)} modals={anyModal} [TODO REMOVE]");
+            Debug.Log($"[DayFlow] state={_dayState} reason={trigger} endDayRequested={_endDayRequested} travelActive={_travelTasks.Count} encounters={(encounterManager != null ? encounterManager.PendingEncounterCount : 0)}/{(encounterManager != null && encounterManager.IsEncounterActive)} reports={_pendingReports.Count}/{(missionReportPanel != null && missionReportPanel.IsOpen)} modals={anyModal} [TODO REMOVE]");
         }
 
         private void EnterGuildHallEvening()
@@ -757,45 +760,94 @@ namespace FantasyGuildmaster.Map
             _dayPhase = DayPhase.Evening;
             _eveningEnteredForDay = _dayIndex;
             EnsureEventSystem();
-            guildHallPanel.ShowEvening(_guildHallEveningData, _dayIndex, OnGuildHallNextDay, ApplyRestEveningEffect);
+            if (_eveningSession == null || _eveningSession.dayIndex != _dayIndex)
+            {
+                _eveningSession = new EveningSessionState
+                {
+                    dayIndex = _dayIndex,
+                    maxAP = 2,
+                    apLeft = 2,
+                    forcedIntroFinished = false
+                };
+            }
+
+            guildHallPanel.ShowEvening(
+                _guildHallEveningData,
+                _dayIndex,
+                _runSeed,
+                _eveningSession,
+                OnGuildHallNextDay,
+                ApplyEveningEffects,
+                GetExhaustedHunters,
+                GetExhaustedSquads,
+                GetPendingForcedSceneCount,
+                DequeueForcedScene,
+                ConsumeDayTriggeredScene);
         }
 
-        private void ApplyRestEveningEffect()
+        private List<HunterData> GetExhaustedHunters()
         {
+            var result = new List<HunterData>();
+            if (hunterRoster == null)
+            {
+                return result;
+            }
+
+            for (var i = 0; i < hunterRoster.Hunters.Count; i++)
+            {
+                var hunter = hunterRoster.Hunters[i];
+                if (hunter != null && hunter.exhaustedToday)
+                {
+                    result.Add(hunter);
+                }
+            }
+
+            return result;
+        }
+
+        private List<SquadData> GetExhaustedSquads()
+        {
+            var result = new List<SquadData>();
             var squads = GetRosterSquads();
             for (var i = 0; i < squads.Count; i++)
             {
                 var squad = squads[i];
-                if (squad == null || squad.IsDestroyed)
+                if (squad != null && squad.exhausted && !squad.IsDestroyed)
                 {
-                    continue;
-                }
-
-                if (squad.members == null)
-                {
-                    continue;
-                }
-
-                for (var m = 0; m < squad.members.Count; m++)
-                {
-                    var member = squad.members[m];
-                    if (member == null || member.maxHp <= 0)
-                    {
-                        continue;
-                    }
-
-                    member.hp = Mathf.Min(member.maxHp, member.hp + 5);
+                    result.Add(squad);
                 }
             }
 
+            return result;
+        }
+
+        private void ApplyEveningEffects(List<ResolvedEffect> effects, string hunterId, string squadId)
+        {
+            var ctx = new EffectContext
+            {
+                dayIndex = _dayIndex.ToString(),
+                hunterId = hunterId,
+                squadId = squadId,
+                resolveSquad = FindSquad,
+                resolveHunter = FindHunter,
+                addGold = AddGold,
+                addRep = AddReputation,
+                addTag = AddTag,
+                removeTag = RemoveTag,
+                enqueueForcedScene = EnqueueForcedScene,
+                onStateChanged = NotifyRosterChanged
+            };
+
+            EffectApplier.Apply(effects, ctx);
             RefreshSquadStatusHud();
-            UpdateEndDayUiState();
             squadDetailsPanel?.Refresh();
+            UpdateEndDayUiState();
         }
 
         private void OnGuildHallNextDay()
         {
             guildHallPanel?.Hide();
+            _eveningSession = null;
             HideEndDayConfirm();
             _dayPhase = DayPhase.Day;
             _endDayRequested = false;

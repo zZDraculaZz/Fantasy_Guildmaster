@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
+using FantasyGuildmaster.Effects;
 
 namespace FantasyGuildmaster.Data
 {
+
     [Serializable]
     public sealed class GuildHallCharacterData
     {
@@ -31,29 +33,83 @@ namespace FantasyGuildmaster.Data
         public List<GuildHallLineData> lines = new();
     }
 
+[Serializable]
+    public sealed class GuildHallTriggerData
+    {
+        public string type;
+        public int day;
+        public string sceneId;
+    }
+
+    [Serializable]
+    public sealed class GuildHallChoiceData
+    {
+        public string label;
+        public List<EffectDef> effects = new();
+    }
+
+    [Serializable]
+    public sealed class GuildHallForcedSceneData
+    {
+        public string id;
+        public string text;
+        public GuildHallTriggerData trigger;
+        public List<GuildHallChoiceData> choices = new();
+    }
+
+    [Serializable]
+    public sealed class GuildHallHubActionData
+    {
+        public string id;
+        public int costAP = 1;
+        public string uiText;
+        public string desc;
+    }
+
     [Serializable]
     public sealed class GuildHallEveningData
     {
         public string forcedIntroSceneId;
         public List<GuildHallCharacterData> characters = new();
         public List<GuildHallSceneData> scenes = new();
+        public List<GuildHallForcedSceneData> forcedScenes = new();
+        public List<GuildHallHubActionData> hubActions = new();
 
-        public GuildHallSceneData FindScene(string sceneId)
+        public GuildHallForcedSceneData FindForcedScene(string sceneId)
         {
-            if (string.IsNullOrWhiteSpace(sceneId) || scenes == null)
+            if (string.IsNullOrWhiteSpace(sceneId) || forcedScenes == null)
             {
                 return null;
             }
 
-            for (var i = 0; i < scenes.Count; i++)
+            for (var i = 0; i < forcedScenes.Count; i++)
             {
-                if (scenes[i] != null && string.Equals(scenes[i].id, sceneId, StringComparison.Ordinal))
+                if (forcedScenes[i] != null && string.Equals(forcedScenes[i].id, sceneId, StringComparison.Ordinal))
                 {
-                    return scenes[i];
+                    return forcedScenes[i];
                 }
             }
 
             return null;
+        }
+
+        public int GetHubActionCost(string actionId, int defaultCost)
+        {
+            if (hubActions == null || hubActions.Count == 0)
+            {
+                return defaultCost;
+            }
+
+            for (var i = 0; i < hubActions.Count; i++)
+            {
+                var action = hubActions[i];
+                if (action != null && string.Equals(action.id, actionId, StringComparison.Ordinal))
+                {
+                    return Math.Max(1, action.costAP);
+                }
+            }
+
+            return defaultCost;
         }
     }
 }
