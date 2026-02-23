@@ -245,6 +245,37 @@ namespace FantasyGuildmaster.UI
             if (contentContainer == null && detailsScrollRect != null)
             {
                 contentContainer = detailsScrollRect.content;
+                if (contentContainer == null)
+                {
+                    var viewport = detailsScrollRect.viewport ?? detailsScrollRect.transform.Find("Viewport") as RectTransform;
+                    if (detailsScrollRect.viewport == null && viewport != null)
+                    {
+                        detailsScrollRect.viewport = viewport;
+                    }
+
+                    if (viewport != null)
+                    {
+                        contentContainer = viewport.Find("Content") as RectTransform;
+                        if (contentContainer != null)
+                        {
+                            detailsScrollRect.content = contentContainer;
+                        }
+                    }
+                }
+            }
+
+            if (detailsScrollRect != null)
+            {
+                var scrollLayoutGroup = detailsScrollRect.GetComponent<VerticalLayoutGroup>();
+                if (scrollLayoutGroup != null)
+                {
+                    scrollLayoutGroup.enabled = false;
+                }
+
+                var scrollLayoutElement = detailsScrollRect.GetComponent<LayoutElement>() ?? detailsScrollRect.gameObject.AddComponent<LayoutElement>();
+                scrollLayoutElement.minHeight = Mathf.Max(scrollLayoutElement.minHeight, 180f);
+                scrollLayoutElement.flexibleHeight = Mathf.Max(scrollLayoutElement.flexibleHeight, 1f);
+                scrollLayoutElement.preferredHeight = -1f;
             }
 
             if (detailsScrollRect != null)
@@ -348,7 +379,7 @@ namespace FantasyGuildmaster.UI
                 contentContainer.anchorMax = new Vector2(1f, 1f);
                 contentContainer.pivot = new Vector2(0.5f, 1f);
                 contentContainer.anchoredPosition = Vector2.zero;
-                contentContainer.sizeDelta = Vector2.zero;
+                contentContainer.sizeDelta = new Vector2(0f, Mathf.Max(contentContainer.sizeDelta.y, bodyText != null ? bodyText.preferredHeight : 1f));
             }
 
             if (bodyText != null && contentContainer != null)
@@ -359,6 +390,13 @@ namespace FantasyGuildmaster.UI
                 bodyRect.pivot = new Vector2(0.5f, 1f);
                 bodyRect.anchoredPosition = Vector2.zero;
                 bodyRect.sizeDelta = new Vector2(0f, Mathf.Max(1f, bodyText.preferredHeight));
+            }
+
+            if (detailsScrollRect != null)
+            {
+                detailsScrollRect.vertical = true;
+                detailsScrollRect.horizontal = false;
+                detailsScrollRect.scrollSensitivity = Mathf.Max(20f, detailsScrollRect.scrollSensitivity);
             }
 
             if (!_scrollFixLogPrinted)

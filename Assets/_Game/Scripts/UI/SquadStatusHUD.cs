@@ -565,11 +565,41 @@ namespace FantasyGuildmaster.UI
             if (rosterViewport == null && rosterScrollRect != null)
             {
                 rosterViewport = rosterScrollRect.viewport;
+                if (rosterViewport == null)
+                {
+                    rosterViewport = rosterScrollRect.transform.Find("Viewport") as RectTransform;
+                    if (rosterViewport != null)
+                    {
+                        rosterScrollRect.viewport = rosterViewport;
+                    }
+                }
             }
 
             if (rosterContent == null && rosterScrollRect != null)
             {
                 rosterContent = rosterScrollRect.content;
+                if (rosterContent == null && rosterViewport != null)
+                {
+                    rosterContent = rosterViewport.Find("Content") as RectTransform;
+                    if (rosterContent != null)
+                    {
+                        rosterScrollRect.content = rosterContent;
+                    }
+                }
+            }
+
+            if (rosterScrollRect != null)
+            {
+                var scrollLayoutGroup = rosterScrollRect.GetComponent<VerticalLayoutGroup>();
+                if (scrollLayoutGroup != null)
+                {
+                    scrollLayoutGroup.enabled = false;
+                }
+
+                var scrollLayoutElement = rosterScrollRect.GetComponent<LayoutElement>() ?? rosterScrollRect.gameObject.AddComponent<LayoutElement>();
+                scrollLayoutElement.minHeight = Mathf.Max(scrollLayoutElement.minHeight, 180f);
+                scrollLayoutElement.flexibleHeight = Mathf.Max(scrollLayoutElement.flexibleHeight, 1f);
+                scrollLayoutElement.preferredHeight = -1f;
             }
 
             if (rosterScrollRect != null)
@@ -673,7 +703,7 @@ namespace FantasyGuildmaster.UI
                 rosterContent.anchorMax = new Vector2(1f, 1f);
                 rosterContent.pivot = new Vector2(0.5f, 1f);
                 rosterContent.anchoredPosition = Vector2.zero;
-                rosterContent.sizeDelta = Vector2.zero;
+                rosterContent.sizeDelta = new Vector2(0f, Mathf.Max(rosterContent.sizeDelta.y, bodyText != null ? bodyText.preferredHeight : 1f));
             }
 
             if (bodyText != null && rosterContent != null)
@@ -689,6 +719,13 @@ namespace FantasyGuildmaster.UI
                 bodyRect.pivot = new Vector2(0.5f, 1f);
                 bodyRect.anchoredPosition = Vector2.zero;
                 bodyRect.sizeDelta = new Vector2(0f, Mathf.Max(1f, bodyText.preferredHeight));
+            }
+
+            if (rosterScrollRect != null)
+            {
+                rosterScrollRect.vertical = true;
+                rosterScrollRect.horizontal = false;
+                rosterScrollRect.scrollSensitivity = Mathf.Max(20f, rosterScrollRect.scrollSensitivity);
             }
 
             if (!_scrollFixLogPrinted)
