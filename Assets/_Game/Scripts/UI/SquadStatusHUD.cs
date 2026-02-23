@@ -42,18 +42,19 @@ namespace FantasyGuildmaster.UI
         private bool _legacyMissingRefsLogged;
         private bool _scrollFixLogPrinted;
         private bool _rectDebugLogPrinted;
-        private bool _rosterScrollWired;
+        private bool _scrollSetupDone;
+        private bool _scrollSetupMissingLogged;
 
         private void Awake()
         {
             ValidateHelperDefinitionsEditorOnly();
             EnsureBodyText();
-            EnsureRosterScrollRectWiring();
+            EnsureRosterScrollSetup();
         }
 
         private void OnEnable()
         {
-            EnsureRosterScrollRectWiring();
+            EnsureRosterScrollSetup();
             StartCoroutine(DelayedBindAndStart());
         }
 
@@ -370,7 +371,7 @@ namespace FantasyGuildmaster.UI
         {
             EnsureBodyText();
             EnsureRosterScrollInfrastructure();
-            EnsureRosterScrollRectWiring();
+            EnsureRosterScrollSetup();
             if (bodyText == null || rosterContent == null)
             {
                 RenderLegacyText(text);
@@ -398,8 +399,17 @@ namespace FantasyGuildmaster.UI
             bodyText.overflowMode = TextOverflowModes.Masking;
             bodyText.raycastTarget = false;
             bodyText.ForceMeshUpdate(true);
+            var preferredHeight = Mathf.Max(1f, bodyText.preferredHeight + paddingTop + paddingBottom);
+            rosterContent.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, preferredHeight);
             Canvas.ForceUpdateCanvases();
             LayoutRebuilder.ForceRebuildLayoutImmediate(rosterContent);
+
+            if (!_rectDebugLogPrinted && rosterViewport != null && rosterScrollRect != null)
+            {
+                _rectDebugLogPrinted = true;
+                var vbar = rosterScrollRect.verticalScrollbar;
+                Debug.Log($"[RosterScrollFix] viewportH={rosterViewport.rect.height} contentH={rosterContent.rect.height} prefH={bodyText.preferredHeight} vbar={(vbar != null)} vis={rosterScrollRect.verticalScrollbarVisibility} [TODO REMOVE]");
+            }
 
             for (var i = 0; i < _rowPool.Count; i++)
             {
@@ -634,13 +644,13 @@ namespace FantasyGuildmaster.UI
 
             if (!forceLegacyText)
             {
-                EnsureRosterScrollRectWiring();
+                EnsureRosterScrollSetup();
             }
         }
 
-        private void EnsureRosterScrollRectWiring()
+        private void EnsureRosterScrollSetup()
         {
-            if (_rosterScrollWired)
+            if (_scrollSetupDone)
             {
                 return;
             }
@@ -653,6 +663,12 @@ namespace FantasyGuildmaster.UI
 
             if (rosterScrollRect == null)
             {
+                if (!_scrollSetupMissingLogged)
+                {
+                    _scrollSetupMissingLogged = true;
+                    Debug.Log("[RosterScrollFix] Missing ScrollRect reference [TODO REMOVE]");
+                }
+
                 return;
             }
 
@@ -702,6 +718,17 @@ namespace FantasyGuildmaster.UI
                 viewportRect.anchorMax = Vector2.one;
                 viewportRect.offsetMin = Vector2.zero;
                 viewportRect.offsetMax = Vector2.zero;
+            }
+
+            if (rosterViewport == null || rosterContent == null || bodyText == null)
+            {
+                if (!_scrollSetupMissingLogged)
+                {
+                    _scrollSetupMissingLogged = true;
+                    Debug.Log($"[RosterScrollFix] Missing refs viewport={(rosterViewport != null)} content={(rosterContent != null)} bodyText={(bodyText != null)} [TODO REMOVE]");
+                }
+
+                return;
             }
 
             if (rosterContent != null)
@@ -794,7 +821,7 @@ namespace FantasyGuildmaster.UI
                     Debug.Log($"[ScrollFix] RosterScroll wired: vis={rosterScrollRect.verticalScrollbarVisibility} contentPivot={pivotInfo} drivenByLayoutGroup={drivenByLayoutGroup} [TODO REMOVE]");
                 }
 
-                _rosterScrollWired = true;
+                _scrollSetupDone = true;
             }
         }
 
