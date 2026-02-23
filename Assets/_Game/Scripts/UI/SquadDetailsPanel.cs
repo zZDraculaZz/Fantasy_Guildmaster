@@ -170,6 +170,8 @@ namespace FantasyGuildmaster.UI
 
             EnsureScrollAnchorsAndMask();
             EnsureVerticalScrollbar();
+            var previousNormalized = detailsScrollRect != null ? detailsScrollRect.verticalNormalizedPosition : 1f;
+
             if (bodyText != null && contentContainer != null && bodyText.transform.parent != contentContainer)
             {
                 bodyText.transform.SetParent(contentContainer, false);
@@ -189,6 +191,12 @@ namespace FantasyGuildmaster.UI
             contentContainer.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, preferredHeight);
             Canvas.ForceUpdateCanvases();
             LayoutRebuilder.ForceRebuildLayoutImmediate(contentContainer);
+            if (detailsScrollRect != null)
+            {
+                detailsScrollRect.StopMovement();
+                detailsScrollRect.verticalNormalizedPosition = Mathf.Clamp01(previousNormalized);
+            }
+
             LogDetailsRectsOnce();
         }
 
@@ -444,7 +452,7 @@ namespace FantasyGuildmaster.UI
                 contentContainer.anchorMin = new Vector2(0f, 1f);
                 contentContainer.anchorMax = new Vector2(1f, 1f);
                 contentContainer.pivot = new Vector2(0.5f, 1f);
-                contentContainer.anchoredPosition = Vector2.zero;
+                contentContainer.anchoredPosition = new Vector2(0f, contentContainer.anchoredPosition.y);
                 contentContainer.sizeDelta = new Vector2(0f, Mathf.Max(contentContainer.sizeDelta.y, bodyText != null ? bodyText.preferredHeight : 1f));
             }
 
