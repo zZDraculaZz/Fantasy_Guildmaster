@@ -11,6 +11,17 @@ namespace FantasyGuildmaster.Map
 {
     public sealed partial class MapController
     {
+        private enum DayPhase
+        {
+            Day,
+            Evening,
+            Transition
+        }
+
+        [SerializeField] private DayPhase _dayPhase = DayPhase.Day;
+        private int _endDayRequestedForDay = -1;
+        private int _eveningEnteredForDay = -1;
+
         private MissionReportData BuildMissionReport(TravelTask task, SquadData squad, HunterData soloHunter = null)
         {
             var readiness = soloHunter != null ? Mathf.RoundToInt(Mathf.Clamp01(soloHunter.maxHp > 0 ? soloHunter.hp / (float)soloHunter.maxHp : 1f) * 100f) : ComputeReadinessPercent(squad);
@@ -130,6 +141,7 @@ namespace FantasyGuildmaster.Map
             }
 
             _endDayRequested = true;
+            _endDayRequestedForDay = _dayIndex;
             Debug.Log("[EndDay] confirmed -> request end day [TODO REMOVE]");
             TryAdvanceDayFlow("EndDay");
             UpdateEndDayUiState();
@@ -579,6 +591,7 @@ namespace FantasyGuildmaster.Map
         {
             HideEndDayConfirm();
             _endDayRequested = true;
+            _endDayRequestedForDay = _dayIndex;
             Debug.Log("[EndDay] confirmed -> request end day [TODO REMOVE]");
             TryAdvanceDayFlow("EndDayConfirm");
             UpdateEndDayUiState();
@@ -586,8 +599,9 @@ namespace FantasyGuildmaster.Map
 
         private void TryAdvanceDayFlow(string trigger)
         {
-            if (_dayState == DayState.EveningGuildHall)
+            if (_dayPhase == DayPhase.Evening)
             {
+                _dayState = DayState.EveningGuildHall;
                 LogDayFlow(trigger, IsAnyContextModalActive());
                 return;
             }
@@ -610,27 +624,52 @@ namespace FantasyGuildmaster.Map
             }
 
             var anyModal = IsAnyContextModalActive();
-            if (_endDayRequested && CanEnterEveningNow(anyModal))
+            if (_endDayRequested)
             {
-                _dayState = DayState.EveningGuildHall;
-                LogDayFlow(trigger, anyModal);
-                EnterGuildHallEvening();
-                return;
+                if (CanEnterEveningNow(out var reason))
+                {
+                    _dayState = DayState.EveningGuildHall;
+                    LogDayFlow(trigger, anyModal);
+                    EnterGuildHallEvening();
+                    return;
+                }
+
+                Debug.LogWarning($"[DayFlowBlock] Cannot enter evening: {reason} day={_dayIndex} phase={_dayPhase} endReq={_endDayRequested} endReqDay={_endDayRequestedForDay} eveningDay={_eveningEnteredForDay} travel={_travelTasks.Count} enc={(encounterManager != null ? encounterManager.PendingEncounterCount : 0)}/{(encounterManager != null && encounterManager.IsEncounterActive)} rep={_pendingReports.Count}/{(missionReportPanel != null && missionReportPanel.IsOpen)} modals={anyModal} [TODO REMOVE]");
             }
 
             _dayState = DayState.MapActive;
             LogDayFlow(trigger, anyModal);
         }
 
-        private bool CanEnterEveningNow(bool anyModal)
+        private bool CanEnterEveningNow(out string reason)
         {
+            if (_dayPhase != DayPhase.Day)
+            {
+                reason = "phase!=Day";
+                return false;
+            }
+
             if (!_endDayRequested)
             {
+                reason = "endDayRequested=false";
+                return false;
+            }
+
+            if (_endDayRequestedForDay != _dayIndex)
+            {
+                reason = "endDayRequestedForDay!=day";
+                return false;
+            }
+
+            if (_eveningEnteredForDay == _dayIndex)
+            {
+                reason = "eveningAlreadyEntered";
                 return false;
             }
 
             if (_travelTasks.Count > 0)
             {
+                reason = "travelActive>0";
                 return false;
             }
 
@@ -638,21 +677,25 @@ namespace FantasyGuildmaster.Map
             var encounterActive = encounterManager != null && encounterManager.IsEncounterActive;
             if (encounterQueued || encounterActive)
             {
+                reason = "encounterQueuedOrActive";
                 return false;
             }
 
             var reportActive = missionReportPanel != null && missionReportPanel.IsOpen;
             if (_pendingReports.Count > 0 || reportActive)
             {
+                reason = "reportsPendingOrShowing";
                 return false;
             }
 
-            if (anyModal)
+            if (IsAnyContextModalActive() || GamePauseService.Count > 0)
             {
+                reason = "modalOpen";
                 return false;
             }
 
-            return GamePauseService.Count == 0;
+            reason = null;
+            return true;
         }
 
         private void LogDayFlow(string trigger, bool anyModal)
@@ -662,6 +705,7 @@ namespace FantasyGuildmaster.Map
 
         private void EnterGuildHallEvening()
         {
+            _dayPhase = DayPhase.Transition;
             Debug.Log("[GuildHall] Enter evening [TODO REMOVE]");
             EnsureGuildHallPanel();
             EnsureEndDayButton();
@@ -678,7 +722,8 @@ namespace FantasyGuildmaster.Map
                 _guildHallEveningData = GuildHallEveningLoader.Load();
             }
 
-            _endDayRequested = false;
+            _dayPhase = DayPhase.Evening;
+            _eveningEnteredForDay = _dayIndex;
             EnsureEventSystem();
             guildHallPanel.ShowEvening(_guildHallEveningData, _dayIndex, OnGuildHallNextDay, ApplyRestEveningEffect);
         }
@@ -719,7 +764,10 @@ namespace FantasyGuildmaster.Map
         private void OnGuildHallNextDay()
         {
             guildHallPanel?.Hide();
+            HideEndDayConfirm();
+            _dayPhase = DayPhase.Day;
             _endDayRequested = false;
+            _endDayRequestedForDay = -1;
             _dayIndex++;
             var squads = GetRosterSquads();
             for (var i = 0; i < squads.Count; i++)
@@ -759,6 +807,7 @@ namespace FantasyGuildmaster.Map
             }
 
             Debug.Log($"[Day] Reset squad exhaustion, day={_dayIndex} [TODO REMOVE]");
+            Debug.Log($"[DayFlow] NextDay reset: day={_dayIndex} phase={_dayPhase} endReq={_endDayRequested} eveningDay={_eveningEnteredForDay} [TODO REMOVE]");
             UpdateEndDayUiState();
         }
 
