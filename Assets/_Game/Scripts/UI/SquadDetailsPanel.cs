@@ -551,6 +551,7 @@ namespace FantasyGuildmaster.UI
                 {
                     rect.SetParent(detailsScrollRect.transform, false);
                 }
+            }
 
                 rect.anchorMin = new Vector2(1f, 0f);
                 rect.anchorMax = new Vector2(1f, 1f);
@@ -581,6 +582,18 @@ namespace FantasyGuildmaster.UI
             rect.pivot = new Vector2(0.5f, 0.5f);
             rect.offsetMin = new Vector2(paddingLeft, paddingBottom);
             rect.offsetMax = new Vector2(-paddingRight, -paddingTop);
+        }
+
+        private float GetBodyTextHeight()
+        {
+            if (bodyText == null)
+            {
+                return 1f;
+            }
+
+            bodyText.ForceMeshUpdate(true);
+            var rendered = bodyText.textBounds.size.y + 12f;
+            return Mathf.Max(1f, bodyText.preferredHeight, rendered);
         }
 
         private void LogDetailsRectsOnce()
