@@ -572,6 +572,20 @@ namespace FantasyGuildmaster.UI
                 rosterContent = rosterScrollRect.content;
             }
 
+            if (rosterScrollRect != null)
+            {
+                var scrollLayoutGroup = rosterScrollRect.GetComponent<VerticalLayoutGroup>();
+                if (scrollLayoutGroup != null)
+                {
+                    scrollLayoutGroup.enabled = false;
+                }
+
+                var scrollLayoutElement = rosterScrollRect.GetComponent<LayoutElement>() ?? rosterScrollRect.gameObject.AddComponent<LayoutElement>();
+                scrollLayoutElement.minHeight = Mathf.Max(scrollLayoutElement.minHeight, 180f);
+                scrollLayoutElement.flexibleHeight = Mathf.Max(scrollLayoutElement.flexibleHeight, 1f);
+                scrollLayoutElement.preferredHeight = -1f;
+            }
+
             if (rosterViewport != null)
             {
                 if (rosterViewport.GetComponent<Mask>() == null && rosterViewport.GetComponent<RectMask2D>() == null)
