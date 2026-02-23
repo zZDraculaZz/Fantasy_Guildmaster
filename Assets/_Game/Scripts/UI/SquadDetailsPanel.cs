@@ -551,6 +551,7 @@ namespace FantasyGuildmaster.UI
                 {
                     rect.SetParent(detailsScrollRect.transform, false);
                 }
+            }
 
                 rect.anchorMin = new Vector2(1f, 0f);
                 rect.anchorMax = new Vector2(1f, 1f);

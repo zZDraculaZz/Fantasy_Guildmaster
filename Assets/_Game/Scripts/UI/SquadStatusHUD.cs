@@ -880,6 +880,7 @@ namespace FantasyGuildmaster.UI
                 rect.anchoredPosition = Vector2.zero;
                 rect.SetAsLastSibling();
             }
+        }
 
             return scrollbar;
         }
