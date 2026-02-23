@@ -25,6 +25,8 @@ namespace FantasyGuildmaster.Map
         private const string GuildHqName = "Guild HQ";
         private const bool DEBUG_TRAVEL = true;
         private const string RunSeedPrefsKey = "FantasyGuildmaster.RunSeed";
+        private const string ForcedSceneQueuePrefsKey = "FantasyGuildmaster.ForcedSceneQueue";
+        private const string PlayedDayForcedPrefsKey = "FantasyGuildmaster.PlayedDayForced";
 
         [SerializeField] private RectTransform mapRect;
         [SerializeField] private RectTransform markersRoot;
@@ -75,6 +77,10 @@ namespace FantasyGuildmaster.Map
         private int _reputation;
         private int _runSeed;
         private GuildHallEveningData _guildHallEveningData;
+        private readonly List<string> _pendingForcedSceneIds = new();
+        private readonly List<string> _playedDayForcedSceneIds = new();
+        private readonly List<string> _runTags = new();
+        private EveningSessionState _eveningSession;
         private float _stuckPauseSince = -1f;
         private DayState _dayState = DayState.MapActive;
         private bool _endDayRequested;
@@ -84,6 +90,7 @@ namespace FantasyGuildmaster.Map
         {
             _gameData = GameDataLoader.Load();
             EnsureRunSeed();
+            LoadEveningPersistence();
             ResolveRuntimeReferences();
             EnsureGuildHqRegion();
             BuildRegionIndex();
@@ -1867,6 +1874,124 @@ namespace FantasyGuildmaster.Map
             _runSeed = BitConverter.ToInt32(bytes, 0);
             PlayerPrefs.SetInt(RunSeedPrefsKey, _runSeed);
             PlayerPrefs.Save();
+        }
+
+        private void LoadEveningPersistence()
+        {
+            _pendingForcedSceneIds.Clear();
+            _playedDayForcedSceneIds.Clear();
+            DeserializeList(PlayerPrefs.GetString(ForcedSceneQueuePrefsKey, string.Empty), _pendingForcedSceneIds);
+            DeserializeList(PlayerPrefs.GetString(PlayedDayForcedPrefsKey, string.Empty), _playedDayForcedSceneIds);
+        }
+
+        private static void DeserializeList(string raw, List<string> target)
+        {
+            if (target == null)
+            {
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(raw))
+            {
+                return;
+            }
+
+            var parts = raw.Split(new[] {"|"}, StringSplitOptions.RemoveEmptyEntries);
+            for (var i = 0; i < parts.Length; i++)
+            {
+                if (!string.IsNullOrWhiteSpace(parts[i]))
+                {
+                    target.Add(parts[i]);
+                }
+            }
+        }
+
+        private static string SerializeList(List<string> values)
+        {
+            if (values == null || values.Count == 0)
+            {
+                return string.Empty;
+            }
+
+            return string.Join("|", values);
+        }
+
+        private void SaveForcedSceneQueue()
+        {
+            PlayerPrefs.SetString(ForcedSceneQueuePrefsKey, SerializeList(_pendingForcedSceneIds));
+            PlayerPrefs.Save();
+        }
+
+        private void SavePlayedDayScenes()
+        {
+            PlayerPrefs.SetString(PlayedDayForcedPrefsKey, SerializeList(_playedDayForcedSceneIds));
+            PlayerPrefs.Save();
+        }
+
+        private void EnqueueForcedScene(string sceneId)
+        {
+            if (string.IsNullOrWhiteSpace(sceneId))
+            {
+                return;
+            }
+
+            _pendingForcedSceneIds.Add(sceneId);
+            SaveForcedSceneQueue();
+        }
+
+        private string DequeueForcedScene()
+        {
+            if (_pendingForcedSceneIds.Count <= 0)
+            {
+                return null;
+            }
+
+            var id = _pendingForcedSceneIds[0];
+            _pendingForcedSceneIds.RemoveAt(0);
+            SaveForcedSceneQueue();
+            return id;
+        }
+
+        private int GetPendingForcedSceneCount()
+        {
+            return _pendingForcedSceneIds.Count;
+        }
+
+        private bool ConsumeDayTriggeredScene(string sceneId)
+        {
+            if (string.IsNullOrWhiteSpace(sceneId))
+            {
+                return false;
+            }
+
+            if (_playedDayForcedSceneIds.Contains(sceneId))
+            {
+                return false;
+            }
+
+            _playedDayForcedSceneIds.Add(sceneId);
+            SavePlayedDayScenes();
+            return true;
+        }
+
+        private void AddTag(string tagId)
+        {
+            if (string.IsNullOrWhiteSpace(tagId) || _runTags.Contains(tagId))
+            {
+                return;
+            }
+
+            _runTags.Add(tagId);
+        }
+
+        private void RemoveTag(string tagId)
+        {
+            if (string.IsNullOrWhiteSpace(tagId))
+            {
+                return;
+            }
+
+            _runTags.Remove(tagId);
         }
 
         private void AddGold(int amount)
