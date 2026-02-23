@@ -143,7 +143,8 @@ namespace FantasyGuildmaster.UI
 
             var fitter = contentContainer.GetComponent<ContentSizeFitter>() ?? contentContainer.gameObject.AddComponent<ContentSizeFitter>();
             fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
-            fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+                fitter.verticalFit = ContentSizeFitter.FitMode.Unconstrained;
+                fitter.enabled = false;
 
             if (bodyText != null)
             {
@@ -200,8 +201,10 @@ namespace FantasyGuildmaster.UI
             bodyText.overflowMode = TextOverflowModes.Masking;
             bodyText.raycastTarget = false;
             bodyText.ForceMeshUpdate(true);
-            var preferredHeight = Mathf.Max(1f, bodyText.preferredHeight + paddingTop + paddingBottom);
-            contentContainer.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, preferredHeight);
+            var prefH = Mathf.Max(bodyText.preferredHeight, bodyText.textBounds.size.y + 12f);
+            bodyText.rectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, prefH);
+            contentContainer.anchoredPosition = Vector2.zero;
+            contentContainer.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, prefH + paddingTop + paddingBottom);
             Canvas.ForceUpdateCanvases();
             LayoutRebuilder.ForceRebuildLayoutImmediate(contentContainer);
 
@@ -209,7 +212,7 @@ namespace FantasyGuildmaster.UI
             {
                 _rectDebugLogPrinted = true;
                 var vbar = detailsScrollRect.verticalScrollbar;
-                Debug.Log($"[DetailsScrollFix] viewportH={detailsScrollRect.viewport.rect.height} contentH={contentContainer.rect.height} prefH={bodyText.preferredHeight} vbar={(vbar != null)} vis={detailsScrollRect.verticalScrollbarVisibility} [TODO REMOVE]");
+                Debug.Log($"[ScrollFixDetails] viewportH={detailsScrollRect.viewport.rect.height} contentH={contentContainer.rect.height} prefH={bodyText.preferredHeight} vbar={(vbar != null)} vis={detailsScrollRect.verticalScrollbarVisibility} [TODO REMOVE]");
             }
             if (detailsScrollRect != null)
             {
@@ -265,7 +268,8 @@ namespace FantasyGuildmaster.UI
 
                 var fitter = contentGo.GetComponent<ContentSizeFitter>();
                 fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
-                fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+                fitter.verticalFit = ContentSizeFitter.FitMode.Unconstrained;
+                fitter.enabled = false;
 
                 detailsScrollRect.viewport = viewportRect;
                 detailsScrollRect.content = contentContainer;
@@ -323,7 +327,8 @@ namespace FantasyGuildmaster.UI
 
                 var fitter = contentContainer.GetComponent<ContentSizeFitter>() ?? contentContainer.gameObject.AddComponent<ContentSizeFitter>();
                 fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
-                fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+                fitter.verticalFit = ContentSizeFitter.FitMode.Unconstrained;
+                fitter.enabled = false;
             }
 
             if (bodyText != null && contentContainer != null && bodyText.transform.parent != contentContainer)
@@ -353,7 +358,7 @@ namespace FantasyGuildmaster.UI
                 if (!_detailsScrollMissingLogged)
                 {
                     _detailsScrollMissingLogged = true;
-                    Debug.Log("[DetailsScrollFix] Missing ScrollRect reference [TODO REMOVE]");
+                    Debug.Log("[ScrollFixDetails] Missing ScrollRect reference [TODO REMOVE]");
                 }
 
                 return;
@@ -388,7 +393,7 @@ namespace FantasyGuildmaster.UI
                 if (!_detailsScrollMissingLogged)
                 {
                     _detailsScrollMissingLogged = true;
-                    Debug.Log($"[DetailsScrollFix] Missing refs viewport={(viewport != null)} content={(contentContainer != null)} bodyText={(bodyText != null)} [TODO REMOVE]");
+                    Debug.Log($"[ScrollFixDetails] Missing refs viewport={(viewport != null)} content={(contentContainer != null)} bodyText={(bodyText != null)} [TODO REMOVE]");
                 }
 
                 return;
@@ -427,7 +432,8 @@ namespace FantasyGuildmaster.UI
 
             var fitter = contentContainer.GetComponent<ContentSizeFitter>() ?? contentContainer.gameObject.AddComponent<ContentSizeFitter>();
             fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
-            fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+                fitter.verticalFit = ContentSizeFitter.FitMode.Unconstrained;
+                fitter.enabled = false;
 
             if (bodyText.transform.parent != contentContainer)
             {
@@ -452,15 +458,7 @@ namespace FantasyGuildmaster.UI
             bodyText.overflowMode = TextOverflowModes.Masking;
             bodyText.raycastTarget = false;
 
-            var vbar = detailsScrollRect.verticalScrollbar;
-            if (vbar == null)
-            {
-                var vbarRect = detailsScrollRect.transform.Find("Scrollbar Vertical") as RectTransform;
-                if (vbarRect != null)
-                {
-                    vbar = vbarRect.GetComponent<Scrollbar>() ?? vbarRect.gameObject.AddComponent<Scrollbar>();
-                }
-            }
+            var vbar = EnsureDetailsVerticalScrollbar();
 
             if (vbar != null)
             {
@@ -482,7 +480,7 @@ namespace FantasyGuildmaster.UI
 
                 detailsScrollRect.verticalScrollbar = vbar;
                 detailsScrollRect.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.AutoHideAndExpandViewport;
-                detailsScrollRect.verticalScrollbarSpacing = 0f;
+                detailsScrollRect.verticalScrollbarSpacing = 2f;
             }
 
             detailsScrollRect.content = contentContainer;
@@ -499,6 +497,71 @@ namespace FantasyGuildmaster.UI
             }
 
             _detailsScrollSetupDone = true;
+        }
+
+
+        private Scrollbar EnsureDetailsVerticalScrollbar()
+        {
+            if (detailsScrollRect == null)
+            {
+                return null;
+            }
+
+            var scrollbar = detailsScrollRect.verticalScrollbar;
+            var scrollbarRect = detailsScrollRect.transform.Find("Scrollbar Vertical") as RectTransform;
+            if (scrollbar == null && scrollbarRect != null)
+            {
+                scrollbar = scrollbarRect.GetComponent<Scrollbar>() ?? scrollbarRect.gameObject.AddComponent<Scrollbar>();
+            }
+
+            if (scrollbar == null)
+            {
+                scrollbarRect = new GameObject("Scrollbar Vertical", typeof(RectTransform), typeof(Image), typeof(Scrollbar)).GetComponent<RectTransform>();
+                scrollbarRect.SetParent(detailsScrollRect.transform, false);
+
+                var bg = scrollbarRect.GetComponent<Image>();
+                bg.color = new Color(0.95f, 0.95f, 0.95f, 0.45f);
+
+                var slidingArea = new GameObject("Sliding Area", typeof(RectTransform)).GetComponent<RectTransform>();
+                slidingArea.SetParent(scrollbarRect, false);
+                slidingArea.anchorMin = Vector2.zero;
+                slidingArea.anchorMax = Vector2.one;
+                slidingArea.offsetMin = new Vector2(2f, 2f);
+                slidingArea.offsetMax = new Vector2(-2f, -2f);
+
+                var handle = new GameObject("Handle", typeof(RectTransform), typeof(Image)).GetComponent<RectTransform>();
+                handle.SetParent(slidingArea, false);
+                handle.anchorMin = Vector2.zero;
+                handle.anchorMax = Vector2.one;
+                handle.offsetMin = Vector2.zero;
+                handle.offsetMax = Vector2.zero;
+                var handleImage = handle.GetComponent<Image>();
+                handleImage.color = new Color(1f, 0.95f, 0.65f, 0.95f);
+
+                scrollbar = scrollbarRect.GetComponent<Scrollbar>();
+                scrollbar.handleRect = handle;
+                scrollbar.targetGraphic = handleImage;
+                scrollbar.direction = Scrollbar.Direction.BottomToTop;
+            }
+
+            var rect = scrollbar.transform as RectTransform;
+            if (rect != null)
+            {
+                if (rect.parent != detailsScrollRect.transform)
+                {
+                    rect.SetParent(detailsScrollRect.transform, false);
+                }
+            }
+
+                rect.anchorMin = new Vector2(1f, 0f);
+                rect.anchorMax = new Vector2(1f, 1f);
+                rect.pivot = new Vector2(1f, 1f);
+                rect.sizeDelta = new Vector2(18f, 0f);
+                rect.anchoredPosition = Vector2.zero;
+                rect.SetAsLastSibling();
+            }
+
+            return scrollbar;
         }
 
         private void ConfigureLegacyBodyTextLayout()
