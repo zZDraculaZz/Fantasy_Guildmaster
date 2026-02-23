@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using FantasyGuildmaster.Core;
 using FantasyGuildmaster.Map;
+using FantasyGuildmaster.Services;
 using FantasyGuildmaster.UI;
 using UnityEngine;
 using UnityEngine.UI;
@@ -13,6 +14,7 @@ namespace FantasyGuildmaster.Encounter
         private struct EncounterRequest
         {
             public string regionId;
+            public string contractId;
             public string squadId;
             public string soloHunterId;
             public Action onEncounterClosed;
@@ -33,12 +35,16 @@ namespace FantasyGuildmaster.Encounter
         private Func<int> _getDayIndex;
         private bool _isPresentingEncounter;
         private Canvas _fallbackCanvas;
+        private int _runSeed;
+
+        private const string RunSeedPrefsKey = "FantasyGuildmaster.RunSeed";
 
         public bool IsEncounterActive => _isPresentingEncounter;
         public int PendingEncounterCount => _queue.Count;
 
         private void Awake()
         {
+            EnsureRunSeed();
             SeedEncounters();
         }
 
@@ -58,12 +64,12 @@ namespace FantasyGuildmaster.Encounter
             _getDayIndex = getDayIndex;
         }
 
-        public void EnqueueEncounter(string regionId, string squadId, Action onEncounterClosed, string soloHunterId = null)
+        public void EnqueueEncounter(string regionId, string contractId, string squadId, Action onEncounterClosed, string soloHunterId = null)
         {
-            StartEncounter(regionId, squadId, onEncounterClosed, soloHunterId);
+            StartEncounter(regionId, contractId, squadId, onEncounterClosed, soloHunterId);
         }
 
-        public void StartEncounter(string regionId, string squadId, Action onEncounterClosed, string soloHunterId = null)
+        public void StartEncounter(string regionId, string contractId, string squadId, Action onEncounterClosed, string soloHunterId = null)
         {
             if (string.IsNullOrEmpty(squadId) && string.IsNullOrEmpty(soloHunterId))
             {
@@ -74,6 +80,7 @@ namespace FantasyGuildmaster.Encounter
             var request = new EncounterRequest
             {
                 regionId = regionId,
+                contractId = contractId,
                 squadId = squadId,
                 soloHunterId = soloHunterId,
                 onEncounterClosed = onEncounterClosed
@@ -157,12 +164,12 @@ namespace FantasyGuildmaster.Encounter
                 _isPresentingEncounter = true;
                 encounterPanel.gameObject.SetActive(true);
                 Debug.Log($"[TravelDebug] Encounter UI show: squad={request.squadId}, region={request.regionId}, encounter={encounter.id}");
-                encounterPanel.ShowEncounter(encounter, option => ResolveOption(request, option));
+                encounterPanel.ShowEncounter(encounter, option => ResolveOption(request, encounter, option));
                 return;
             }
         }
 
-        private void ResolveOption(EncounterRequest request, EncounterOption option)
+        private void ResolveOption(EncounterRequest request, EncounterData encounter, EncounterOption option)
         {
             if (_cancelledSquadIds.Contains(request.squadId))
             {
@@ -199,10 +206,13 @@ namespace FantasyGuildmaster.Encounter
 
             var baseChance = Mathf.RoundToInt(option.successChance * 100f);
             var finalChance = Mathf.Clamp(baseChance + modifier, 5, 95);
-            var roll = UnityEngine.Random.Range(1, 101);
-            var success = roll <= finalChance;
+            var optionId = ResolveOptionId(encounter, option);
+            var rollSeed = BuildEncounterOptionSeed(_runSeed, dayIndex, request.contractId, encounter != null ? encounter.id : null, optionId, 0);
+            var success = DeterministicRng.RollSuccess(rollSeed, finalChance / 100f);
             var partyId = !string.IsNullOrEmpty(request.squadId) ? request.squadId : request.soloHunterId;
-            Debug.Log($"[Cohesion] party={partyId} cohesion={(squad != null ? squad.cohesion : 50)} newbies={newbieCount} rosterChangedToday={(squad != null && squad.lastRosterChangeDay == dayIndex)} base={baseChance} final={finalChance} roll={roll} [TODO REMOVE]");
+            var breakdown = BuildChanceBreakdown(baseChance, modifier, finalChance);
+            encounterPanel.SetChanceBreakdown(breakdown);
+            Debug.Log($"[Cohesion] party={partyId} cohesion={(squad != null ? squad.cohesion : 50)} newbies={newbieCount} rosterChangedToday={(squad != null && squad.lastRosterChangeDay == dayIndex)} base={baseChance} final={finalChance}");
             var result = success ? option.successText : option.failText;
 
             if (success && option.goldReward > 0)
@@ -242,6 +252,58 @@ namespace FantasyGuildmaster.Encounter
                 request.onEncounterClosed?.Invoke();
                 TryPresentNextEncounter();
             });
+        }
+
+        private static string ResolveOptionId(EncounterData encounter, EncounterOption option)
+        {
+            if (encounter == null || encounter.options == null)
+            {
+                return "option_unknown";
+            }
+
+            var index = encounter.options.IndexOf(option);
+            if (index < 0)
+            {
+                return "option_unknown";
+            }
+
+            return $"opt_{index}";
+        }
+
+        private static string BuildChanceBreakdown(int baseChance, int modifier, int finalChance)
+        {
+            if (modifier == 0)
+            {
+                return $"Base {baseChance} + Mods +0 = {finalChance}%";
+            }
+
+            var sign = modifier > 0 ? "+" : "-";
+            return $"Base {baseChance} + Mods {sign}{Mathf.Abs(modifier)} = {finalChance}%";
+        }
+
+        private static uint BuildEncounterOptionSeed(int runSeed, int dayIndex, string contractId, string encounterId, string optionId, int salt)
+        {
+            return DeterministicRng.Hash(
+                runSeed,
+                dayIndex,
+                unchecked((int)DeterministicRng.HashString(contractId)),
+                unchecked((int)DeterministicRng.HashString(encounterId)),
+                unchecked((int)DeterministicRng.HashString(optionId)),
+                salt);
+        }
+
+        private void EnsureRunSeed()
+        {
+            if (PlayerPrefs.HasKey(RunSeedPrefsKey))
+            {
+                _runSeed = PlayerPrefs.GetInt(RunSeedPrefsKey);
+                return;
+            }
+
+            var bytes = Guid.NewGuid().ToByteArray();
+            _runSeed = BitConverter.ToInt32(bytes, 0);
+            PlayerPrefs.SetInt(RunSeedPrefsKey, _runSeed);
+            PlayerPrefs.Save();
         }
 
         private bool EnsureEncounterPanelReadyForDisplay()
