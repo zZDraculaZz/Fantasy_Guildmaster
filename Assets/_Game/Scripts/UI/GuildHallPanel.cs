@@ -47,6 +47,40 @@ namespace FantasyGuildmaster.UI
         private void Awake() { EnsureRuntimeBindings(); Hide(); }
         private void OnDisable() { if (_pauseHeld) { GamePauseService.Pop("GuildHall"); _pauseHeld = false; } }
 
+
+        public void ConfigureRuntimeBindings(
+            GameObject rootObject,
+            Image dimmer,
+            RectTransform content,
+            Image background,
+            RectTransform stage,
+            TMP_Text runtimeTitle,
+            TMP_Text runtimeDay,
+            TMP_Text runtimeHint,
+            Button runtimeNextDay,
+            GameObject runtimeDialogueBar,
+            TMP_Text runtimeSpeaker,
+            TMP_Text runtimeBody,
+            Button runtimeNext,
+            Button runtimeSkip)
+        {
+            root = rootObject;
+            dimmerImage = dimmer;
+            contentRoot = content;
+            backgroundImage = background;
+            stageLayer = stage;
+            titleText = runtimeTitle;
+            dayText = runtimeDay;
+            hintText = runtimeHint;
+            nextDayButton = runtimeNextDay;
+            dialogueBar = runtimeDialogueBar;
+            speakerText = runtimeSpeaker;
+            dialogueText = runtimeBody;
+            nextButton = runtimeNext;
+            skipButton = runtimeSkip;
+            EnsureRuntimeBindings();
+        }
+
         public void ShowEvening(
             GuildHallEveningData data,
             int dayIndex,

@@ -735,7 +735,7 @@ namespace FantasyGuildmaster.Map
 
         private void LogDayFlow(string trigger, bool anyModal)
         {
-            Debug.Log($"[DayFlow] reason={trigger} endDayRequested={_endDayRequested} travelActive={_travelTasks.Count} encounters={(encounterManager != null ? encounterManager.PendingEncounterCount : 0)}/{(encounterManager != null && encounterManager.IsEncounterActive)} reports={_pendingReports.Count}/{(missionReportPanel != null && missionReportPanel.IsOpen)} modals={anyModal} [TODO REMOVE]");
+            Debug.Log($"[DayFlow] state={_dayState} reason={trigger} endDayRequested={_endDayRequested} travelActive={_travelTasks.Count} encounters={(encounterManager != null ? encounterManager.PendingEncounterCount : 0)}/{(encounterManager != null && encounterManager.IsEncounterActive)} reports={_pendingReports.Count}/{(missionReportPanel != null && missionReportPanel.IsOpen)} modals={anyModal} [TODO REMOVE]");
         }
 
         private void EnterGuildHallEvening()
