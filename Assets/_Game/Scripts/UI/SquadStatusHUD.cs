@@ -773,11 +773,22 @@ namespace FantasyGuildmaster.UI
 
             if (rosterContent != null)
             {
+                if (rosterViewport != null && rosterContent.parent != rosterViewport)
+                {
+                    rosterContent.SetParent(rosterViewport, false);
+                }
+
                 rosterContent.anchorMin = new Vector2(0f, 1f);
                 rosterContent.anchorMax = new Vector2(1f, 1f);
                 rosterContent.pivot = new Vector2(0.5f, 1f);
                 rosterContent.anchoredPosition = new Vector2(0f, rosterContent.anchoredPosition.y);
                 rosterContent.sizeDelta = new Vector2(0f, Mathf.Max(rosterContent.sizeDelta.y, GetBodyTextHeight()));
+
+                if (rosterScrollRect != null)
+                {
+                    rosterScrollRect.viewport = rosterViewport;
+                    rosterScrollRect.content = rosterContent;
+                }
             }
 
             if (bodyText != null && rosterContent != null)

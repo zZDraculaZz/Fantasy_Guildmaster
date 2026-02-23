@@ -449,11 +449,22 @@ namespace FantasyGuildmaster.UI
 
             if (contentContainer != null)
             {
+                if (viewport != null && contentContainer.parent != viewport)
+                {
+                    contentContainer.SetParent(viewport, false);
+                }
+
                 contentContainer.anchorMin = new Vector2(0f, 1f);
                 contentContainer.anchorMax = new Vector2(1f, 1f);
                 contentContainer.pivot = new Vector2(0.5f, 1f);
                 contentContainer.anchoredPosition = new Vector2(0f, contentContainer.anchoredPosition.y);
                 contentContainer.sizeDelta = new Vector2(0f, Mathf.Max(contentContainer.sizeDelta.y, GetBodyTextHeight()));
+
+                if (detailsScrollRect != null)
+                {
+                    detailsScrollRect.viewport = viewport;
+                    detailsScrollRect.content = contentContainer;
+                }
             }
 
             if (bodyText != null && contentContainer != null)
