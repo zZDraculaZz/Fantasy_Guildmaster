@@ -186,7 +186,7 @@ namespace FantasyGuildmaster.UI
 
             bodyText.overflowMode = TextOverflowModes.Masking;
             bodyText.raycastTarget = false;
-            var preferredHeight = Mathf.Max(1f, bodyText.preferredHeight);
+            var preferredHeight = GetBodyTextHeight();
             rect.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, preferredHeight);
             contentContainer.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, preferredHeight);
             Canvas.ForceUpdateCanvases();
@@ -453,7 +453,7 @@ namespace FantasyGuildmaster.UI
                 contentContainer.anchorMax = new Vector2(1f, 1f);
                 contentContainer.pivot = new Vector2(0.5f, 1f);
                 contentContainer.anchoredPosition = new Vector2(0f, contentContainer.anchoredPosition.y);
-                contentContainer.sizeDelta = new Vector2(0f, Mathf.Max(contentContainer.sizeDelta.y, bodyText != null ? bodyText.preferredHeight : 1f));
+                contentContainer.sizeDelta = new Vector2(0f, Mathf.Max(contentContainer.sizeDelta.y, GetBodyTextHeight()));
             }
 
             if (bodyText != null && contentContainer != null)
@@ -463,7 +463,7 @@ namespace FantasyGuildmaster.UI
                 bodyRect.anchorMax = new Vector2(1f, 1f);
                 bodyRect.pivot = new Vector2(0.5f, 1f);
                 bodyRect.anchoredPosition = Vector2.zero;
-                bodyRect.sizeDelta = new Vector2(0f, Mathf.Max(1f, bodyText.preferredHeight));
+                bodyRect.sizeDelta = new Vector2(0f, GetBodyTextHeight());
             }
 
             if (detailsScrollRect != null)
@@ -478,6 +478,18 @@ namespace FantasyGuildmaster.UI
                 _scrollFixLogPrinted = true;
                 Debug.Log("[ScrollFix] content anchors/pivot fixed");
             }
+        }
+
+        private float GetBodyTextHeight()
+        {
+            if (bodyText == null)
+            {
+                return 1f;
+            }
+
+            bodyText.ForceMeshUpdate(true);
+            var rendered = bodyText.textBounds.size.y + 12f;
+            return Mathf.Max(1f, bodyText.preferredHeight, rendered);
         }
 
         private void LogDetailsRectsOnce()
